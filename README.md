@@ -1,5 +1,7 @@
 # Software for the xwr68xxisk radar sensor evaluation kit
 
+![AWR6843ISK](awr6843isk.png)
+
 Allows for recording radar data to a CSV file and displaying the data in a GUI.
 
 Works with the mmw demo application from TI by default:
@@ -11,6 +13,7 @@ Works with the mmw demo application from TI by default:
     RF F/W Patch            : 00.00.00.00.00.00.00
     mmWaveLink Version      : 01.02.06.06
 
+Make sure, the dip switches on the board are set to OFF-OFF-ON-ON-OFF-OFF.
 
 ## Installation
 
@@ -57,6 +60,9 @@ Frame: 12, Points: 15    ^C
 ```
 
 ### GUI usage
+
+The GUI is used to display the radar point cloud in realtime (100ms update rate).
+Just click "Connect" and then "Start" to start the radar.
 
 ```bash
 $ xwr68xxisk gui
