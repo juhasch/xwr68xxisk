@@ -1,0 +1,30 @@
+[project]
+name = "xwr68xxisk"
+version = "0.1.0"
+description = "Record and display radar data from the xwr68xxisk"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Juergen Hasch", email = "juergen.hasch@mmwaves.de" }
+]
+license = { text = "MIT" }
+
+dependencies = [
+    "dora-rs >= 0.3.6",
+    "numpy < 2.0.0",
+    "pyarrow >= 5.0.0",
+    "pydantic>=2.10.6",
+    "panel >= 0.16.0",
+    "bokeh >= 3.5.0",
+    "colorcet >= 3.0.0",
+    "holoviews >= 1.16.0",
+]
+
+[dependency-groups]
+dev = ["pytest >=8.1.1", "ruff >=0.9.1"]
+
+[project.scripts]
+xwr68xxisk = "xwr68xxisk.main:main"
+
+[tool.setuptools]
+packages = ["xwr68xxisk"]
