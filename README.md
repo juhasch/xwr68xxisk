@@ -45,7 +45,7 @@ The serial number is unique and read from the USB interface of the sensor.
 ### Commandline usage
 
 ```bash
-xwr68xxisk record
+$ xwr68xxisk record
 2025-02-20 09:49:47 - INFO - Found CLI port: /dev/ttyUSB0
 2025-02-20 09:49:47 - INFO - Found Data port: /dev/ttyUSB1
 2025-02-20 09:49:47 - INFO - Serial number: 00F48B0C
@@ -59,10 +59,10 @@ Frame: 12, Points: 15    ^C
 ### GUI usage
 
 ```bash
-xwr68xxisk gui
+$ xwr68xxisk gui
 ```
 
-![GUI](./docs/gui.png)
+![GUI](gui_screenshot.png)
 
 
 
