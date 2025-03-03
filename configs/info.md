@@ -4,9 +4,6 @@
 
 ### Overview
 
-    guiMonitor: <subFrameIdx> <detectedObjects> <logMagRange> <noiseProfile> <rangeAzimuthHeatMap> <rangeDopplerHeatMap> <statsInfo>
-    cfarCfg: <subFrameIdx> <procDirection> <averageMode> <winLen> <guardLen> <noiseDiv> <cyclicMode> <thresholdScale> <peakGroupingEn>
-    multiObjBeamForming: <subFrameIdx> <enabled> <threshold>
     calibDcRangeSig: <subFrameIdx> <enabled> <negativeBinIdx> <positiveBinIdx> <numAvgFrames>
     clutterRemoval: <subFrameIdx> <enabled>
     adcbufCfg: <subFrameIdx> <adcOutputFmt> <SampleSwap> <ChanInterleave> <ChirpThreshold>
@@ -18,25 +15,97 @@
     bpmCfg: <subFrameIdx> <enabled> <chirp0Idx> <chirp1Idx>
     CQRxSatMonitor: <profile> <satMonSel> <priSliceDuration> <numSlices> <rxChanMask>
     CQSigImgMonitor: <profile> <numSlices> <numSamplePerSlice>
-    analogMonitor: <rxSaturation> <sigImgBand>
     lvdsStreamCfg: <subFrameIdx> <enableHeader> <dataFmt> <enableSW>
-    configDataPort: <baudrate> <ackPing>
     calibData: <save enable> <restore enable> <Flash offset>
     idlePowerCycle: <enDSPpowerdown> <enDSSclkgate> <enMSSvclkgate> <enBSSclkgate> <enRFpowerdown> <enAPLLpowerdown> <enAPLLGPADCpowerdown> <componentMicroDelay> <idleModeMicroDelay>
     idlePowerDown: <enDSPpowerdown> <enDSSclkgate> <enMSSvclkgate> <enBSSclkgate> <enRFpowerdown> <enAPLLpowerdown> <enAPLLGPADCpowerdown> <componentMicroDelay> <idleModeMicroDelay>
-    version: 
-    flushCfg: 
     dfeDataOutputMode: 
     channelCfg: 
     adcCfg: 
-    profileCfg: 
-    chirpCfg: 
-    frameCfg: 
     advFrameCfg: 
     subFrameCfg: 
     lowPower:
     contModeCfg: 
     bpmCfgAdvanced: 
+
+
+### flushCfg
+
+
+### clutterRemoval
+
+clutterRemoval: <subFrameIdx> <enabled>
+
+    clutterRemoval: -1 0
+
+### profileCfg
+
+profileCfg <> <frequency band> <> <> <> <> <> <> <> <>
+
+    profileCfg 0 77 267 7 57.14 0 0 70 1 256 5209 0 0 30
+    profileCfg 0 60 558 7 66.67 0 0 60 1 256 4363 0 0 158
+
+
+### frameCfg
+
+frameCfg <> <> <> <> <period> <> <>
+
+     frameCfg 0 1 16 0 71.429 1 0
+
+
+### chirpCfg
+
+### guiMonitor
+
+| Parameter               | Description |
+|-------------------------|-------------|
+| `detectedObjects`       | Send list of detected objects. <br>• **0**: Don't send anything.<br>• **1**: Send list of detected objects (see `DPIF_PointCloudCartesian`) and side info (`DPIF_PointCloudSideInfo`).<br>• **2**: Send list of detected objects only (no side info). |
+| `logMagRange`          | Send log magnitude range array. |
+| `noiseProfile`         | Send noise floor profile. |
+| `rangeAzimuthHeatMap`  | Send complex range bins at zero Doppler, all antenna symbols for range-azimuth heat map. |
+| `rangeDopplerHeatMap`  | Send complex range bins at zero Doppler (all antenna symbols), for range-Doppler heat map. |
+| `statsInfo`            | Send statistics. |
+
+
+    guiMonitor -1 1 1 0 0 0 1
+
+
+### analogMonitor
+
+analogMonitor: <rxSaturation> <sigImgBand>
+
+    analogMonitor 0 0
+
+### cfarCfg
+
+cfarCfg: <subFrameIdx> <procDirection> <averageMode> <winLen> <guardLen> <noiseDiv> <cyclicMode> <thresholdScale> <peakGroupingEn>
+
+| Parameter | Description |
+|-----------|-------------|
+| procDirection | 0: range, 1: doppler |
+| averageMode   | int |
+| winLen         | int|
+| guardLen       | int|
+| noiseDivShift  | int|
+| cyclicMode     | int|
+| threshold      | float|
+| peakGroupingEn | int|
+
+
+    cfarCfg -1 0 2 8 4 3 0 15 1
+    cfarCfg -1 1 0 4 2 3 1 15 1
+
+### multiObjBeamForming
+
+multiObjBeamForming: <subFrameIdx> <enabled> <threshold>
+
+
+| Parameter | Description |
+|-----------|-------------|
+| enabled   | |
+| threshold | |
+
+    multiObjBeamForming -1 1 0.5
 
 
 ### Version
