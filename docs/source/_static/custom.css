@@ -1,0 +1,53 @@
+/* Custom table styling */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+    white-space: normal !important;
+}
+
+.wy-table-responsive {
+    margin-bottom: 24px;
+    max-width: 100%;
+    overflow: visible !important;
+}
+
+.wy-table-responsive table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+/* Column widths for better readability */
+.wy-table-responsive table td:nth-child(1) {
+    width: 15%;
+}
+.wy-table-responsive table td:nth-child(2) {
+    width: 25%;
+}
+.wy-table-responsive table td:nth-child(3) {
+    width: 30%;
+}
+.wy-table-responsive table td:nth-child(4) {
+    width: 30%;
+}
+
+/* Better handling of code blocks in tables */
+.wy-table-responsive table code {
+    white-space: normal;
+    word-wrap: break-word;
+}
+
+/* Improved table cell padding */
+.wy-table-responsive table td {
+    padding: 12px !important;
+    vertical-align: top;
+}
+
+/* Table header styling */
+.wy-table-responsive table th {
+    background-color: #f0f0f0;
+    padding: 12px !important;
+}
+
+/* Zebra striping for better readability */
+.wy-table-responsive table tr:nth-child(even) {
+    background-color: #f8f8f8;
+} 
