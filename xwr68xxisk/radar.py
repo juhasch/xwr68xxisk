@@ -4,7 +4,7 @@ USB communication module for TI mmWave radar sensors.
 This module provides a RadarConnection class to handle serial communication with TI mmWave 
 radar sensors using the Silicon Labs CP2105 dual UART bridge. It provides functionality to:
 - Auto-detect the CLI and Data ports
-- Configure the radar sensor using a configuration file
+- Configure the radar sensor using a configuration file or text
 - Manage serial communication buffers
 """
 
@@ -29,8 +29,14 @@ class RadarConnection:
     MAX_BUFFER_SIZE = 2**15
     MAGIC_WORD = b'\x02\x01\x04\x03\x06\x05\x08\x07'
     MAGIC_WORD_LENGTH = 8
-    VENDOR_ID = 0x10C4  # Silicon Labs CP2105
-    PRODUCT_ID = 0xEA70
+    
+    # Silicon Labs CP2105
+    CP2105_VENDOR_ID = 0x10C4
+    CP2105_PRODUCT_ID = 0xEA70
+    
+    # TI XDS110
+    TI_VENDOR_ID = 0x0451
+    TI_PRODUCT_ID = 0xBEF3
     
     def __init__(self):
         """Initialize RadarConnection instance."""
@@ -41,13 +47,17 @@ class RadarConnection:
         self.current_index = 0
         self.have_waited = False
         self.configuration = ""
-        self.version_info = None  # Add version info storage
+        self.version_info = None
         self.serial_number = None
+        self.device_type = None  # 'CP2105' or 'XDS110'
 
     def find_serial_ports(self, serial_number: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
         """
-        Find the Silicon Labs CP2105 dual UART bridge ports used by TI mmWave radar.
+        Find the radar ports for either Silicon Labs CP2105 or TI XDS110 devices.
         
+        Args:
+            serial_number (Optional[str]): Optional serial number to match specific device
+            
         Returns:
             Tuple[Optional[str], Optional[str]]: Tuple of (CLI port path, Data port path) 
             or (None, None) if not found.
@@ -57,32 +67,51 @@ class RadarConnection:
         data_port_path = None
         
         for port in ports:
-            if "CP2105" in port.description and port.vid == self.VENDOR_ID and port.pid == self.PRODUCT_ID:
+            # Check for CP2105
+            if port.vid == self.CP2105_VENDOR_ID and port.pid == self.CP2105_PRODUCT_ID:
                 logger.debug(f"Found CP2105 port: {port.description}")
                 if "Enhanced" in port.description:
                     cli_port_path = port.device
                 elif "Standard" in port.description:
                     data_port_path = port.device
                     self.serial_number = port.serial_number
+                    self.device_type = 'CP2105'
                     if serial_number and serial_number != self.serial_number:
                         logger.debug(f"Serial number mismatch: {self.serial_number} != {serial_number}")
                         data_port_path = None
+                        cli_port_path = None
+                        
+            # Check for XDS110
+            elif port.vid == self.TI_VENDOR_ID and port.pid == self.TI_PRODUCT_ID:
+                logger.debug(f"Found XDS110 port: {port.description}")
+                if "ACM0" in port.device:  # CLI port
+                    cli_port_path = port.device
+                elif "ACM1" in port.device:  # Data port
+                    data_port_path = port.device
+                    self.serial_number = port.serial_number
+                    self.device_type = 'XDS110'
+                    if serial_number and serial_number != self.serial_number:
+                        logger.debug(f"Serial number mismatch: {self.serial_number} != {serial_number}")
+                        data_port_path = None
+                        cli_port_path = None
         
         if cli_port_path and data_port_path:
             logger.info(f"Found CLI port: {cli_port_path}")
             logger.info(f"Found Data port: {data_port_path}")
+            logger.info(f"Device type: {self.device_type}")
             logger.info(f"Serial number: {self.serial_number}")
             return cli_port_path, data_port_path
         
-        logger.warning("No CP2105 ports found")
+        logger.warning("No compatible radar ports found")
         return None, None
 
-    def connect(self, config_filename: str, serial_number: Optional[str] = None) -> None:
+    def connect(self, config: str, serial_number: Optional[str] = None) -> None:
         """
-        Connect to the radar and store the configuration file contents.
+        Connect to the radar and store the configuration.
         
         Args:
-            config_filename (str): Path to the configuration file
+            config (str): Either path to the configuration file or configuration text
+            serial_number (Optional[str]): Optional serial number to match specific device
             
         Raises:
             RadarConnectionError: If connection to the radar fails
@@ -99,10 +128,17 @@ class RadarConnection:
             else:
                 raise RadarConnectionError("Failed to connect to radar")
 
-            # Read and store configuration
-            with open(config_filename, 'r') as config_file:
-                config_lines = [line.rstrip('\r\n') for line in config_file]
-                self.configuration = config_lines
+            # Check if config is a file path or configuration text
+            if '\n' in config:  # Configuration text
+                config_lines = [line.strip() for line in config.splitlines()]
+            else:  # File path
+                try:
+                    with open(config, 'r') as config_file:
+                        config_lines = [line.rstrip('\r\n') for line in config_file]
+                except FileNotFoundError:
+                    raise FileNotFoundError(f"Configuration file not found: {config}")
+                
+            self.configuration = config_lines
 
             # Test communication by sending a simple command and store version info
             self.version_info = self.get_version()
@@ -110,15 +146,13 @@ class RadarConnection:
                 raise RadarConnectionError("No response from sensor - check connections and power")
 
             # set data port to given baudrate
-            self.send_command(f"configDataPort {baudrate} 1")
-            data = self.data_port.read(16)
-            if len(data) == 16 and data == b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff':
-                logger.info(f"Data port set to given baudrate {baudrate}")
+            #self.send_command(f"configDataPort {baudrate} 1")
+            #data = self.data_port.read(16)
+            #if len(data) == 16 and data == b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff':
+            #    logger.info(f"Data port set to given baudrate {baudrate}")
         
         except serial.SerialException as e:
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Configuration file not found: {config_filename}")
 
     def send_configuration(self, ignore_response: bool = False) -> None:
         """
