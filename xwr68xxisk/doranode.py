@@ -1,15 +1,10 @@
 """ Dora-rs node"""
 
-import logging
-import os
-import ast
 import pyarrow as pa
 from dora import Node
 import numpy as np
-import time
-import random
 import json
-from xwr68xxisk.radar import RadarConnection, create_radar
+from xwr68xxisk.radar import RadarConnection, create_radar, RadarConnectionError
 from xwr68xxisk.parse import RadarData
 
 DEFAULT_CONFIG_FILE = "configs/xwr68xxconfig.cfg"
@@ -31,6 +26,7 @@ def start_dora_node():
     print(f"Creating {radar_type} radar instance")
     radar = create_radar(radar_type)            
     radar.connect(config_file)
+    radar.cli_port.flushInput()
     radar.configure_and_start()
 
 
@@ -38,12 +34,19 @@ def start_dora_node():
         if event["type"] == "STOP":
             print("Stopping radar")
             radar.stop()
-            radar.disconnect()
+            radar.close()
         elif event["type"] == "INPUT" and event["id"] == "tick":
             data = RadarData(radar)
-            print('new data')
             if data is not None and data.pc is not None:
-                x, y, z, velocity, snr, rcs = data.pc
+                x, y, z, velocity = data.pc
+                # Get SNR values, use default if not available
+                if data.snr and len(data.snr) == len(x):
+                    snr = np.array(data.snr)
+                else:
+                    snr = np.ones(len(x)) * 30
+
+                rcs = np.ones(len(x)) * 30
+
                 frame_number = data.frame_number if data.frame_number is not None else 0
                 
                 metadata = event["metadata"]
@@ -53,9 +56,9 @@ def start_dora_node():
 
                 pc = np.array([x,y,z,velocity,snr,rcs]).ravel()
                 pointcloud_array = pa.array(pc, type=pa.float32())
-                print(f'Sending pointcloud {frame_number}')
+                print(f'Sending pointcloud for frame {frame_number}')
                 # Senden des Arrays
                 node.send_output("pointcloud", pointcloud_array, metadata)
 
-
-#start_dora_node()
+if __name__ == "__main__":
+    start_dora_node()
