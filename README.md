@@ -1,6 +1,6 @@
 # Software for the xwr68xxisk radar sensor evaluation kit
 
-![AWR6843ISK](awr6843isk.png)
+![AWR6843ISK](docs/source/_static/awr6843isk.png)
 
 Allows for recording radar data to a CSV file and displaying the data in a GUI.
 
@@ -68,7 +68,7 @@ Just click "Connect" and then "Start" to start the radar.
 $ xwr68xxisk gui
 ```
 
-![GUI](gui_screenshot.png)
+![GUI](output.gif)
 
 
 

@@ -6,13 +6,16 @@ import holoviews as hv
 from bokeh.plotting import figure
 from bokeh.models import ColorBar, LinearColorMapper, ColumnDataSource
 import colorcet as cc
-from xwr68xxisk.radar import RadarConnection, RadarConnectionError
+from xwr68xxisk.radar import XWR68xxRadar, RadarConnectionError, AWR2544Radar
 from xwr68xxisk.parse import RadarData
 import time
 import os
 import logging
 from datetime import datetime
-from panel.widgets import TextAreaInput, StaticText, Button, FileInput
+from panel.widgets import TextAreaInput, StaticText, Button, FileInput, Select
+from xwr68xxisk.radar import RadarConnection, create_radar
+import socket
+from xwr68xxisk import defaultconfig
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +25,16 @@ TIMER_PERIOD = 90
 hv.extension('bokeh')
 pn.extension(design="material", sizing_mode="stretch_width")
 
-# Default configuration file
-DEFAULT_CONFIG_FILE = "configs/xwr68xxconfig.cfg"
 
 class RadarGUI:
     def __init__(self):
         # Initialize radar connection
-        self.radar = RadarConnection()
+        # Note: Actual connection to the physical device happens later via connect() method
+        self.radar = None
+        self.radar_type = None  # Will be set during connection
+        
+        # Load default configuration - will be set when radar type is detected
+        self.config_file = None
         
         # Add timing variable
         self.last_update_time = None
@@ -36,7 +42,6 @@ class RadarGUI:
         # Initialize plot data
         self.scatter_source = None
         self.color_mapper = LinearColorMapper(palette=cc.rainbow, low=-1, high=1)
-        self.config_file = DEFAULT_CONFIG_FILE
         
         # Recording state
         self.is_recording = False
@@ -149,7 +154,17 @@ class RadarGUI:
         try:
             self.connect_button.loading = True
             logger.info("Attempting to connect to sensor...")
+            
+            # Auto-detect radar type
+            if not self._detect_radar_type():
+                raise RadarConnectionError("No supported radar detected")
+            
+            logger.info(f"Creating {self.radar_type} radar instance")
+            self.radar = create_radar(self.radar_type)
+            
+            # Now connect with the appropriate configuration
             self.radar.connect(self.config_file)
+            
             # Update version info in the modal
             if self.radar.version_info:
                 formatted_info = '\n'.join(str(line) for line in self.radar.version_info)
@@ -160,16 +175,16 @@ class RadarGUI:
             self.start_button.disabled = False
             self.config_button.disabled = False
             self.connect_button.disabled = True
+            
         except (RadarConnectionError, FileNotFoundError) as e:
             logger.error(f"Error connecting to sensor: {e}")
             self.connect_button.loading = False
             self.connect_button.name = "Connection Failed"
             self.connect_button.button_type = "danger"
-            # Clean up and exit
-            self.cleanup()
-            if pn.state.curdoc:
-                pn.state.curdoc.remove_root(self.layout)
-            os._exit(1)
+            # Don't exit, just allow retry
+            if self.radar:
+                self.radar.close()
+                self.radar = None
     
     def _record_callback(self, event):
         """Toggle recording state."""
@@ -215,8 +230,7 @@ class RadarGUI:
             self.stop_button.disabled = True
             if self.radar.is_connected():
                 logger.info("Stopping sensor...")
-                self.radar.cli_port.write(b'sensorStop\n')
-                self.radar._read_cli_response()  # Clear the response
+                self.radar.stop()
             self.is_running = False
             self.start_button.button_type = 'primary'
             self.start_button.name = 'Start'
@@ -362,6 +376,14 @@ class RadarGUI:
                     for i in range(min_length):
                         self.recording_file.write(f"{frame_number},{x[i]:.3f},{y[i]:.3f},{velocity[i]:.3f},{snr_values[i]:.3f}\n")
                     self.recording_file.flush()  # Ensure data is written to disk
+            else:
+                # Clear the plot when no data is available
+                self.data_source.data = {
+                    'x': [],
+                    'y': [],
+                    'velocity': [],
+                    'size': []
+                }
 
             # Schedule next update if still running
             if self.is_running:
@@ -369,6 +391,13 @@ class RadarGUI:
 
         except Exception as e:
             logger.error(f"Error updating plot: {e}")
+            # Clear the plot on error
+            self.data_source.data = {
+                'x': [],
+                'y': [],
+                'velocity': [],
+                'size': []
+            }
             self._stop_callback(None)
     
     def create_layout(self):
@@ -437,6 +466,26 @@ class RadarGUI:
             self.recording_file.close()
         if self.radar.is_connected():
             self.radar.close()
+
+    def _detect_radar_type(self):
+        """Auto-detect which radar is connected."""
+        # Check serial ports and identify device type
+        radar_base = RadarConnection()
+        cli_path, data_path = radar_base.find_serial_ports()
+        
+        if cli_path and data_path:
+            if radar_base.device_type == 'CP2105':
+                logger.info("Detected XWR68xx radar via CP2105 interface")
+                self.radar_type = "xwr68xx"
+                self.config_file = defaultconfig.xwr68xx
+                return True
+            elif radar_base.device_type == 'XDS110':
+                logger.info("Detected AWR2544 radar via XDS110 interface")
+                self.radar_type = "awr2544"
+                self.config_file = defaultconfig.awr2544
+                return True
+            
+        return False
 
 # Create and serve the application
 radar_gui = RadarGUI()

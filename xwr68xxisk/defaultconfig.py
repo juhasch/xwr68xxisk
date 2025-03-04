@@ -1,25 +1,26 @@
-% ***************************************************************
-% Created for SDK ver:03.05
-% Created using Visualizer ver:3.5.0.0
-% Frequency:60
-% Platform:xWR68xx
-% Scene Classifier:best_range_res
-% Azimuth Resolution(deg):15%
-% Range Resolution(m):0.044
-% Maximum unambiguous Range(m):9.02
-% Maximum Radial Velocity(m/s):1
-% Radial velocity resolution(m/s):0.13
-% Frame Duration(msec):100
-% RF calibration data:None
-% Range Detection Threshold (dB):15
-% Doppler Detection Threshold (dB):15
-% Range Peak Grouping:enabled
-% Doppler Peak Grouping:enabled
-% Static clutter removal:disabled
-% Angle of Arrival FoV: Full FoV
-% Range FoV: Full FoV
-% Doppler FoV: Full FoV
-% ***************************************************************
+# Default configurations
+
+awr2544 = """
+sensorStop
+flushCfg
+dfeDataOutputMode 1
+channelCfg 15 15 0 0 0
+adcCfg 2 0
+adcbufCfg -1 1 0 1 1
+lowPower 0 0
+profileCfg 0 77 7 7 20.81 0 0 8.883 0 256 30000 0 0 164
+chirpCfg 0 5 0 0 0 0 0 15
+frameCfg 0 5 128 0 256 500 1 0
+compressionCfg -1 1 0 0.5 8
+intfMitigCfg -1 15 18
+procChainCfg 1 0 530 0 1
+ddmPhaseShiftAntOrder 0 1 2 3
+adcDataDitherCfg 0 0 1
+analogMonitor 0 0 0
+calibData 0 0 0
+"""
+
+xwr68xx = """
 sensorStop
 flushCfg
 dfeDataOutputMode 1
@@ -49,4 +50,4 @@ aoaFovCfg -1 -90 90 -90 90
 cfarFovCfg -1 0 0 8.92
 cfarFovCfg -1 1 -1 1.00
 calibData 0 0 0
-
+"""

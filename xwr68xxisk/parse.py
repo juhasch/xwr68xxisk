@@ -3,6 +3,7 @@ import struct
 from typing import Tuple, List, Optional
 import time
 import logging
+import os
 
 # Magic number for radar data validation
 MAGIC_NUMBER = 0x708050603040102
@@ -45,31 +46,17 @@ class RadarData:
         self.adc: Optional[np.ndarray] = None
         self.snr: List[float] = []
         self.noise: List[float] = []
+        self.frame_number = None
         
-        if radar_connection is None or not radar_connection.is_connected():
+        if radar_connection is None or not radar_connection.is_connected() or not radar_connection.is_running:
             return
             
-        header = radar_connection.read_header()
+        header, payload = radar_connection.read_frame()
         if header is not None:
-            assert len(header) == 32
-            self._parse_header(header)
-            payload = radar_connection.read_packet(self.total_packet_len)
-            if payload is not None:
-                self._parse_tlv_data(payload)
+            self.frame_number = header.get('frame_number')
+            self.num_tlvs = header.get('num_detected_obj', 0)
+            self._parse_tlv_data(payload)
 
-    def _parse_header(self, data: np.ndarray) -> None:
-        """Parse the radar data packet header."""
-        self.version = int.from_bytes(data[0:4], byteorder='little')
-        self.total_packet_len = int.from_bytes(data[4:8], byteorder='little')
-        logging.debug(f"Total packet length: {self.total_packet_len}")
-        self.platform = int.from_bytes(data[8:12], byteorder='little')
-        self.frame_number = int.from_bytes(data[12:16], byteorder='little')
-        logging.debug(f"Frame number: {self.frame_number}")
-        self.time_cpu_cycles = int.from_bytes(data[16:20], byteorder='little')
-        self.num_detected_obj = int.from_bytes(data[20:24], byteorder='little')
-        self.num_tlvs = int.from_bytes(data[24:28], byteorder='little')
-        self.subframe_number = (int.from_bytes(data[28:32], byteorder='little') 
-                              if self.num_detected_obj > 0 else None)
 
     def _parse_tlv_data(self, data: np.ndarray) -> None:
         """Parse TLV (Type-Length-Value) data from the radar packet."""
@@ -140,3 +127,218 @@ class RadarData:
                 f"Number of Detected Objects: {self.num_detected_obj}\n"
                 f"Number of TLVs: {self.num_tlvs}\n"
                 f"Subframe Number: {hex(self.subframe_number) if self.subframe_number is not None else 'N/A'}")
+
+class AWR2544Data(RadarData):
+    """
+    Parser for AWR2544 radar data packets.
+    
+    This class extends RadarData to handle the specific format of AWR2544 UDP packets,
+    which use a different data structure than the XWR68xx series.
+    """
+    
+    def __init__(self, radar_connection=None):
+        """
+        Initialize and parse AWR2544 radar data packet.
+
+        Args:
+            radar_connection: RadarConnection instance to read data from
+
+        Raises:
+            ValueError: If packet format is invalid or magic number doesn't match
+        """
+        super().__init__(radar_connection)
+        
+        # AWR2544 specific data containers
+        self.compressed_data: List[int] = []
+        self.decompressed_data: Optional[np.ndarray] = None
+        self.config_params: Optional[dict] = None
+        
+        # Create debug directory if it doesn't exist
+        self.debug_dir = "debug_data"
+        os.makedirs(self.debug_dir, exist_ok=True)
+        self.packet_count = 0
+        
+    def _parse_header(self, data: np.ndarray) -> None:
+        """Parse the AWR2544 radar data packet header."""
+        # Save raw header data for debugging
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(self.debug_dir, f"header_{timestamp}_{self.packet_count:04d}.bin")
+        with open(filename, 'wb') as f:
+            f.write(data)
+        logging.debug(f"Saved raw header to {filename}")
+        
+        # AWR2544 header format (32 bytes):
+        # - Magic word (8 bytes)
+        # - Sequence number (4 bytes)
+        # - Frame number (4 bytes)
+        # - Chirp number (4 bytes)
+        # - Length (4 bytes)
+        # - CRC (4 bytes)
+        # - Reserved (4 bytes)
+        self.sequence_number = int.from_bytes(data[0:4], byteorder='little')
+        self.frame_number = int.from_bytes(data[4:8], byteorder='little')
+        self.chirp_number = int.from_bytes(data[8:12], byteorder='little')
+        self.packet_length = int.from_bytes(data[12:16], byteorder='little')
+        self.crc = int.from_bytes(data[16:20], byteorder='little')
+        logging.debug(f"Frame {self.frame_number}, Chirp {self.chirp_number}, Seq {self.sequence_number}")
+        
+    def _parse_tlv_data(self, data: np.ndarray) -> None:
+        """Parse the AWR2544 radar TLV data."""
+        # Save raw TLV data for debugging
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(self.debug_dir, f"tlv_{timestamp}_{self.packet_count:04d}.bin")
+        with open(filename, 'wb') as f:
+            f.write(data)
+        self.packet_count += 1
+        logging.debug(f"Saved raw TLV data to {filename}")
+        
+        # Store compressed data for later decompression
+        self.compressed_data = []
+        for i in range(0, len(data), 4):
+            if i + 4 <= len(data):
+                value = int.from_bytes(data[i:i+4], byteorder='little')
+                self.compressed_data.append(value)
+                
+        # Save compressed data for debugging
+        filename = os.path.join(self.debug_dir, f"compressed_{timestamp}_{self.packet_count-1:04d}.npy")
+        np.save(filename, np.array(self.compressed_data))
+        logging.debug(f"Saved compressed data to {filename}")
+
+    def check_crc(self, data: bytes, packet_length: int, crc_type: bool = True) -> bool:
+        """
+        Check CRC of packet data.
+        
+        Args:
+            data: Raw packet data
+            packet_length: Length of packet payload
+            crc_type: True for 32-bit CRC, False for 16-bit CRC
+            
+        Returns:
+            True if CRC check passes, False otherwise
+        """
+        if crc_type:
+            # 32-bit CRC
+            crc32 = -1
+            crc32_p = -306674912  # crc32 reverse poly
+            
+            for i in range(packet_length + 16 + 8):
+                byte = int(data[i])
+                crc32 = crc32 ^ byte
+                
+                for j in range(8):
+                    a = (crc32 >> 1) & int(0x7fffffff)
+                    b = crc32_p & (-1*(crc32 & 1))
+                    crc32 = a ^ b
+                    
+            ans32 = (~(crc32))
+            if ans32 < 0:
+                ans32 = ans32 + int(0xffffffff) + 1
+            computed_crc = ans32
+            actual_crc = int.from_bytes(data[packet_length+16+8:packet_length+16+12], byteorder='little')
+            return computed_crc == actual_crc
+        else:
+            # 16-bit CRC
+            crc16 = -1
+            crc16_p = 4129  # crc16 reverse poly
+            
+            for i in range(packet_length + 16 + 8):
+                byte = int(data[i])
+                crc16 = crc16 ^ (byte << 8)
+                
+                for j in range(8):
+                    if (crc16 & 0x8000 == 0x8000):
+                        crc16 = (crc16 << 1) ^ crc16_p
+                    else:
+                        crc16 = crc16 << 1
+                        
+            computed_crc = crc16 & 0xffff
+            actual_crc = int.from_bytes(data[packet_length+16+8:packet_length+16+10], byteorder='little')
+            return computed_crc == actual_crc
+        
+    def decompress_data(self, config_params: dict) -> None:
+        """
+        Decompress the radar data using the AWR2544's compression scheme.
+        
+        Args:
+            config_params: Dictionary containing radar configuration parameters
+                         needed for decompression
+        """
+        if not self.compressed_data:
+            return
+            
+        self.config_params = config_params
+        samples_per_block = (config_params['rangeBinsPerBlock'] if config_params['compMethod'] == 1 
+                           else config_params['rxAnt'] * config_params['rangeBinsPerBlock'])
+        
+        # Calculate decompressed data size
+        num_samples = config_params['rangeBins'] * config_params['rxAnt']
+        if config_params.get('dcmpFrame', False):
+            num_samples *= config_params['chirpsPerFrame']
+            
+        # Initialize decompressed data array (complex values)
+        self.decompressed_data = np.zeros(num_samples, dtype=np.complex64)
+        
+        # Decompress data blocks
+        input_idx = 0
+        output_idx = 0
+        while input_idx < len(self.compressed_data) and output_idx < num_samples:
+            # Each block contains samples_per_block complex values
+            block = self.compressed_data[input_idx:input_idx + samples_per_block]
+            if len(block) < samples_per_block:
+                break
+                
+            # Convert block to complex values
+            for i in range(0, len(block), 2):
+                if i + 1 >= len(block):
+                    break
+                real = block[i]
+                imag = block[i + 1]
+                if output_idx < num_samples:
+                    self.decompressed_data[output_idx] = complex(real, imag)
+                    output_idx += 1
+                    
+            input_idx += samples_per_block
+            
+        # Reshape data based on compression method
+        if config_params['compMethod'] == 1:
+            # Method 1: Data is organized by range bins then RX
+            self.decompressed_data = self.decompressed_data.reshape(-1, config_params['rxAnt'])
+        else:
+            # Method 0: Data is organized by RX then range bins
+            self.decompressed_data = self.decompressed_data.reshape(config_params['rxAnt'], -1).T
+        
+    def get_point_cloud(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Extract point cloud data from decompressed radar data.
+        
+        Returns:
+            Tuple containing arrays of x, y, z coordinates and velocity
+        """
+        if self.decompressed_data is None or self.config_params is None:
+            return np.array([]), np.array([]), np.array([]), np.array([])
+            
+        # Process decompressed data to get point cloud
+        # First get range profile
+        range_profile = np.abs(self.decompressed_data)
+        
+        # Calculate range for each bin
+        range_res = (3e8 * self.config_params['sampleRate'] * 1e3) / \
+                   (2 * self.config_params['slope'] * 1e12 * self.config_params['rangeBins'] * 2)
+        ranges = np.arange(self.config_params['rangeBins']) * range_res
+        
+        # Find peaks in range profile (simple threshold-based detection)
+        threshold = np.mean(range_profile) + 2 * np.std(range_profile)
+        detected_points = np.where(range_profile > threshold)
+        
+        if len(detected_points[0]) == 0:
+            return np.array([]), np.array([]), np.array([]), np.array([])
+            
+        # Convert to x, y, z coordinates
+        x = ranges[detected_points[0]] * np.cos(detected_points[1] * np.pi / self.config_params['rxAnt'])
+        y = ranges[detected_points[0]] * np.sin(detected_points[1] * np.pi / self.config_params['rxAnt'])
+        z = np.zeros_like(x)  # Z coordinate requires elevation angle estimation
+        
+        # Velocity estimation would require Doppler processing across chirps
+        v = np.zeros_like(x)
+        
+        return x, y, z, v
