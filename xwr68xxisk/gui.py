@@ -136,15 +136,15 @@ class RadarGUI:
         self.cancel_button.on_click(self._hide_config_modal)
         self.save_button.on_click(self._save_config)
         
-        # Load initial configuration
-        self._load_initial_config()
-        
         # Create layout
         self.layout = self.create_layout()
         
         # Initialize periodic callback (disabled by default)
         self.periodic_callback = None
         self.is_running = False
+        
+        # Set initial configuration text
+        self.config_text.value = "# Connect to sensor to load configuration"
     
     def _load_config_callback(self, event):
         """Handle loading of configuration file."""
@@ -178,6 +178,11 @@ class RadarGUI:
             if self.radar.version_info:
                 formatted_info = '\n'.join(str(line) for line in self.radar.version_info)
                 self.version_info.value = formatted_info
+                
+            # Set the configuration text directly
+            if self.config_file:
+                self.config_text.value = self.config_file
+            
             self.connect_button.loading = False
             self.connect_button.name = "Connected"
             self.connect_button.button_type = "success"
@@ -483,21 +488,8 @@ class RadarGUI:
         """Auto-detect which radar is connected."""
         # Check serial ports and identify device type
         radar_base = RadarConnection()
-        cli_path, data_path = radar_base.find_serial_ports()
-        
-        if cli_path and data_path:
-            if radar_base.device_type == 'CP2105':
-                logger.info("Detected XWR68xx radar via CP2105 interface")
-                self.radar_type = "xwr68xx"
-                self.config_file = defaultconfig.xwr68xx
-                return True
-            elif radar_base.device_type == 'XDS110':
-                logger.info("Detected AWR2544 radar via XDS110 interface")
-                self.radar_type = "awr2544"
-                self.config_file = defaultconfig.awr2544
-                return True
-            
-        return False
+        self.radar_type, self.config_file = radar_base.detect_radar_type()
+        return self.radar_type is not None
 
 # Create and serve the application
 radar_gui = RadarGUI()

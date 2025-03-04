@@ -10,10 +10,10 @@ MAGIC_NUMBER = 0x708050603040102
 
 class RadarData:
     """
-    Parser for TI mmWave radar data packets.
+    Parser for radar data packets.
     
-    This class handles parsing of binary data packets from TI mmWave radar sensors,
-    extracting point cloud data, range profiles, and side information.
+    This class handles parsing of radar data packets from TI mmWave sensors.
+    It supports both XWR68xx and AWR2544 series sensors.
     
     Attributes:
         MMWDEMO_OUTPUT_MSG_DETECTED_POINTS (int): TLV type for point cloud data
@@ -26,10 +26,10 @@ class RadarData:
         noise (List[float]): Noise level for each point
     """
     
-    # TLV message types
+    # TLV (Type-Length-Value) types
     MMWDEMO_OUTPUT_MSG_DETECTED_POINTS = 1
     MMWDEMO_OUTPUT_MSG_RANGE_PROFILE = 2
-    MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO = 7
+    MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO = 3
 
     def __init__(self, radar_connection=None):
         """
@@ -51,12 +51,19 @@ class RadarData:
         if radar_connection is None or not radar_connection.is_connected() or not radar_connection.is_running:
             return
             
-        header, payload = radar_connection.read_frame()
-        if header is not None:
-            self.frame_number = header.get('frame_number')
-            self.num_tlvs = header.get('num_detected_obj', 0)
-            self._parse_tlv_data(payload)
-
+        try:
+            frame_data = radar_connection.read_frame()
+            if frame_data is None:
+                return
+                
+            header, payload = frame_data
+            if header is not None:
+                self.frame_number = header.get('frame_number')
+                self.num_tlvs = header.get('num_detected_obj', 0)
+                self._parse_tlv_data(payload)
+        except Exception as e:
+            logging.error(f"Error reading radar data: {e}")
+            return
 
     def _parse_tlv_data(self, data: np.ndarray) -> None:
         """Parse TLV (Type-Length-Value) data from the radar packet."""
