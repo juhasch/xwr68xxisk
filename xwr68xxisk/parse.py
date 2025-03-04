@@ -46,13 +46,16 @@ class RadarData:
         self.adc: Optional[np.ndarray] = None
         self.snr: List[float] = []
         self.noise: List[float] = []
+        self.frame_number = None
         
         if radar_connection is None or not radar_connection.is_connected():
             return
             
         header, payload = radar_connection.read_frame()
-        self.num_tlvs = header['num_detected_obj']
-        self._parse_tlv_data(payload)
+        if header is not None:
+            self.frame_number = header.get('frame_number')
+            self.num_tlvs = header.get('num_detected_obj', 0)
+            self._parse_tlv_data(payload)
 
 
     def _parse_tlv_data(self, data: np.ndarray) -> None:

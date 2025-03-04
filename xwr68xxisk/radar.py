@@ -257,7 +257,7 @@ class XWR68xxRadar(RadarConnection):
         if cli_path and data_path:
             self.cli_port = serial.Serial(cli_path, 115200, timeout=0.05)
             # Initialize the optimized reader
-            self.reader = RadarReader(data_path, debug=True)
+            self.reader = RadarReader(data_path, debug=False)
             logger.info("Successfully created optimized reader")
         else:
             raise RadarConnectionError("Failed to connect to radar")
@@ -353,13 +353,6 @@ class XWR68xxRadar(RadarConnection):
         # Parse configuration and store parameters
         self.radar_params = self.parse_configuration(self.configuration)
         logger.info(f"Parsed radar parameters: {self.radar_params}")
-        
-        # Save radar parameters to file
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        params_file = os.path.join(self.debug_dir, f"radar_params_{timestamp}.json")
-        with open(params_file, 'w') as f:
-            json.dump(self.radar_params, f, indent=4)
-        logger.info(f"Saved radar parameters to: {params_file}")
         
         # First, stop the sensor and flush any existing configuration
         init_commands = [
@@ -659,13 +652,6 @@ class AWR2544Radar(RadarConnection):
         self.radar_params = self.parse_configuration(self.configuration)
         logger.info(f"Parsed radar parameters: {self.radar_params}")
         
-        # Save radar parameters to file
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        params_file = os.path.join(self.debug_dir, f"radar_params_{timestamp}.json")
-        with open(params_file, 'w') as f:
-            json.dump(self.radar_params, f, indent=4)
-        logger.info(f"Saved radar parameters to: {params_file}")
-        
         # First, stop the sensor and flush any existing configuration
         init_commands = [
             'sensorStop',
@@ -808,7 +794,6 @@ class AWR2544Radar(RadarConnection):
             chirp_number = header['frame_number']
             logger.debug(f"Frame {frame_number}, Chirp {chirp_number}, Seq {sequence_number}")
             print(f"Frame {frame_number}, Chirp {chirp_number}, Seq {sequence_number}")
-            return None
             return header, payload
             
         except Exception as e:
