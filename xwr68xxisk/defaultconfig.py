@@ -10,7 +10,7 @@ adcbufCfg -1 1 0 1 1
 lowPower 0 0
 profileCfg 0 77 7 7 20.81 0 0 8.883 0 256 30000 0 0 164
 chirpCfg 0 5 0 0 0 0 0 15
-frameCfg 0 5 128 0 256 50 1 0
+frameCfg 0 5 128 0 256 500 1 0
 compressionCfg -1 1 0 0.5 8
 intfMitigCfg -1 15 18
 procChainCfg 1 0 530 0 1
