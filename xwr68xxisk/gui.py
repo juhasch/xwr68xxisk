@@ -55,6 +55,7 @@ class RadarGUI:
         self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
         self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
         self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
+        self.clutter_removal_checkbox = pn.widgets.Checkbox(name='Enable Clutter Removal', value=False)
         
         # Set up callbacks
         self.load_config_button.param.watch(self._load_config_callback, 'value')
@@ -63,9 +64,11 @@ class RadarGUI:
         self.stop_button.on_click(self._stop_callback)
         self.record_button.on_click(self._record_callback)
         self.exit_button.on_click(self._exit_callback)
+        self.clutter_removal_checkbox.param.watch(self._clutter_removal_callback, 'value')
         self.start_button.disabled = True
         self.stop_button.disabled = True
         self.record_button.disabled = True
+        self.clutter_removal_checkbox.disabled = True  # Initially disabled until connected
         
         # Create plot
         self.plot = self.create_plot()
@@ -149,6 +152,12 @@ class RadarGUI:
             self.config_file = event.new.decode('utf-8')
             logger.info("Loaded configuration file")
     
+    def _clutter_removal_callback(self, event):
+        """Handle clutter removal checkbox changes."""
+        if self.radar and self.radar.is_connected():
+            self.radar.clutterRemoval = event.new
+            logger.info(f"Clutter removal {'enabled' if event.new else 'disabled'}")
+    
     def _connect_callback(self, event):
         """Handle connection to sensor."""
         try:
@@ -174,6 +183,7 @@ class RadarGUI:
             self.connect_button.button_type = "success"
             self.start_button.disabled = False
             self.config_button.disabled = False
+            self.clutter_removal_checkbox.disabled = False  # Enable clutter removal checkbox
             self.connect_button.disabled = True
             
         except (RadarConnectionError, FileNotFoundError) as e:
@@ -416,6 +426,8 @@ class RadarGUI:
             self.start_button,
             self.stop_button,
             self.record_button,
+            pn.layout.Divider(),
+            self.clutter_removal_checkbox,  # Add clutter removal checkbox
             pn.layout.Divider(),
             self.exit_button,
             width=300,

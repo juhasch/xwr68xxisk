@@ -49,6 +49,27 @@ class RadarConnection:
         self.serial_number = None
         self.device_type = None  # 'CP2105' or 'XDS110'
         self.is_running = False
+        self._clutter_removal = False  # Default value for clutter removal
+
+    @property
+    def clutterRemoval(self) -> bool:
+        """Get the static clutter removal setting.
+        
+        Returns:
+            bool: True if static clutter removal is enabled, False otherwise.
+        """
+        return self._clutter_removal
+
+    @clutterRemoval.setter
+    def clutterRemoval(self, value: bool) -> None:
+        """Set the static clutter removal setting.
+        
+        Args:
+            value (bool): True to enable static clutter removal, False to disable.
+        """
+        self._clutter_removal = value
+        self.send_command('clutterRemoval -1 ' + ('1' if value else '0') + '\n')
+
     @property
     def DEFAULT_CONFIG_FILE(self) -> str:
         """Default configuration string. Must be implemented by derived classes."""
@@ -875,7 +896,6 @@ class AWR2544Radar(RadarConnection):
             frame_number = header['frame_number']
             chirp_number = header['frame_number']
             logger.debug(f"Frame {frame_number}, Chirp {chirp_number}, Seq {sequence_number}")
-            print(f"Frame {frame_number}, Chirp {chirp_number}, Seq {sequence_number}")
             return header, payload
             
         except Exception as e:
