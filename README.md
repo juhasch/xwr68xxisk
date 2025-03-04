@@ -68,7 +68,7 @@ Just click "Connect" and then "Start" to start the radar.
 $ xwr68xxisk gui
 ```
 
-![GUI](docs/source/_static/gui_screenshot.png)
+![GUI](output.gif)
 
 
 
