@@ -79,7 +79,7 @@ def main():
     # Set up logging
     logging.basicConfig(
         level=getattr(logging, args.log_level),
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        format='%(asctime)s - %(module)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
     )
     

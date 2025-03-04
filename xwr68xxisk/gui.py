@@ -230,8 +230,7 @@ class RadarGUI:
             self.stop_button.disabled = True
             if self.radar.is_connected():
                 logger.info("Stopping sensor...")
-                self.radar.cli_port.write(b'sensorStop\n')
-                self.radar._read_cli_response()  # Clear the response
+                self.radar.stop()
             self.is_running = False
             self.start_button.button_type = 'primary'
             self.start_button.name = 'Start'
