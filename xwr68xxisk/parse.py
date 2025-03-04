@@ -50,27 +50,10 @@ class RadarData:
         if radar_connection is None or not radar_connection.is_connected():
             return
             
-        header = radar_connection.read_header()
-        if header is not None:
-            assert len(header) == 32
-            self._parse_header(header)
-            payload = radar_connection.read_packet(self.total_packet_len)
-            if payload is not None:
-                self._parse_tlv_data(payload)
+        header, payload = radar_connection.read_frame()
+        self.num_tlvs = header['num_detected_obj']
+        self._parse_tlv_data(payload)
 
-    def _parse_header(self, data: np.ndarray) -> None:
-        """Parse the radar data packet header."""
-        self.version = int.from_bytes(data[0:4], byteorder='little')
-        self.total_packet_len = int.from_bytes(data[4:8], byteorder='little')
-        logging.debug(f"Total packet length: {self.total_packet_len}")
-        self.platform = int.from_bytes(data[8:12], byteorder='little')
-        self.frame_number = int.from_bytes(data[12:16], byteorder='little')
-        logging.debug(f"Frame number: {self.frame_number}")
-        self.time_cpu_cycles = int.from_bytes(data[16:20], byteorder='little')
-        self.num_detected_obj = int.from_bytes(data[20:24], byteorder='little')
-        self.num_tlvs = int.from_bytes(data[24:28], byteorder='little')
-        self.subframe_number = (int.from_bytes(data[28:32], byteorder='little') 
-                              if self.num_detected_obj > 0 else None)
 
     def _parse_tlv_data(self, data: np.ndarray) -> None:
         """Parse TLV (Type-Length-Value) data from the radar packet."""

@@ -20,7 +20,7 @@ import fcntl
 import struct
 import math
 import json
-from mmwserial import UDPReader
+from mmwserial import UDPReader, RadarReader
 
 logger = logging.getLogger(__name__)
 
@@ -242,17 +242,23 @@ class XWR68xxRadar(RadarConnection):
         self.radar_params = {}
         self.debug_dir = "debug_data"
         os.makedirs(self.debug_dir, exist_ok=True)
+        self.reader = None
+        self.last_frame = None
+        self.missed_frames = 0
+        self.total_frames = 0
+        self.invalid_packets = 0
+        self.failed_reads = 0
 
     def _connect_device(self, serial_number: Optional[str] = None) -> None:
         """Connect to the XWR68xx radar device."""
-        baudrate = 115200*9  # Highest working baudrate for the sensor
-        
         # Try to auto-detect ports
         cli_path, data_path = self.find_serial_ports(serial_number)
         
         if cli_path and data_path:
             self.cli_port = serial.Serial(cli_path, 115200, timeout=0.05)
-            self.data_port = serial.Serial(data_path, baudrate, timeout=0.2)
+            # Initialize the optimized reader
+            self.reader = RadarReader(data_path, debug=True)
+            logger.info("Successfully created optimized reader")
         else:
             raise RadarConnectionError("Failed to connect to radar")
 
@@ -406,48 +412,90 @@ class XWR68xxRadar(RadarConnection):
     def configure_and_start(self) -> None:
         """Configure the XWR68xx radar and start streaming data."""
         self.send_configuration()
-        self.data_port.flushInput()
+#        if self.reader:
+#            self.reader.flush()  # Flush any existing data in the reader
         self.cli_port.write(b'sensorStart\n')
         logger.info("Radar configured and started")
 
-    def read_header(self) -> Optional[np.ndarray]:
-        """Read a packet header from the XWR68xx sensor."""
-        counter = 0
-        while True:            
-            chunk = self.data_port.read(8)
-            if chunk == self.MAGIC_WORD:
-                counter = 0
-                header = self.data_port.read(32)
-                if len(header) < 32:
-                    logger.warning("Incomplete header read")
-                    continue
-                time.sleep(0.08)
-                return header
+    def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:
+        """
+        Read and parse data packets from the radar using the optimized mmwserial reader.
+        
+        Returns:
+            Tuple of (header, payload) arrays if successful, None otherwise
+        """
+        if not self.reader:
+            logger.error("Reader not initialized. Please connect to the radar first.")
+            return None
+            
+        try:
+            if packet := self.reader.read_packet():
+                self.total_frames += 1
+                frame = packet.header.frame_number
+                
+                # Track frame statistics
+                if self.last_frame is not None:
+                    if frame != self.last_frame + 1:
+                        missed = frame - self.last_frame - 1
+                        self.missed_frames += missed
+                        logger.warning(f"Missed {missed} frames between {self.last_frame} and {frame}")
+                    elif frame <= self.last_frame:
+                        logger.error(f"Invalid frame sequence: {self.last_frame} -> {frame}")
+                        self.invalid_packets += 1
+                
+                self.last_frame = frame
+                logger.debug(f"Frame {frame}: {packet.header.num_detected_obj} objects, "
+                           f"{packet.header.total_packet_len} bytes")
+                
+                # Convert packet data to numpy arrays
+                header = {
+                    'version': packet.header.version,
+                    'total_packet_len': packet.header.total_packet_len,
+                    'platform': packet.header.platform,
+                    'frame_number': packet.header.frame_number,
+                    'time_cpu_cycles': packet.header.time_cpu_cycles,
+                    'num_detected_obj': packet.header.num_detected_obj,
+                }
+                
+                # Convert payload to numpy array
+                payload = np.frombuffer(packet.data, dtype=np.uint8)
+                
+                return header, payload
             else:
-                counter += 1
-                if counter > 10000:
-                    logger.warning("No magic word found")
-                    return None
-                time.sleep(0.001)
+                self.failed_reads += 1
+                logger.warning("Failed to read packet")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error reading frame: {e}")
+            return None
 
-    def read_packet(self, num_bytes: int) -> Optional[np.ndarray]:
-        """Read a complete packet from the XWR68xx sensor."""
-        num_bytes = self.data_port.in_waiting
-        packet = self.data_port.read(num_bytes)
-        return packet
 
     def close(self) -> None:
         """Safely close the XWR68xx radar connection."""
         if self.cli_port and self.cli_port.is_open:
-            self.cli_port.write('sensorStop\n'.encode())
+            self.send_command('sensorStop')
             self.cli_port.close()
-        if self.data_port and self.data_port.is_open:
-            self.data_port.close()
+#        if self.reader:
+#            self.reader.close()
+            
+        # Log statistics
+        if self.total_frames > 0:
+            total_attempted = self.total_frames + self.failed_reads
+            logger.info(f"\nStatistics:")
+            logger.info(f"Total successful frames: {self.total_frames}")
+            logger.info(f"Failed reads: {self.failed_reads}")
+            logger.info(f"Missed frames: {self.missed_frames}")
+            logger.info(f"Invalid packets: {self.invalid_packets}")
+            if total_attempted > 0:
+                logger.info(f"Success rate: {100.0*self.total_frames/total_attempted:.1f}%")
+            if self.total_frames + self.missed_frames > 0:
+                logger.info(f"Frame loss: {100*self.missed_frames/(self.total_frames+self.missed_frames):.1f}%")
 
     def is_connected(self) -> bool:
         """Check if XWR68xx radar is connected."""
         return (self.cli_port is not None and self.cli_port.is_open and 
-                self.data_port is not None and self.data_port.is_open)
+                self.reader is not None)
 
 
 class AWR2544Radar(RadarConnection):
@@ -709,7 +757,7 @@ class AWR2544Radar(RadarConnection):
                 data[2]*65536 +
                 data[3]*16777216)
 
-    def read_frame(self) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:
         """
         Read and parse data packets from the radar using mmwserial_rs.
         Looks for magic pattern and extracts frame information from each packet.
@@ -744,13 +792,20 @@ class AWR2544Radar(RadarConnection):
             
             # Extract header and payload from first frame
             first_frame = frames[0]
-            header = np.frombuffer(first_frame[:16], dtype=np.uint32)
-            payload = np.frombuffer(first_frame[16:], dtype=np.uint8)
+            header = {
+                'version': first_frame[0],
+                'total_packet_len': first_frame[1],
+                'platform': first_frame[2],
+                'frame_number': first_frame[3],
+                'time_cpu_cycles': first_frame[4],
+                'num_detected_obj': first_frame[5],
+            }
+            payload = np.frombuffer(first_frame[6:], dtype=np.uint8)
             
             # Log frame information
-            sequence_number = header[0]
-            frame_number = header[1]
-            chirp_number = header[2]
+            sequence_number = header['frame_number']
+            frame_number = header['frame_number']
+            chirp_number = header['frame_number']
             logger.debug(f"Frame {frame_number}, Chirp {chirp_number}, Seq {sequence_number}")
             print(f"Frame {frame_number}, Chirp {chirp_number}, Seq {sequence_number}")
             return None
@@ -760,7 +815,7 @@ class AWR2544Radar(RadarConnection):
             logger.error(f"Error reading frame: {e}")
             return None
 
-    def read_header(self) -> Optional[np.ndarray]:
+    def read_header(self) -> Optional[dict]:
         """Read a frame header from the AWR2544 sensor."""
         frame_data = self.read_frame()
         if frame_data is None:
