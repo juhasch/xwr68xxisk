@@ -137,6 +137,27 @@ class RadarConnection:
         
         return cli_port_path, data_port_path
 
+    def detect_radar_type(self) -> Tuple[Optional[str], Optional[str]]:
+        """Detect which type of radar is connected and return its type and config file.
+        
+        Returns:
+            Tuple[Optional[str], Optional[str]]: A tuple containing (radar_type, config_file)
+                where radar_type is either "xwr68xx" or "awr2544", and config_file is the
+                corresponding default configuration file path.
+                Returns (None, None) if no supported radar is detected.
+        """
+        cli_path, data_path = self.find_serial_ports()
+        
+        if cli_path and data_path:
+            if self.device_type == 'CP2105':
+                logger.info("Detected XWR68xx radar via CP2105 interface")
+                return "xwr68xx", defaultconfig.xwr68xx
+            elif self.device_type == 'XDS110':
+                logger.info("Detected AWR2544 radar via XDS110 interface")
+                return "awr2544", defaultconfig.awr2544
+            
+        return None, None
+
     def _read_cli_response(self):
         """Read and return the complete response from the CLI port."""
         response = []

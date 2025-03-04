@@ -4,44 +4,21 @@ import os
 import logging
 import re
 
-import pyarrow as pa
-from dora import Node
 import panel as pn
 from .gui import RadarGUI
 from .record import main as record_main
+from .doranode import start_dora_node
 
 RUNNER_CI = True if os.getenv("CI") == "true" else False
 
+import sys
+print(sys.executable)
 
 def start_gui(args):
     """Start the Panel GUI server."""
     radar_gui = RadarGUI()
     pn.serve(radar_gui.layout, port=args.port, show=True)
 
-
-def send_data(args):
-    """Send data using PyArrow."""
-    data = os.getenv("DATA", args.data)
-
-    node = Node(
-        args.name,
-    )  # provide the name to connect to the dataflow if dynamic node
-
-    if data is None:
-        raise ValueError(
-            "No data provided. Please specify `DATA` environment argument or as `--data` argument",
-        )
-    try:
-        data = ast.literal_eval(data)
-    except ValueError:
-        print("Passing input as string")
-    if isinstance(data, list):
-        data = pa.array(data)  # initialize pyarrow array
-    elif isinstance(data, str) or isinstance(data, int) or isinstance(data, float):
-        data = pa.array([data])
-    else:
-        data = pa.array(data)  # initialize pyarrow array
-    node.send_output("data", data)
 
 
 def validate_serial(value):
@@ -73,6 +50,12 @@ def main():
     # Record subcommand
     record_parser = subparsers.add_parser('record', help='Record radar data to CSV file')
     record_parser.set_defaults(func=lambda _: record_main(serial_number=args.serial_number))
+
+    # Dora subcommand
+    dora_parser = subparsers.add_parser('dora', help='Start the dora-rs node interface')
+    dora_parser.add_argument('--name', type=str, required=True,
+                           help='Name of the dora node')
+    dora_parser.set_defaults(func=start_dora_node)
 
     args = parser.parse_args()
 
