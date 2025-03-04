@@ -48,7 +48,7 @@ class RadarConnection:
         self.version_info = None
         self.serial_number = None
         self.device_type = None  # 'CP2105' or 'XDS110'
-        
+        self.is_running = False
     @property
     def DEFAULT_CONFIG_FILE(self) -> str:
         """Default configuration string. Must be implemented by derived classes."""
@@ -346,13 +346,49 @@ class XWR68xxRadar(RadarConnection):
         
         return config_params
 
+    def _format_radar_params(self, params: dict) -> str:
+        """Format radar parameters for pretty printing.
+        
+        Args:
+            params: Dictionary of radar parameters
+            
+        Returns:
+            Formatted string with radar parameters
+        """
+        # Define parameter groups and their display names
+        groups = {
+            'Antenna Configuration': ['rxAnt', 'txAnt'],
+            'Sampling Parameters': ['samples', 'sampleRate', 'slope'],
+            'Frame Configuration': ['chirpsPerFrame', 'rangeBins'],
+            'Range Parameters': ['rangeStep', 'maxRange'],
+            'Compression Settings': ['compMethod', 'compRatio', 'rangeBinsPerBlock', 'achievedDcmpratio'],
+            'Packet Configuration': ['pktsPerChirp', 'pktsPerFrame', 'pktLen'],
+            'Processing Chain': ['procChain', 'crcType']
+        }
+        
+        # Format each group
+        formatted_lines = []
+        for group_name, param_names in groups.items():
+            group_params = {k: params[k] for k in param_names if k in params}
+            if group_params:
+                formatted_lines.append(f"\n{group_name}:")
+                for param_name, value in group_params.items():
+                    # Format floating point numbers to 2 decimal places
+                    if isinstance(value, float):
+                        formatted_value = f"{value:.2f}"
+                    else:
+                        formatted_value = str(value)
+                    formatted_lines.append(f"  {param_name:20} = {formatted_value}")
+        
+        return "\n".join(formatted_lines)
+
     def send_configuration(self, ignore_response: bool = False) -> None:
         """Send the configuration to the radar efficiently."""
         self.cli_port.flushInput()
         
         # Parse configuration and store parameters
         self.radar_params = self.parse_configuration(self.configuration)
-        logger.info(f"Parsed radar parameters: {self.radar_params}")
+        logger.info(f"Parsed radar parameters:{self._format_radar_params(self.radar_params)}")
         
         # First, stop the sensor and flush any existing configuration
         init_commands = [
@@ -408,6 +444,7 @@ class XWR68xxRadar(RadarConnection):
 #        if self.reader:
 #            self.reader.flush()  # Flush any existing data in the reader
         self.cli_port.write(b'sensorStart\n')
+        self.is_running = True
         logger.info("Radar configured and started")
 
     def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:
@@ -419,6 +456,10 @@ class XWR68xxRadar(RadarConnection):
         """
         if not self.reader:
             logger.error("Reader not initialized. Please connect to the radar first.")
+            return None
+        
+        if not self.is_running:
+            logger.error("Radar is not running. Please start the radar first.")
             return None
             
         try:
@@ -464,10 +505,15 @@ class XWR68xxRadar(RadarConnection):
             return None
 
 
+    def stop(self) -> None:
+        """Stop the XWR68xx radar."""
+        self.send_command('sensorStop')
+        self.is_running = False
+
     def close(self) -> None:
         """Safely close the XWR68xx radar connection."""
         if self.cli_port and self.cli_port.is_open:
-            self.send_command('sensorStop')
+            self.stop()
             self.cli_port.close()
 #        if self.reader:
 #            self.reader.close()
@@ -644,13 +690,49 @@ class AWR2544Radar(RadarConnection):
         
         return config_params
 
+    def _format_radar_params(self, params: dict) -> str:
+        """Format radar parameters for pretty printing.
+        
+        Args:
+            params: Dictionary of radar parameters
+            
+        Returns:
+            Formatted string with radar parameters
+        """
+        # Define parameter groups and their display names
+        groups = {
+            'Antenna Configuration': ['rxAnt', 'txAnt'],
+            'Sampling Parameters': ['samples', 'sampleRate', 'slope'],
+            'Frame Configuration': ['chirpsPerFrame', 'rangeBins'],
+            'Range Parameters': ['rangeStep', 'maxRange'],
+            'Compression Settings': ['compMethod', 'compRatio', 'rangeBinsPerBlock', 'achievedDcmpratio'],
+            'Packet Configuration': ['pktsPerChirp', 'pktsPerFrame', 'pktLen'],
+            'Processing Chain': ['procChain', 'crcType']
+        }
+        
+        # Format each group
+        formatted_lines = []
+        for group_name, param_names in groups.items():
+            group_params = {k: params[k] for k in param_names if k in params}
+            if group_params:
+                formatted_lines.append(f"\n{group_name}:")
+                for param_name, value in group_params.items():
+                    # Format floating point numbers to 2 decimal places
+                    if isinstance(value, float):
+                        formatted_value = f"{value:.2f}"
+                    else:
+                        formatted_value = str(value)
+                    formatted_lines.append(f"  {param_name:20} = {formatted_value}")
+        
+        return "\n".join(formatted_lines)
+
     def send_configuration(self, ignore_response: bool = False) -> None:
         """Send the configuration to the radar efficiently."""
         self.cli_port.flushInput()
         
         # Parse configuration and store parameters
         self.radar_params = self.parse_configuration(self.configuration)
-        logger.info(f"Parsed radar parameters: {self.radar_params}")
+        logger.info(f"Parsed radar parameters:{self._format_radar_params(self.radar_params)}")
         
         # First, stop the sensor and flush any existing configuration
         init_commands = [

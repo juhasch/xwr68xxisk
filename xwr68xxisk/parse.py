@@ -48,7 +48,7 @@ class RadarData:
         self.noise: List[float] = []
         self.frame_number = None
         
-        if radar_connection is None or not radar_connection.is_connected():
+        if radar_connection is None or not radar_connection.is_connected() or not radar_connection.is_running:
             return
             
         header, payload = radar_connection.read_frame()
