@@ -239,6 +239,9 @@ class XWR68xxRadar(RadarConnection):
         self.byte_buffer = np.zeros(self.MAX_BUFFER_SIZE, dtype='uint8')
         self.byte_buffer_length = 0
         self.current_index = 0
+        self.radar_params = {}
+        self.debug_dir = "debug_data"
+        os.makedirs(self.debug_dir, exist_ok=True)
 
     def _connect_device(self, serial_number: Optional[str] = None) -> None:
         """Connect to the XWR68xx radar device."""
@@ -253,9 +256,104 @@ class XWR68xxRadar(RadarConnection):
         else:
             raise RadarConnectionError("Failed to connect to radar")
 
+    def parse_configuration(self, config_lines: List[str]) -> dict:
+        """Parse configuration lines and extract radar parameters.
+        
+        Args:
+            config_lines: List of configuration command lines
+            
+        Returns:
+            Dictionary containing parsed radar parameters
+        """
+        config_params = {}
+        
+        for line in config_lines:
+            if not line.strip() or line.startswith('%'):
+                continue
+                
+            cfg = line.split()
+            if not cfg:
+                continue
+                
+            cmd = cfg[0]
+            args = cfg[1::]
+            
+            try:
+                if cmd == 'channelCfg':
+                    config_params['rxAnt'] = bin(int(args[0])).count("1")
+                    config_params['txAnt'] = bin(int(args[1])).count("1")
+                    
+                elif cmd == 'profileCfg':
+                    config_params['samples'] = int(args[-5])
+                    config_params['sampleRate'] = int(args[-4])
+                    config_params['slope'] = float(args[7])
+                    
+                elif cmd == 'frameCfg':
+                    config_params['chirpsPerFrame'] = (int(args[1]) - int(args[0]) + 1) * int(args[2])
+                    
+                elif cmd == 'compressionCfg':
+                    config_params['compMethod'] = int(args[2])
+                    config_params['compRatio'] = float(args[3])
+                    config_params['rangeBinsPerBlock'] = int(args[4])
+                    
+                elif cmd == 'procChainCfg':
+                    config_params['procChain'] = int(args[0])
+                    config_params['crcType'] = int(args[4])
+                    
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Error parsing configuration line '{line}': {e}")
+                continue
+        
+        # Calculate derived parameters
+        if 'samples' in config_params:
+            rangeBins2x = 2 ** (len(bin(config_params['samples'])) - 2)
+            if config_params.get('procChain', 0) == 0:
+                config_params['rangeBins'] = int(rangeBins2x/2)
+            else:
+                rangeBins3x = 3 * 2 ** (len(bin(int(config_params['samples']/3))) - 2)
+                config_params['rangeBins'] = int(rangeBins3x/2) if rangeBins2x > rangeBins3x else int(rangeBins2x/2)
+        
+        # Calculate range resolution
+        if all(k in config_params for k in ['sampleRate', 'slope', 'rangeBins']):
+            config_params['rangeStep'] = (3e8 * config_params['sampleRate'] * 1e3) / (2 * config_params['slope'] * 1e12 * config_params['rangeBins'] * 2)
+            config_params['maxRange'] = config_params['rangeStep'] * config_params['rangeBins']
+        
+        # Calculate compression parameters
+        if all(k in config_params for k in ['compMethod', 'rxAnt', 'rangeBinsPerBlock', 'compRatio']):
+            if config_params['compMethod'] == 1:
+                samplesPerBlock = config_params['rangeBinsPerBlock']
+            else:
+                samplesPerBlock = config_params['rxAnt'] * config_params['rangeBinsPerBlock']
+                
+            inputBytesPerBlock = 4 * samplesPerBlock
+            outputBytesPerBlock = math.ceil((inputBytesPerBlock * config_params['compRatio']) / 4) * 4
+            config_params['achievedDcmpratio'] = outputBytesPerBlock/inputBytesPerBlock
+            
+            # Calculate packets per chirp and frame
+            if 'rangeBins' in config_params:
+                numBlocksPerChirp = config_params['rangeBins'] * config_params['rxAnt'] / samplesPerBlock
+                maxPayloadSize = 1536 - (16 + 8)  # max - (header+ footer)
+                numBlocksPerPayload = int(maxPayloadSize / outputBytesPerBlock)
+                config_params['pktsPerChirp'] = math.ceil(numBlocksPerChirp / numBlocksPerPayload)
+                config_params['pktsPerFrame'] = config_params['pktsPerChirp'] * config_params['chirpsPerFrame']
+                config_params['pktLen'] = int((outputBytesPerBlock * numBlocksPerChirp) / config_params['pktsPerChirp'])
+        
+        return config_params
+
     def send_configuration(self, ignore_response: bool = False) -> None:
         """Send the configuration to the radar efficiently."""
         self.cli_port.flushInput()
+        
+        # Parse configuration and store parameters
+        self.radar_params = self.parse_configuration(self.configuration)
+        logger.info(f"Parsed radar parameters: {self.radar_params}")
+        
+        # Save radar parameters to file
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        params_file = os.path.join(self.debug_dir, f"radar_params_{timestamp}.json")
+        with open(params_file, 'w') as f:
+            json.dump(self.radar_params, f, indent=4)
+        logger.info(f"Saved radar parameters to: {params_file}")
         
         # First, stop the sensor and flush any existing configuration
         init_commands = [
