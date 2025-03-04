@@ -377,6 +377,14 @@ class RadarGUI:
                     for i in range(min_length):
                         self.recording_file.write(f"{frame_number},{x[i]:.3f},{y[i]:.3f},{velocity[i]:.3f},{snr_values[i]:.3f}\n")
                     self.recording_file.flush()  # Ensure data is written to disk
+            else:
+                # Clear the plot when no data is available
+                self.data_source.data = {
+                    'x': [],
+                    'y': [],
+                    'velocity': [],
+                    'size': []
+                }
 
             # Schedule next update if still running
             if self.is_running:
@@ -384,6 +392,13 @@ class RadarGUI:
 
         except Exception as e:
             logger.error(f"Error updating plot: {e}")
+            # Clear the plot on error
+            self.data_source.data = {
+                'x': [],
+                'y': [],
+                'velocity': [],
+                'size': []
+            }
             self._stop_callback(None)
     
     def create_layout(self):
