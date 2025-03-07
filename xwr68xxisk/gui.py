@@ -11,11 +11,13 @@ from xwr68xxisk.parse import RadarData
 import time
 import os
 import logging
+import sys
 from datetime import datetime
 from panel.widgets import TextAreaInput, StaticText, Button, FileInput, Select
 from xwr68xxisk.radar import RadarConnection, create_radar
 import socket
 from xwr68xxisk import defaultconfig
+from bokeh.server.server import Server
 
 logger = logging.getLogger(__name__)
 
@@ -492,8 +494,20 @@ class RadarGUI:
         return self.radar_type is not None
 
 # Create and serve the application
-radar_gui = RadarGUI()
-pn.config.allow_ws_origin = ['localhost:5006', 'dockerpi:5006']
-pn.config.port = 5006
-pn.config.address = '0.0.0.0'
-radar_gui.layout.servable(title='XWR68XX ISK Radar GUI')
+def main():
+    # Set up command line arguments for Panel
+    sys.argv.extend(['--port', '5006', 
+                     '--address', '0.0.0.0', 
+                     '--allow-websocket-origin', 'localhost:5006',
+                     '--allow-websocket-origin', 'dockerpi:5006',
+                     '--allow-websocket-origin', '0.0.0.0:5006'])
+    
+    radar_gui = RadarGUI()
+    radar_gui.layout.servable()
+
+if __name__ == "__main__":
+    main()
+else:
+    # When imported as a module
+    radar_gui = RadarGUI()
+    radar_gui.layout.servable()
