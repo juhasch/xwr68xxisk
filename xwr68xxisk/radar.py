@@ -55,11 +55,6 @@ class RadarConnection:
         self._detected_data_port = None
 
     @property
-    def DEFAULT_CONFIG_FILE(self) -> str:
-        """Default configuration string. Must be implemented by derived classes."""
-        raise NotImplementedError("Derived classes must implement DEFAULT_CONFIG_FILE")
-
-    @property
     def clutterRemoval(self) -> bool:
         """Get the static clutter removal setting.
         
@@ -77,6 +72,25 @@ class RadarConnection:
         """
         self._clutter_removal = value
         self.send_command('clutterRemoval -1 ' + ('1' if value else '0') + '\n')
+
+    def set_mob_enabled(self, enabled: bool) -> None:
+        """Enable or disable multi-object beamforming.
+        
+        Args:
+            enabled (bool): True to enable multi-object beamforming, False to disable.
+        """
+        value = '1' if enabled else '0'
+        self.send_command(f'multiObjBeamForming -1 {value} 0.5\n')
+
+    def set_mob_threshold(self, threshold: float) -> None:
+        """Set the multi-object beamforming threshold.
+        
+        Args:
+            threshold (float): The threshold value between 0 and 1.
+        """
+        # Ensure threshold is within valid range
+        threshold = max(0.0, min(1.0, threshold))
+        self.send_command(f'multiObjBeamForming -1 1 {threshold:.2f}\n')
 
     def find_serial_ports(self, serial_number: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
         """Find the radar ports for either Silicon Labs CP2105 or TI XDS110 devices."""
