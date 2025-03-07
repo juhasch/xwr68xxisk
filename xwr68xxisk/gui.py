@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 TIMER_PERIOD = 90
 
+# Set Bokeh environment variables for external access
+os.environ["BOKEH_ALLOW_WS_ORIGIN"] = "localhost:5006,dockerpi:5006,0.0.0.0:5006"
+os.environ["BOKEH_ADDRESS"] = "0.0.0.0"
+os.environ["BOKEH_PORT"] = "5006"
+
 # Initialize extensions (fix order and syntax)
 hv.extension('bokeh')
 pn.extension(design="material", sizing_mode="stretch_width")
