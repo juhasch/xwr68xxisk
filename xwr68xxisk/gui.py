@@ -55,6 +55,7 @@ class RadarGUI:
         self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
         self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
         self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
+        self.clutter_removal_checkbox = pn.widgets.Checkbox(name='Enable Clutter Removal', value=False)
         
         # Set up callbacks
         self.load_config_button.param.watch(self._load_config_callback, 'value')
@@ -63,9 +64,11 @@ class RadarGUI:
         self.stop_button.on_click(self._stop_callback)
         self.record_button.on_click(self._record_callback)
         self.exit_button.on_click(self._exit_callback)
+        self.clutter_removal_checkbox.param.watch(self._clutter_removal_callback, 'value')
         self.start_button.disabled = True
         self.stop_button.disabled = True
         self.record_button.disabled = True
+        self.clutter_removal_checkbox.disabled = True  # Initially disabled until connected
         
         # Create plot
         self.plot = self.create_plot()
@@ -133,21 +136,27 @@ class RadarGUI:
         self.cancel_button.on_click(self._hide_config_modal)
         self.save_button.on_click(self._save_config)
         
-        # Load initial configuration
-        self._load_initial_config()
-        
         # Create layout
         self.layout = self.create_layout()
         
         # Initialize periodic callback (disabled by default)
         self.periodic_callback = None
         self.is_running = False
+        
+        # Set initial configuration text
+        self.config_text.value = "# Connect to sensor to load configuration"
     
     def _load_config_callback(self, event):
         """Handle loading of configuration file."""
         if event.new:  # Check if a file was actually uploaded
             self.config_file = event.new.decode('utf-8')
             logger.info("Loaded configuration file")
+    
+    def _clutter_removal_callback(self, event):
+        """Handle clutter removal checkbox changes."""
+        if self.radar and self.radar.is_connected():
+            self.radar.clutterRemoval = event.new
+            logger.info(f"Clutter removal {'enabled' if event.new else 'disabled'}")
     
     def _connect_callback(self, event):
         """Handle connection to sensor."""
@@ -169,11 +178,17 @@ class RadarGUI:
             if self.radar.version_info:
                 formatted_info = '\n'.join(str(line) for line in self.radar.version_info)
                 self.version_info.value = formatted_info
+                
+            # Set the configuration text directly
+            if self.config_file:
+                self.config_text.value = self.config_file
+            
             self.connect_button.loading = False
             self.connect_button.name = "Connected"
             self.connect_button.button_type = "success"
             self.start_button.disabled = False
             self.config_button.disabled = False
+            self.clutter_removal_checkbox.disabled = False  # Enable clutter removal checkbox
             self.connect_button.disabled = True
             
         except (RadarConnectionError, FileNotFoundError) as e:
@@ -417,6 +432,8 @@ class RadarGUI:
             self.stop_button,
             self.record_button,
             pn.layout.Divider(),
+            self.clutter_removal_checkbox,  # Add clutter removal checkbox
+            pn.layout.Divider(),
             self.exit_button,
             width=300,
             styles={'background': '#f8f8f8', 'padding': '10px'}
@@ -464,28 +481,15 @@ class RadarGUI:
             self._stop_callback(None)
         if self.is_recording and self.recording_file:
             self.recording_file.close()
-        if self.radar.is_connected():
+        if self.radar is not None and self.radar.is_connected():
             self.radar.close()
 
     def _detect_radar_type(self):
         """Auto-detect which radar is connected."""
         # Check serial ports and identify device type
         radar_base = RadarConnection()
-        cli_path, data_path = radar_base.find_serial_ports()
-        
-        if cli_path and data_path:
-            if radar_base.device_type == 'CP2105':
-                logger.info("Detected XWR68xx radar via CP2105 interface")
-                self.radar_type = "xwr68xx"
-                self.config_file = defaultconfig.xwr68xx
-                return True
-            elif radar_base.device_type == 'XDS110':
-                logger.info("Detected AWR2544 radar via XDS110 interface")
-                self.radar_type = "awr2544"
-                self.config_file = defaultconfig.awr2544
-                return True
-            
-        return False
+        self.radar_type, self.config_file = radar_base.detect_radar_type()
+        return self.radar_type is not None
 
 # Create and serve the application
 radar_gui = RadarGUI()
