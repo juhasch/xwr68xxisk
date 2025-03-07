@@ -50,6 +50,9 @@ class RadarConnection:
         self.device_type = None  # 'CP2105' or 'XDS110'
         self.is_running = False
         self._clutter_removal = False  # Default value for clutter removal
+        # Store detected ports
+        self._detected_cli_port = None
+        self._detected_data_port = None
 
     @property
     def clutterRemoval(self) -> bool:
@@ -112,43 +115,62 @@ class RadarConnection:
             # Check for CP2105
             if port.vid == self.CP2105_VENDOR_ID and port.pid == self.CP2105_PRODUCT_ID:
                 logger.debug(f"Found CP2105 port: {port.description}")
-                if "Enhanced" in port.description:
-                    cli_port_path = port.device
-                elif "Standard" in port.description:
-                    data_port_path = port.device
+                device_path = port.device
+                
+                # Convert cu. to tty. on macOS for more reliable access
+                if device_path.startswith('/dev/cu.'):
+                    device_path = device_path.replace('/dev/cu.', '/dev/tty.')
+                
+                # Handle different naming conventions based on OS
+                if "SLAB_USBtoUART" in device_path:  # macOS
+                    if "UART3" in device_path:  # CLI port on macOS
+                        cli_port_path = device_path
+                    else:  # Data port on macOS
+                        data_port_path = device_path
                     self.serial_number = port.serial_number
                     self.device_type = 'CP2105'
-                    if serial_number and serial_number != self.serial_number:
-                        data_port_path = None
-                        cli_port_path = None
+                elif "Enhanced" in port.description:  # Windows/Linux
+                    cli_port_path = device_path
+                elif "Standard" in port.description:  # Windows/Linux
+                    data_port_path = device_path
+                    self.serial_number = port.serial_number
+                    self.device_type = 'CP2105'
+                    
+                if serial_number and serial_number != self.serial_number:
+                    data_port_path = None
+                    cli_port_path = None
                         
             # Check for XDS110
             elif port.vid == self.TI_VENDOR_ID and port.pid == self.TI_PRODUCT_ID:
                 logger.debug(f"Found XDS110 port: {port.description}")
-                if "ACM0" in port.device:  # CLI port
-                    cli_port_path = port.device
-                elif "ACM1" in port.device:  # Data port
-                    data_port_path = port.device
+                device_path = port.device
+                if device_path.startswith('/dev/cu.'):
+                    device_path = device_path.replace('/dev/cu.', '/dev/tty.')
+                    
+                if "ACM0" in device_path:  # CLI port
+                    cli_port_path = device_path
+                elif "ACM1" in device_path:  # Data port
+                    data_port_path = device_path
                     self.serial_number = port.serial_number
                     self.device_type = 'XDS110'
                     if serial_number and serial_number != self.serial_number:
                         data_port_path = None
                         cli_port_path = None
         
+        if cli_port_path and data_port_path:
+            logger.info(f"Found CLI port: {cli_port_path}")
+            logger.info(f"Found Data port: {data_port_path}")
+            logger.info(f"Serial number: {self.serial_number}")
+        
         return cli_port_path, data_port_path
 
     def detect_radar_type(self) -> Tuple[Optional[str], Optional[str]]:
-        """Detect which type of radar is connected and return its type and config file.
+        """Detect which type of radar is connected and return its type and config file."""
+        # Only detect ports if not already detected
+        if not (self._detected_cli_port and self._detected_data_port):
+            self._detected_cli_port, self._detected_data_port = self.find_serial_ports()
         
-        Returns:
-            Tuple[Optional[str], Optional[str]]: A tuple containing (radar_type, config_file)
-                where radar_type is either "xwr68xx" or "awr2544", and config_file is the
-                corresponding default configuration file path.
-                Returns (None, None) if no supported radar is detected.
-        """
-        cli_path, data_path = self.find_serial_ports()
-        
-        if cli_path and data_path:
+        if self._detected_cli_port and self._detected_data_port:
             if self.device_type == 'CP2105':
                 logger.info("Detected XWR68xx radar via CP2105 interface")
                 return "xwr68xx", defaultconfig.xwr68xx
@@ -293,16 +315,48 @@ class XWR68xxRadar(RadarConnection):
 
     def _connect_device(self, serial_number: Optional[str] = None) -> None:
         """Connect to the XWR68xx radar device."""
-        # Try to auto-detect ports
-        cli_path, data_path = self.find_serial_ports(serial_number)
+        # Use already detected ports if available, otherwise detect them
+        if not (self._detected_cli_port and self._detected_data_port):
+            self._detected_cli_port, self._detected_data_port = self.find_serial_ports(serial_number)
         
-        if cli_path and data_path:
-            self.cli_port = serial.Serial(cli_path, 115200, timeout=0.05)
+        if not (self._detected_cli_port and self._detected_data_port):
+            raise RadarConnectionError("Failed to detect radar ports")
+            
+        try:
+            logger.debug(f"Attempting to open CLI port: {self._detected_cli_port}")
+            self.cli_port = serial.Serial(
+                self._detected_cli_port,
+                baudrate=115200,
+                timeout=0.05,
+                exclusive=True  # Ensure exclusive access to the port
+            )
+            logger.debug("CLI port opened successfully")
+            
+            # Set baudrate based on OS platform
+            if self._detected_cli_port.startswith('/dev/tty.'):  # macOS
+                baudrate = 460800
+            else:  # Windows/Linux
+                baudrate = 921600
+                
             # Initialize the optimized reader
-            self.reader = RadarReader(data_path, debug=False)
+            logger.debug(f"Attempting to create reader for data port: {self._detected_data_port}")
+            logger.debug(f"Using baudrate: {baudrate}")
+            
+            # Create the reader with the configured baudrate
+            self.reader = RadarReader(self._detected_data_port, baudrate=baudrate, debug=False)
             logger.info("Successfully created optimized reader")
-        else:
-            raise RadarConnectionError("Failed to connect to radar")
+        except serial.SerialException as e:
+            logger.error(f"Failed to open serial port: {str(e)}")
+            # Clean up if partial connection was established
+            if self.cli_port and self.cli_port.is_open:
+                self.cli_port.close()
+            raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error during connection: {str(e)}")
+            # Clean up if partial connection was established
+            if self.cli_port and self.cli_port.is_open:
+                self.cli_port.close()
+            raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
 
     def parse_configuration(self, config_lines: List[str]) -> dict:
         """Parse configuration lines and extract radar parameters.
@@ -479,6 +533,23 @@ class XWR68xxRadar(RadarConnection):
                             logger.error(f"Error in command '{command}': {response}")
                             raise RadarConnectionError(f"Configuration error: {response}")
                         logger.debug(f"Response: {response}")
+        
+        # Configure data port baudrate after other configuration
+        # Set baudrate based on OS platform
+        if self._detected_cli_port.startswith('/dev/tty.'):  # macOS
+            baudrate = 460800
+        else:  # Windows/Linux
+            baudrate = 921600
+        
+        logger.debug(f"Configuring data port with baudrate: {baudrate}")
+        self.cli_port.write(f"configDataPort {baudrate} 0\n".encode())
+        if not ignore_response:
+            response = self._read_cli_response()
+            if response:
+                if "Done" not in response:
+                    logger.error(f"Error configuring data port: {response}")
+                    raise RadarConnectionError(f"Data port configuration error: {response}")
+                logger.debug(f"Data port configuration response: {response}")
 
     def configure_and_start(self) -> None:
         """Configure the XWR68xx radar and start streaming data."""
@@ -822,7 +893,6 @@ class AWR2544Radar(RadarConnection):
                         if "Done" not in response:
                             logger.error(f"Error in command '{command}': {response}")
                             raise RadarConnectionError(f"Configuration error: {response}")
-                        logger.debug(f"Response: {response}")
 
     def configure_and_start(self) -> None:
         """Configure the AWR2544 radar and start streaming data."""
