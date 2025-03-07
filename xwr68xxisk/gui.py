@@ -494,4 +494,6 @@ class RadarGUI:
 # Create and serve the application
 radar_gui = RadarGUI()
 pn.config.allow_ws_origin = ['localhost:5006', 'dockerpi:5006']
-radar_gui.layout.servable(title='XWR68XX ISK Radar GUI', port=5006, address='0.0.0.0')
+pn.config.port = 5006
+pn.config.address = '0.0.0.0'
+radar_gui.layout.servable(title='XWR68XX ISK Radar GUI')
