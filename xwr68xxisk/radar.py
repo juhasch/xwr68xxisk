@@ -280,15 +280,9 @@ class RadarConnection:
             return
             
         try:
-            # Stop sensor before changing configuration
-            self.send_command('sensorStop')
-            
-            # Send new frame period configuration
-            # Keep all other parameters the same, just update the period
+            #self.send_command('sensorStop')            
             self.send_command(f'frameCfg 0 1 16 0 {int(period_ms)} 1 0')
-            
-            # Restart sensor
-            self.send_command('sensorStart')
+            #self.send_command('sensorStart 0')
             logger.info(f"Frame period set to {period_ms}ms")
         except Exception as e:
             logger.error(f"Error setting frame period: {e}")
