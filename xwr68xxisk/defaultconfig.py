@@ -38,7 +38,7 @@ lowPower 0 0
 guiMonitor -1 1 1 0 0 0 1
 cfarCfg -1 0 2 8 4 3 0 15 1
 cfarCfg -1 1 0 4 2 3 1 15 1
-multiObjBeamForming -1 1 0.5
+multiObjBeamForming -1 1 0.88
 clutterRemoval -1 0
 calibDcRangeSig -1 0 -5 8 256
 extendedMaxVelocity -1 0

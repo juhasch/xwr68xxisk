@@ -75,7 +75,17 @@ class RadarGUI:
             margin=20,
             width=300,
             position='right-top',
-            visible=False
+            visible=False,
+            styles={
+                'position': 'fixed',
+                'top': '80px',
+                'right': '20px',
+                'z-index': '1000',
+                'background': 'white',
+                'border': '1px solid #ddd',
+                'border-radius': '5px',
+                'box-shadow': '0 2px 4px rgba(0,0,0,0.1)'
+            }
         )
         
         # Set up callbacks
@@ -490,7 +500,7 @@ class RadarGUI:
             styles={'padding': '10px'}
         )
         
-        # Add CSS for modal styling
+        # Add CSS for modal and panel styling
         pn.extension(raw_css=["""
         .modal {
             position: fixed !important;
@@ -505,6 +515,12 @@ class RadarGUI:
             border-radius: 5px !important;
             padding: 20px !important;
             box-shadow: 0 0 10px rgba(0,0,0,0.1) !important;
+        }
+        .bk-root .bk-float-panel {
+            position: fixed !important;
+            top: 80px !important;
+            right: 20px !important;
+            z-index: 1000 !important;
         }
         """])
         
