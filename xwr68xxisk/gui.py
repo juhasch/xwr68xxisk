@@ -481,7 +481,7 @@ class RadarGUI:
             self._stop_callback(None)
         if self.is_recording and self.recording_file:
             self.recording_file.close()
-        if self.radar.is_connected():
+        if self.radar is not None and self.radar.is_connected():
             self.radar.close()
 
     def _detect_radar_type(self):
