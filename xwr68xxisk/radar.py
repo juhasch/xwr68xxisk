@@ -269,6 +269,30 @@ class RadarConnection:
         """Connect to the physical device. Must be implemented by derived classes."""
         raise NotImplementedError("Derived classes must implement _connect_device()")
 
+    def set_frame_period(self, period_ms: float) -> None:
+        """Set the frame period in milliseconds.
+        
+        Args:
+            period_ms: Frame period in milliseconds
+        """
+        if not self.is_connected():
+            logger.error("Radar not connected")
+            return
+            
+        try:
+            # Stop sensor before changing configuration
+            self.send_command('sensorStop')
+            
+            # Send new frame period configuration
+            # Keep all other parameters the same, just update the period
+            self.send_command(f'frameCfg 0 1 16 0 {int(period_ms)} 1 0')
+            
+            # Restart sensor
+            self.send_command('sensorStart')
+            logger.info(f"Frame period set to {period_ms}ms")
+        except Exception as e:
+            logger.error(f"Error setting frame period: {e}")
+
     def parse_configuration(self, config_lines: List[str]) -> dict:
         """Parse configuration lines and extract radar parameters.
         
@@ -305,6 +329,7 @@ class RadarConnection:
                     
                 elif cmd == 'frameCfg':
                     config_params['chirpsPerFrame'] = (int(args[1]) - int(args[0]) + 1) * int(args[2])
+                    config_params['framePeriod'] = float(args[4])  # Store frame period
                     
                 elif cmd == 'compressionCfg':
                     config_params['compMethod'] = int(args[2])
