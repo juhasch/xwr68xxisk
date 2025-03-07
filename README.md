@@ -1,6 +1,6 @@
 # Software for the xwr68xxisk radar sensor evaluation kit
 
-![AWR6843ISK](docs/source/_static/awr6843isk.png)
+![AWR6843ISK](awr6843isk.png)
 
 Allows for recording radar data to a CSV file and displaying the data in a GUI.
 
@@ -34,6 +34,7 @@ positional arguments:
   {gui,record}          Available commands
     gui                 Start the radar GUI
     record              Record radar data to CSV file
+    dora                Start the dora-rs node interface
 
 options:
   -h, --help            show this help message and exit
