@@ -8,6 +8,7 @@ from bokeh.models import ColorBar, LinearColorMapper, ColumnDataSource
 import colorcet as cc
 from xwr68xxisk.radar import RadarConnectionError
 from xwr68xxisk.parse import RadarData
+from xwr68xxisk.point_cloud import RadarPointCloud
 import os
 import logging
 from datetime import datetime
@@ -29,6 +30,7 @@ class RadarGUI:
         # Note: Actual connection to the physical device happens later via connect() method
         self.radar = None
         self.radar_type = None  # Will be set during connection
+        self.radar_data = None  # Will hold the RadarData instance
         
         # Load default configuration - will be set when radar type is detected
         self.config_file = None
@@ -206,6 +208,9 @@ class RadarGUI:
             # Now connect with the appropriate configuration
             self.radar.connect(self.config_file)
             
+            # Create RadarData instance for the connected radar
+            self.radar_data = RadarData(self.radar)
+            
             # Update version info in the modal
             if self.radar.version_info:
                 formatted_info = '\n'.join(str(line) for line in self.radar.version_info)
@@ -258,8 +263,8 @@ class RadarGUI:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = os.path.join(self.recording_dir, f"radar_data_{timestamp}.csv")
             self.recording_file = open(filename, "w")
-            # Write header
-            self.recording_file.write("frame,x,y,velocity,snr\n")
+            # Write header with more comprehensive fields
+            self.recording_file.write("frame,x,y,z,velocity,range,azimuth,elevation,snr\n")
             self.is_recording = True
             self.record_button.name = 'Stop Recording'
             self.record_button.button_type = 'danger'
@@ -280,6 +285,10 @@ class RadarGUI:
             self.stop_button.disabled = False
             self.record_button.disabled = False
             self.radar.configure_and_start()
+            
+            # Create a new RadarData instance for the running radar
+            self.radar_data = RadarData(self.radar)
+            
             # Instead of periodic callback, schedule the first update
             self.is_running = True
             pn.state.onload(self.update_plot)
@@ -397,49 +406,66 @@ class RadarGUI:
         return pn.pane.Bokeh(p)
     
     def update_plot(self):
-        """Update the plot with new radar data."""
+        """Update the plot with new radar data using RadarPointCloud."""
         
         try:
-            # Get actual radar data
-            data = RadarData(self.radar)
-            if data is not None and data.pc is not None:
-                x, y, z, velocity = data.pc
+            # Get point cloud using the new iterator functionality
+            if self.radar_data is not None:
+                # Get the next point cloud from the iterator
+                point_cloud = next(iter(self.radar_data))
                 
-                # Clip x and y values to plot range
-                x = np.clip(x, -2.5, 2.5)
-                y = np.clip(y, 0, 5)
-                
-                # Clip velocity to color mapper range
-                velocity = np.clip(velocity, -1, 1)
-                
-                # Get original SNR values (0-60 range)
-                # Ensure snr_values has same length as position data
-                if data.snr and len(data.snr) == len(x):
-                    snr_values = np.array(data.snr)
+                if point_cloud.num_points > 0:
+                    # Get Cartesian coordinates
+                    x, y, z = point_cloud.to_cartesian()
+                    
+                    # Clip x and y values to plot range
+                    x = np.clip(x, -2.5, 2.5)
+                    y = np.clip(y, 0, 5)
+                    
+                    # Clip velocity to color mapper range
+                    velocity = np.clip(point_cloud.velocity, -1, 1)
+                    
+                    # Get SNR values for point sizing
+                    if point_cloud.snr is not None and len(point_cloud.snr) > 0:
+                        snr_values = point_cloud.snr
+                    else:
+                        snr_values = np.ones(point_cloud.num_points) * 30  # Default to mid-range if no SNR
+                    
+                    # Scale and clip SNR only for display
+                    display_sizes = np.clip(snr_values / 60.0, 0, 1)  # Normalize to 0-1 range
+                    point_sizes = 5 + display_sizes * 15  # Scale to range 5-20 pixels
+                    
+                    # Ensure all arrays have the same length before updating
+                    min_length = min(len(x), len(y), len(velocity), len(point_sizes))
+                    
+                    # Update the scatter plot data with consistent lengths
+                    self.data_source.data = {
+                        'x': x[:min_length],
+                        'y': y[:min_length],
+                        'velocity': velocity[:min_length],
+                        'size': point_sizes[:min_length]
+                    }
+                    
+                    # Save data if recording is enabled
+                    if self.is_recording and self.recording_file:
+                        frame_number = point_cloud.metadata.get('frame_number', 0)
+                        for i in range(min_length):
+                            # Save both Cartesian and spherical coordinates
+                            self.recording_file.write(
+                                f"{frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
+                                f"{point_cloud.velocity[i]:.3f},{point_cloud.range[i]:.3f},"
+                                f"{point_cloud.azimuth[i]:.3f},{point_cloud.elevation[i]:.3f},"
+                                f"{snr_values[i]:.3f}\n"
+                            )
+                        self.recording_file.flush()  # Ensure data is written to disk
                 else:
-                    snr_values = np.ones(len(x)) * 30  # Default to mid-range if no SNR or length mismatch
-                
-                # Scale and clip SNR only for display
-                display_sizes = np.clip(snr_values / 60.0, 0, 1)  # Normalize to 0-1 range
-                point_sizes = 5 + display_sizes * 15  # Scale to range 5-20 pixels
-                
-                # Ensure all arrays have the same length before updating
-                min_length = min(len(x), len(y), len(velocity), len(point_sizes))
-                
-                # Update the scatter plot data with consistent lengths
-                self.data_source.data = {
-                    'x': x[:min_length],
-                    'y': y[:min_length],
-                    'velocity': velocity[:min_length],
-                    'size': point_sizes[:min_length]
-                }
-
-                # Save data if recording is enabled
-                if self.is_recording and self.recording_file:
-                    frame_number = data.frame_number if data.frame_number is not None else 0
-                    for i in range(min_length):
-                        self.recording_file.write(f"{frame_number},{x[i]:.3f},{y[i]:.3f},{velocity[i]:.3f},{snr_values[i]:.3f}\n")
-                    self.recording_file.flush()  # Ensure data is written to disk
+                    # Clear the plot when no points are detected
+                    self.data_source.data = {
+                        'x': [],
+                        'y': [],
+                        'velocity': [],
+                        'size': []
+                    }
             else:
                 # Clear the plot when no data is available
                 self.data_source.data = {
@@ -453,6 +479,10 @@ class RadarGUI:
             if self.is_running:
                 pn.state.add_periodic_callback(self.update_plot, period=10, count=1)
 
+        except StopIteration:
+            # This happens when the radar stops sending data
+            logger.warning("No more radar data available")
+            self._stop_callback(None)
         except Exception as e:
             logger.error(f"Error updating plot: {e}")
             # Clear the plot on error

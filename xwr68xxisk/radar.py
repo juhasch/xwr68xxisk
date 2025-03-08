@@ -48,6 +48,9 @@ class RadarConnection:
         self.device_type = None  # 'CP2105' or 'XDS110'
         self.is_running = False
         self._clutter_removal = False  # Default value for clutter removal
+        self.frame_period = 100  # Default frame period in milliseconds
+        self.mob_enabled = False  # Default value for moving object detection
+        self.mob_threshold = 0.5  # Default value for moving object detection threshold
         # Store detected ports
         self._detected_cli_port = None
         self._detected_data_port = None
@@ -79,6 +82,7 @@ class RadarConnection:
         """
         value = '1' if enabled else '0'
         self.send_command(f'multiObjBeamForming -1 {value} 0.5\n')
+        self.mob_enabled = enabled  # Store the value
 
     def set_mob_threshold(self, threshold: float) -> None:
         """Set the multi-object beamforming threshold.
@@ -89,6 +93,7 @@ class RadarConnection:
         # Ensure threshold is within valid range
         threshold = max(0.0, min(1.0, threshold))
         self.send_command(f'multiObjBeamForming -1 1 {threshold:.2f}\n')
+        self.mob_threshold = threshold  # Store the value
 
     def find_serial_ports(self, serial_number: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
         """Find the radar ports for either Silicon Labs CP2105 or TI XDS110 devices."""
@@ -281,6 +286,7 @@ class RadarConnection:
             #self.send_command('sensorStop')            
             self.send_command(f'frameCfg 0 1 16 0 {int(period_ms)} 1 0')
             #self.send_command('sensorStart 0')
+            self.frame_period = period_ms  # Store the frame period value
             logger.info(f"Frame period set to {period_ms}ms")
         except Exception as e:
             logger.error(f"Error setting frame period: {e}")
@@ -322,6 +328,7 @@ class RadarConnection:
                 elif cmd == 'frameCfg':
                     config_params['chirpsPerFrame'] = (int(args[1]) - int(args[0]) + 1) * int(args[2])
                     config_params['framePeriod'] = float(args[4])  # Store frame period
+                    self.frame_period = float(args[4])  # Update the frame_period attribute
                     
                 elif cmd == 'compressionCfg':
                     config_params['compMethod'] = int(args[2])
@@ -331,6 +338,18 @@ class RadarConnection:
                 elif cmd == 'procChainCfg':
                     config_params['procChain'] = int(args[0])
                     config_params['crcType'] = int(args[4])
+                    
+                elif cmd == 'multiObjBeamForming':
+                    if len(args) >= 3:
+                        self.mob_enabled = int(args[1]) == 1
+                        self.mob_threshold = float(args[2])
+                        config_params['mobEnabled'] = self.mob_enabled
+                        config_params['mobThreshold'] = self.mob_threshold
+                        
+                elif cmd == 'clutterRemoval':
+                    if len(args) >= 2:
+                        self._clutter_removal = int(args[1]) == 1
+                        config_params['clutterRemoval'] = self._clutter_removal
                     
             except (ValueError, IndexError) as e:
                 logger.warning(f"Error parsing configuration line '{line}': {e}")
