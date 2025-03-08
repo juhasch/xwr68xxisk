@@ -101,8 +101,7 @@ class RadarData:
 
     def _parse_range_profile(self, data: bytes, idx: int, tlv_length: int) -> int:
         """Parse range profile data from TLV."""
-        length = tlv_length // 2
-#        self.adc = np.frombuffer(data[idx:idx+tlv_length], dtype=np.uint16)
+        self.adc = np.frombuffer(data[idx:idx+tlv_length], dtype=np.uint16)
         return idx + tlv_length
 
     def _parse_side_info(self, data: bytes, idx: int, tlv_length: int) -> int:
