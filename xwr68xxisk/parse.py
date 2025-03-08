@@ -1,12 +1,16 @@
 import numpy as np
 import struct
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Iterator, Dict, Any
 import time
 import logging
 import os
+import math
 
 # Magic number for radar data validation
 MAGIC_NUMBER = 0x708050603040102
+
+# Import RadarPointCloud
+from .point_cloud import RadarPointCloud
 
 class RadarData:
     """
@@ -47,6 +51,17 @@ class RadarData:
         self.snr: List[float] = []
         self.noise: List[float] = []
         self.frame_number = None
+        self.num_tlvs = 0
+        self.magic_word = None
+        self.version = None
+        self.total_packet_len = None
+        self.platform = None
+        self.time_cpu_cycles = None
+        self.num_detected_obj = 0
+        self.subframe_number = None
+        
+        # Store the radar connection for iterator functionality
+        self.radar_connection = radar_connection
         
         if radar_connection is None or not radar_connection.is_connected() or not radar_connection.is_running:
             return
@@ -122,17 +137,130 @@ class RadarData:
         
         return idx + tlv_length
 
+    def to_point_cloud(self) -> RadarPointCloud:
+        """
+        Convert the radar data to a RadarPointCloud object.
+        
+        Returns:
+            RadarPointCloud: Point cloud representation of the radar data
+        """
+        if self.pc is None:
+            return RadarPointCloud()
+            
+        x, y, z, v = self.pc
+        
+        # Convert Cartesian coordinates to spherical coordinates
+        range_values = []
+        azimuth = []
+        elevation = []
+        
+        for i in range(len(x)):
+            # Calculate range
+            r = math.sqrt(x[i]**2 + y[i]**2 + z[i]**2)
+            range_values.append(r)
+            
+            # Calculate azimuth (horizontal angle)
+            az = math.atan2(x[i], y[i])
+            azimuth.append(az)
+            
+            # Calculate elevation (vertical angle)
+            if r > 0:
+                el = math.asin(z[i] / r)
+            else:
+                el = 0
+            elevation.append(el)
+        
+        # Create metadata dictionary
+        metadata = {
+            'frame_number': self.frame_number,
+            'num_detected_obj': self.num_detected_obj,
+            'timestamp': self.time_cpu_cycles
+        }
+        
+        # Convert lists to numpy arrays
+        range_array = np.array(range_values)
+        velocity_array = np.array(v)
+        azimuth_array = np.array(azimuth)
+        elevation_array = np.array(elevation)
+        snr_array = np.array(self.snr) if self.snr else None
+        
+        return RadarPointCloud(
+            range=range_array,
+            velocity=velocity_array,
+            azimuth=azimuth_array,
+            elevation=elevation_array,
+            snr=snr_array,
+            metadata=metadata
+        )
+    
+    def __iter__(self) -> 'RadarDataIterator':
+        """
+        Return an iterator over radar frames.
+        
+        Returns:
+            RadarDataIterator: Iterator that yields RadarPointCloud objects
+        """
+        return RadarDataIterator(self.radar_connection)
+    
     def __str__(self) -> str:
         """Return string representation of the radar data."""
-        return (f"Magic Word: {hex(self.magic_word)}\n"
-                f"Version: {hex(self.version)}\n"
+        return (f"Magic Word: {hex(self.magic_word) if self.magic_word else 'N/A'}\n"
+                f"Version: {hex(self.version) if self.version else 'N/A'}\n"
                 f"Total Packet Length: {self.total_packet_len}\n"
-                f"Platform: {hex(self.platform)}\n"
+                f"Platform: {hex(self.platform) if self.platform else 'N/A'}\n"
                 f"Frame Number: {self.frame_number}\n"
                 f"Time CPU Cycles: {self.time_cpu_cycles}\n"
                 f"Number of Detected Objects: {self.num_detected_obj}\n"
                 f"Number of TLVs: {self.num_tlvs}\n"
                 f"Subframe Number: {hex(self.subframe_number) if self.subframe_number is not None else 'N/A'}")
+
+
+class RadarDataIterator:
+    """
+    Iterator for radar data frames.
+    
+    This class provides an iterator interface to continuously read frames
+    from a radar connection and convert them to RadarPointCloud objects.
+    """
+    
+    def __init__(self, radar_connection):
+        """
+        Initialize the radar data iterator.
+        
+        Args:
+            radar_connection: RadarConnection instance to read data from
+        """
+        self.radar_connection = radar_connection
+        
+    def __iter__(self) -> 'RadarDataIterator':
+        """Return self as iterator."""
+        return self
+        
+    def __next__(self) -> RadarPointCloud:
+        """
+        Get the next radar frame as a RadarPointCloud.
+        
+        Returns:
+            RadarPointCloud: Point cloud data from the next radar frame
+            
+        Raises:
+            StopIteration: If the radar connection is closed or not running
+        """
+        if (self.radar_connection is None or 
+            not self.radar_connection.is_connected() or 
+            not self.radar_connection.is_running):
+            raise StopIteration
+            
+        try:
+            # Create a new RadarData object with the next frame
+            radar_data = self.__class__.__qualname__.replace('Iterator', '')
+            radar_data_obj = globals()[radar_data](self.radar_connection)
+            
+            # Convert to point cloud and return
+            return radar_data_obj.to_point_cloud()
+        except Exception as e:
+            logging.error(f"Error reading next radar frame: {e}")
+            raise StopIteration
 
 class AWR2544Data(RadarData):
     """
@@ -347,4 +475,57 @@ class AWR2544Data(RadarData):
         # Velocity estimation would require Doppler processing across chirps
         v = np.zeros_like(x)
         
+        # Store point cloud data
+        self.pc = (x, y, z, v)
+        
         return x, y, z, v
+    
+    def to_point_cloud(self) -> RadarPointCloud:
+        """
+        Convert the AWR2544 radar data to a RadarPointCloud object.
+        
+        This method first ensures the point cloud data is available by calling
+        get_point_cloud() if needed, then converts it to a RadarPointCloud.
+        
+        Returns:
+            RadarPointCloud: Point cloud representation of the radar data
+        """
+        # Make sure point cloud data is available
+        if self.pc is None:
+            self.get_point_cloud()
+            
+        # Use the parent class method to convert to RadarPointCloud
+        return super().to_point_cloud()
+
+
+class AWR2544DataIterator(RadarDataIterator):
+    """
+    Iterator for AWR2544 radar data frames.
+    
+    This class extends RadarDataIterator to handle the specific format of AWR2544 data.
+    """
+    
+    def __next__(self) -> RadarPointCloud:
+        """
+        Get the next AWR2544 radar frame as a RadarPointCloud.
+        
+        Returns:
+            RadarPointCloud: Point cloud data from the next radar frame
+            
+        Raises:
+            StopIteration: If the radar connection is closed or not running
+        """
+        if (self.radar_connection is None or 
+            not self.radar_connection.is_connected() or 
+            not self.radar_connection.is_running):
+            raise StopIteration
+            
+        try:
+            # Create a new AWR2544Data object with the next frame
+            radar_data = AWR2544Data(self.radar_connection)
+            
+            # Convert to point cloud and return
+            return radar_data.to_point_cloud()
+        except Exception as e:
+            logging.error(f"Error reading next AWR2544 radar frame: {e}")
+            raise StopIteration
