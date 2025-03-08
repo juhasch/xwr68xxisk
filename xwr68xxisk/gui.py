@@ -583,6 +583,8 @@ class RadarGUI:
             except Exception as e:
                 logger.error(f"Error setting MOB threshold: {e}")
 
-# Create and serve the application
-radar_gui = RadarGUI()
-radar_gui.layout.servable()
+# Move these lines inside a main block
+if __name__ == "__main__":
+    # Create and serve the application when run directly
+    radar_gui = RadarGUI()
+    radar_gui.layout.servable()

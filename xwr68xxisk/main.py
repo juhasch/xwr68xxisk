@@ -4,10 +4,7 @@ import os
 import logging
 import re
 
-import panel as pn
-from .gui import RadarGUI
 from .record import main as record_main
-from .doranode import start_dora_node
 
 RUNNER_CI = True if os.getenv("CI") == "true" else False
 
@@ -16,9 +13,19 @@ print(sys.executable)
 
 def start_gui(args):
     """Start the Panel GUI server."""
+    # Import panel and RadarGUI only when needed
+    import panel as pn
+    from .gui import RadarGUI
     radar_gui = RadarGUI()
     pn.serve(radar_gui.layout, port=args.port, show=True)
 
+
+def start_dora(args):
+    """Start the dora-rs node interface."""
+    # Import dora-related modules only when needed
+    from .doranode import start_dora_node
+    # Pass the name parameter to start_dora_node
+    start_dora_node(name=args.name)
 
 
 def validate_serial(value):
@@ -55,7 +62,7 @@ def main():
     dora_parser = subparsers.add_parser('dora', help='Start the dora-rs node interface')
     dora_parser.add_argument('--name', type=str, required=True,
                            help='Name of the dora node')
-    dora_parser.set_defaults(func=start_dora_node)
+    dora_parser.set_defaults(func=start_dora)
 
     args = parser.parse_args()
 
