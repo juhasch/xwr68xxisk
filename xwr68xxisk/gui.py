@@ -11,7 +11,7 @@ from xwr68xxisk.parse import RadarData
 import os
 import logging
 from datetime import datetime
-from panel.widgets import TextAreaInput, StaticText, Button, FileInput, Select, FloatSlider, Checkbox
+from panel.widgets import TextAreaInput, Button
 from xwr68xxisk.radar import RadarConnection, create_radar
 
 logger = logging.getLogger(__name__)

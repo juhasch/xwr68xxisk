@@ -16,10 +16,8 @@ import logging
 import socket
 from . import defaultconfig
 import os
-import fcntl
 import struct
 import math
-import json
 from mmwserial import UDPReader, RadarReader
 
 logger = logging.getLogger(__name__)
@@ -613,7 +611,7 @@ class RadarConnection:
         # Log statistics
         if self.total_frames > 0:
             total_attempted = self.total_frames + self.failed_reads
-            logger.info(f"\nStatistics:")
+            logger.info("\nStatistics:")
             logger.info(f"Total successful frames: {self.total_frames}")
             logger.info(f"Failed reads: {self.failed_reads}")
             logger.info(f"Missed frames: {self.missed_frames}")
@@ -810,7 +808,7 @@ class XWR68xxRadar(RadarConnection):
         # Log statistics
         if self.total_frames > 0:
             total_attempted = self.total_frames + self.failed_reads
-            logger.info(f"\nStatistics:")
+            logger.info("\nStatistics:")
             logger.info(f"Total successful frames: {self.total_frames}")
             logger.info(f"Failed reads: {self.failed_reads}")
             logger.info(f"Missed frames: {self.missed_frames}")
