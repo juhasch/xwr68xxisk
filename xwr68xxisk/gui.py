@@ -490,7 +490,3 @@ class RadarGUI:
         radar_base = RadarConnection()
         self.radar_type, self.config_file = radar_base.detect_radar_type()
         return self.radar_type is not None
-
-# Create and serve the application
-radar_gui = RadarGUI()
-radar_gui.layout.servable()

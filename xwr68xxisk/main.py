@@ -4,21 +4,43 @@ import os
 import logging
 import re
 
-import panel as pn
-from .gui import RadarGUI
 from .record import main as record_main
-from .doranode import start_dora_node
 
 RUNNER_CI = True if os.getenv("CI") == "true" else False
 
-import sys
-print(sys.executable)
-
 def start_gui(args):
     """Start the Panel GUI server."""
+    # Import panel and RadarGUI only when needed
+    import panel as pn
+    from .gui import RadarGUI
+    
+    # Create the application
     radar_gui = RadarGUI()
-    pn.serve(radar_gui.layout, port=args.port, show=True)
+    
+    # Configure origins for websocket connections
+    origins = [f'localhost:{args.port}']
+    
+    # Add the server IP to origins if remote access is enabled
+    if args.remote:
+        origins.append(f'0.0.0.0:{args.port}')
+    
+    # Configure and serve the application
+    pn.serve(
+        radar_gui.layout,
+        port=args.port,
+        address='0.0.0.0',
+        allow_websocket_origin=origins,
+        show=not args.noshow,
+        start=True
+    )
 
+
+def start_dora(args):
+    """Start the dora-rs node interface."""
+    # Import dora-related modules only when needed
+    from .doranode import start_dora_node
+    # Pass the name parameter to start_dora_node
+    start_dora_node(name=args.name)
 
 
 def validate_serial(value):
@@ -45,6 +67,10 @@ def main():
     gui_parser = subparsers.add_parser('gui', help='Start the radar GUI')
     gui_parser.add_argument('--port', type=int, default=5006,
                            help='Port to run the Panel server on (default: 5006)')
+    gui_parser.add_argument('--noshow', action='store_true',
+                           help='Do not automatically open the browser')
+    gui_parser.add_argument('--remote', action='store_true',
+                           help='Enable remote access to the GUI')
     gui_parser.set_defaults(func=start_gui)
 
     # Record subcommand
@@ -55,7 +81,7 @@ def main():
     dora_parser = subparsers.add_parser('dora', help='Start the dora-rs node interface')
     dora_parser.add_argument('--name', type=str, required=True,
                            help='Name of the dora node')
-    dora_parser.set_defaults(func=start_dora_node)
+    dora_parser.set_defaults(func=start_dora)
 
     args = parser.parse_args()
 
