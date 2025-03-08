@@ -12,9 +12,13 @@ serial_number = None
 
 
 
-def start_dora_node():
-    """Start the dora-rs node interface."""
-    node = Node("RadarNode")
+def start_dora_node(name="RadarNode"):
+    """Start the dora-rs node interface.
+    
+    Args:
+        name: Name of the dora node
+    """
+    node = Node(name)
     radar = None
     radar_base = RadarConnection()
     
