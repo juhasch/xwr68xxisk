@@ -6,16 +6,13 @@ import holoviews as hv
 from bokeh.plotting import figure
 from bokeh.models import ColorBar, LinearColorMapper, ColumnDataSource
 import colorcet as cc
-from xwr68xxisk.radar import XWR68xxRadar, RadarConnectionError, AWR2544Radar
+from xwr68xxisk.radar import RadarConnectionError
 from xwr68xxisk.parse import RadarData
-import time
 import os
 import logging
 from datetime import datetime
-from panel.widgets import TextAreaInput, StaticText, Button, FileInput, Select
+from panel.widgets import TextAreaInput, StaticText, Button, FileInput, Select, FloatSlider, Checkbox
 from xwr68xxisk.radar import RadarConnection, create_radar
-import socket
-from xwr68xxisk import defaultconfig
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +52,38 @@ class RadarGUI:
         self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
         self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
         self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
-        self.clutter_removal_checkbox = pn.widgets.Checkbox(name='Enable Clutter Removal', value=False)
+        
+        # Parameters panel controls
+        self.modify_params_checkbox = pn.widgets.Checkbox(name='Modify Parameters', value=False)
+        self.clutter_removal_checkbox = pn.widgets.Checkbox(name='Static Clutter Removal', value=False)
+        self.frame_period_slider = pn.widgets.FloatSlider(name='Frame Period (ms)', start=50, end=1000, value=100, step=10)
+        self.mob_enabled_checkbox = pn.widgets.Checkbox(name='Multi-object Beamforming', value=False)
+        self.mob_threshold_slider = pn.widgets.FloatSlider(name='MOB Threshold', start=0, end=1, value=0.5, step=0.01)
+        
+        # Create floating panel for parameters
+        self.params_panel = pn.layout.FloatPanel(
+            pn.Column(
+                self.clutter_removal_checkbox,
+                self.frame_period_slider,
+                self.mob_enabled_checkbox,
+                self.mob_threshold_slider
+            ),
+            name='Radar Parameters',
+            margin=20,
+            width=300,
+            position='right-top',
+            visible=False,
+            styles={
+                'position': 'fixed',
+                'top': '80px',
+                'right': '20px',
+                'z-index': '1000',
+                'background': 'white',
+                'border': '1px solid #ddd',
+                'border-radius': '5px',
+                'box-shadow': '0 2px 4px rgba(0,0,0,0.1)'
+            }
+        )
         
         # Set up callbacks
         self.load_config_button.param.watch(self._load_config_callback, 'value')
@@ -64,11 +92,15 @@ class RadarGUI:
         self.stop_button.on_click(self._stop_callback)
         self.record_button.on_click(self._record_callback)
         self.exit_button.on_click(self._exit_callback)
+        self.modify_params_checkbox.param.watch(self._toggle_params_panel, 'value')
         self.clutter_removal_checkbox.param.watch(self._clutter_removal_callback, 'value')
+        self.frame_period_slider.param.watch(self._frame_period_callback, 'value')
+        self.mob_enabled_checkbox.param.watch(self._mob_enabled_callback, 'value')
+        self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value')
+        
         self.start_button.disabled = True
         self.stop_button.disabled = True
         self.record_button.disabled = True
-        self.clutter_removal_checkbox.disabled = True  # Initially disabled until connected
         
         # Create plot
         self.plot = self.create_plot()
@@ -183,12 +215,29 @@ class RadarGUI:
             if self.config_file:
                 self.config_text.value = self.config_file
             
+            # Initialize parameter controls with current radar settings
+            if self.radar.is_connected():
+                # Enable all parameter controls
+                self.clutter_removal_checkbox.disabled = False
+                self.frame_period_slider.disabled = False
+                self.mob_enabled_checkbox.disabled = False
+                # MOB threshold is only enabled if MOB is enabled
+                self.mob_threshold_slider.disabled = not self.mob_enabled_checkbox.value
+                
+                # Set initial values from radar if available
+                try:
+                    self.clutter_removal_checkbox.value = self.radar.clutterRemoval
+                    self.frame_period_slider.value = self.radar.frame_period
+                    self.mob_enabled_checkbox.value = self.radar.mob_enabled
+                    self.mob_threshold_slider.value = self.radar.mob_threshold
+                except Exception as e:
+                    logger.warning(f"Could not initialize all parameter values: {e}")
+            
             self.connect_button.loading = False
             self.connect_button.name = "Connected"
             self.connect_button.button_type = "success"
             self.start_button.disabled = False
             self.config_button.disabled = False
-            self.clutter_removal_checkbox.disabled = False  # Enable clutter removal checkbox
             self.connect_button.disabled = True
             
         except (RadarConnectionError, FileNotFoundError) as e:
@@ -432,9 +481,9 @@ class RadarGUI:
             self.stop_button,
             self.record_button,
             pn.layout.Divider(),
-            self.clutter_removal_checkbox,  # Add clutter removal checkbox
+            self.exit_button,     # Moved exit button up
             pn.layout.Divider(),
-            self.exit_button,
+            self.modify_params_checkbox,  # Moved modify parameters checkbox down
             width=300,
             styles={'background': '#f8f8f8', 'padding': '10px'}
         )
@@ -444,10 +493,11 @@ class RadarGUI:
             pn.pane.Markdown('## Real-time Data'),
             self.plot,
             self.config_modal,  # Add the modal to main layout
+            self.params_panel,  # Add the parameters panel to main layout
             styles={'padding': '10px'}
         )
         
-        # Add CSS for modal styling
+        # Add CSS for modal and panel styling
         pn.extension(raw_css=["""
         .modal {
             position: fixed !important;
@@ -462,6 +512,12 @@ class RadarGUI:
             border-radius: 5px !important;
             padding: 20px !important;
             box-shadow: 0 0 10px rgba(0,0,0,0.1) !important;
+        }
+        .bk-root .bk-float-panel {
+            position: fixed !important;
+            top: 80px !important;
+            right: 20px !important;
+            z-index: 1000 !important;
         }
         """])
         
@@ -490,3 +546,36 @@ class RadarGUI:
         radar_base = RadarConnection()
         self.radar_type, self.config_file = radar_base.detect_radar_type()
         return self.radar_type is not None
+
+    def _toggle_params_panel(self, event):
+        """Toggle the visibility of the parameters panel."""
+        self.params_panel.visible = event.new
+    
+    def _frame_period_callback(self, event):
+        """Handle frame period slider changes."""
+        if self.radar and self.radar.is_connected():
+            try:
+                self.radar.set_frame_period(event.new)
+                logger.info(f"Frame period set to {event.new}ms")
+            except Exception as e:
+                logger.error(f"Error setting frame period: {e}")
+    
+    def _mob_enabled_callback(self, event):
+        """Handle multi-object beamforming enable/disable."""
+        if self.radar and self.radar.is_connected():
+            try:
+                self.radar.set_mob_enabled(event.new)
+                logger.info(f"Multi-object beamforming {'enabled' if event.new else 'disabled'}")
+                # Only enable threshold slider if MOB is enabled
+                self.mob_threshold_slider.disabled = not event.new
+            except Exception as e:
+                logger.error(f"Error setting MOB state: {e}")
+    
+    def _mob_threshold_callback(self, event):
+        """Handle multi-object beamforming threshold changes."""
+        if self.radar and self.radar.is_connected():
+            try:
+                self.radar.set_mob_threshold(event.new)
+                logger.info(f"MOB threshold set to {event.new}")
+            except Exception as e:
+                logger.error(f"Error setting MOB threshold: {e}")

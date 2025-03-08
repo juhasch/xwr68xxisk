@@ -1,5 +1,4 @@
 import argparse
-import ast
 import os
 import logging
 import re
@@ -13,8 +12,6 @@ def start_gui(args):
     # Import panel and RadarGUI only when needed
     import panel as pn
     from .gui import RadarGUI
-    
-    # Create the application
     radar_gui = RadarGUI()
     
     # Configure origins for websocket connections
@@ -23,12 +20,15 @@ def start_gui(args):
     # Add the server IP to origins if remote access is enabled
     if args.remote:
         origins.append(f'0.0.0.0:{args.port}')
+        address='0.0.0.0'
+    else:
+        address='localhost'
     
     # Configure and serve the application
     pn.serve(
         radar_gui.layout,
         port=args.port,
-        address='0.0.0.0',
+        address=address,
         allow_websocket_origin=origins,
         show=not args.noshow,
         start=True
