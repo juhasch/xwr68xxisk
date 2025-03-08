@@ -17,8 +17,6 @@ from xwr68xxisk.radar import RadarConnection, create_radar
 
 logger = logging.getLogger(__name__)
 
-TIMER_PERIOD = 90
-
 # Initialize extensions (fix order and syntax)
 hv.extension('bokeh')
 pn.extension(design="material", sizing_mode="stretch_width")
@@ -364,8 +362,8 @@ class RadarGUI:
         """Create the scatter plot."""
         p = figure(
             title='Radar Point Cloud', 
-            width=1200,    # Doubled from 600
-            height=800,    # Doubled from 400
+            width=1100,     # Reduced from 1200 to better fit MacBook screens
+            height=600,    # Reduced from 800 to better fit MacBook screens
             x_range=(-2.5, 2.5),  # Set fixed x range to ±5m
             y_range=(0, 5)   # Set fixed y range to ±5m
         )
@@ -514,7 +512,7 @@ class RadarGUI:
             self.exit_button,     # Moved exit button up
             pn.layout.Divider(),
             self.modify_params_checkbox,  # Moved modify parameters checkbox down
-            width=300,
+            width=300,  # Reverted to 300 pixels for better usability
             styles={'background': '#f8f8f8', 'padding': '10px'}
         )
         
@@ -524,7 +522,8 @@ class RadarGUI:
             self.plot,
             self.config_modal,  # Add the modal to main layout
             self.params_panel,  # Add the parameters panel to main layout
-            styles={'padding': '10px'}
+            styles={'padding': '10px'},
+            max_width=1000  # Add max width to prevent excessive stretching on wide screens
         )
         
         # Add CSS for modal and panel styling
@@ -549,6 +548,11 @@ class RadarGUI:
             right: 20px !important;
             z-index: 1000 !important;
         }
+        .bk-root .bk-sidebar {
+            width: 300px !important;
+            min-width: 300px !important;
+            max-width: 300px !important;
+        }
         """])
         
         # Combine everything into a template
@@ -556,7 +560,8 @@ class RadarGUI:
             title='XWR68XX ISK Radar GUI',
             sidebar=sidebar,
             main=main,
-            header=header
+            header=header,
+            sidebar_width=300  # Reverted back to 300 pixels for better usability
         )
         
         return template
