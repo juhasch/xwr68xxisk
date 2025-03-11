@@ -2,12 +2,26 @@ import pytest
 import numpy as np
 from xwr68xxisk.parse import RadarData, MAGIC_NUMBER
 
+class MockRadarConnection:
+    def __init__(self, data):
+        self.data = data
+        
+    def is_connected(self):
+        return True
+        
+    def is_running(self):
+        return True
+        
+    def read_frame(self):
+        return {'frame_number': 1, 'num_detected_obj': 0}, self.data
+
 def test_invalid_magic_number():
     """Test that invalid magic number raises ValueError."""
     # Create dummy data with wrong magic number
-    data = bytearray(100)  # Create dummy data
-    with pytest.raises(ValueError):
-        RadarData(data)
+    data = bytearray(100)  # Create dummy data with zeros (invalid magic number)
+    mock_connection = MockRadarConnection(data)
+    radar_data = RadarData(mock_connection)
+    assert radar_data.magic_word is None  # Magic word should be None for invalid data
 
 def test_parse_empty_packet():
     """Test parsing of minimal valid packet with no TLVs."""
