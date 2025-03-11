@@ -11,6 +11,7 @@ from xwr68xxisk.parse import RadarData
 from xwr68xxisk.point_cloud import RadarPointCloud
 from xwr68xxisk.clustering import PointCloudClustering
 from xwr68xxisk.tracking import PointCloudTracker
+from xwr68xxisk.configs import ConfigManager
 import os
 import logging
 from datetime import datetime
@@ -26,19 +27,22 @@ pn.extension(design="material", sizing_mode="stretch_width")
 
 class RadarGUI:
     def __init__(self):
+        # Initialize configuration
+        self.config_manager = ConfigManager()
+        self.config = self.config_manager.load_config()
+        
         # Initialize radar connection
-        # Note: Actual connection to the physical device happens later via connect() method
         self.radar = None
-        self.radar_type = None  # Will be set during connection
-        self.radar_data = None  # Will hold the RadarData instance
+        self.radar_type = None
+        self.radar_data = None
         
         # Initialize clustering and tracking
         self.clusterer = None
         self.tracker = None
-        self.enable_clustering = False
-        self.enable_tracking = False
+        self.enable_clustering = self.config.clustering.enabled
+        self.enable_tracking = self.config.tracking.enabled
         
-        # Load default configuration - will be set when radar type is detected
+        # Load default configuration
         self.config_file = None
         
         # Add timing variable
@@ -65,19 +69,73 @@ class RadarGUI:
         
         # Parameters panel controls
         self.modify_params_checkbox = pn.widgets.Checkbox(name='Modify Parameters', value=False)
-        self.clutter_removal_checkbox = pn.widgets.Checkbox(name='Static Clutter Removal', value=False)
-        self.frame_period_slider = pn.widgets.FloatSlider(name='Frame Period (ms)', start=50, end=1000, value=100, step=10)
-        self.mob_enabled_checkbox = pn.widgets.Checkbox(name='Multi-object Beamforming', value=False)
-        self.mob_threshold_slider = pn.widgets.FloatSlider(name='MOB Threshold', start=0, end=1, value=0.5, step=0.01)
+        self.clutter_removal_checkbox = pn.widgets.Checkbox(
+            name='Static Clutter Removal',
+            value=self.config.processing.clutter_removal
+        )
+        self.frame_period_slider = pn.widgets.FloatSlider(
+            name='Frame Period (ms)',
+            start=50,
+            end=1000,
+            value=self.config.processing.frame_period_ms,
+            step=10
+        )
+        self.mob_enabled_checkbox = pn.widgets.Checkbox(
+            name='Multi-object Beamforming',
+            value=self.config.processing.mob_enabled
+        )
+        self.mob_threshold_slider = pn.widgets.FloatSlider(
+            name='MOB Threshold',
+            start=0,
+            end=1,
+            value=self.config.processing.mob_threshold,
+            step=0.01
+        )
         
         # Add clustering and tracking controls
-        self.clustering_checkbox = pn.widgets.Checkbox(name='Enable Clustering', value=False)
-        self.tracking_checkbox = pn.widgets.Checkbox(name='Enable Tracking', value=False)
-        self.cluster_eps_slider = pn.widgets.FloatSlider(name='Cluster Size (m)', start=0.1, end=2.0, value=0.5, step=0.1)
-        self.cluster_min_samples_slider = pn.widgets.IntSlider(name='Min Points per Cluster', start=3, end=20, value=5, step=1)
-        self.track_max_distance_slider = pn.widgets.FloatSlider(name='Max Track Distance (m)', start=0.5, end=5.0, value=2.0, step=0.1)
-        self.track_min_hits_slider = pn.widgets.IntSlider(name='Min Track Hits', start=2, end=10, value=3, step=1)
-        self.track_max_misses_slider = pn.widgets.IntSlider(name='Max Track Misses', start=2, end=10, value=5, step=1)
+        self.clustering_checkbox = pn.widgets.Checkbox(
+            name='Enable Clustering',
+            value=self.config.clustering.enabled
+        )
+        self.tracking_checkbox = pn.widgets.Checkbox(
+            name='Enable Tracking',
+            value=self.config.tracking.enabled
+        )
+        self.cluster_eps_slider = pn.widgets.FloatSlider(
+            name='Cluster Size (m)',
+            start=0.1,
+            end=2.0,
+            value=self.config.clustering.eps,
+            step=0.1
+        )
+        self.cluster_min_samples_slider = pn.widgets.IntSlider(
+            name='Min Points per Cluster',
+            start=3,
+            end=20,
+            value=self.config.clustering.min_samples,
+            step=1
+        )
+        self.track_max_distance_slider = pn.widgets.FloatSlider(
+            name='Max Track Distance (m)',
+            start=0.5,
+            end=5.0,
+            value=self.config.tracking.max_distance,
+            step=0.1
+        )
+        self.track_min_hits_slider = pn.widgets.IntSlider(
+            name='Min Track Hits',
+            start=2,
+            end=10,
+            value=self.config.tracking.min_hits,
+            step=1
+        )
+        self.track_max_misses_slider = pn.widgets.IntSlider(
+            name='Max Track Misses',
+            start=2,
+            end=10,
+            value=self.config.tracking.max_misses,
+            step=1
+        )
         
         # Create floating panel for parameters
         self.params_panel = pn.layout.FloatPanel(
@@ -335,6 +393,9 @@ class RadarGUI:
                         max_misses=self.track_max_misses_slider.value
                     )
             
+            # Save current configuration
+            self._save_current_config()
+            
             # Instead of periodic callback, schedule the first update
             self.is_running = True
             pn.state.onload(self.update_plot)
@@ -410,10 +471,10 @@ class RadarGUI:
         """Create the scatter plot."""
         p = figure(
             title='Radar Point Cloud', 
-            width=1100,     # Reduced from 1200 to better fit MacBook screens
-            height=600,    # Reduced from 800 to better fit MacBook screens
-            x_range=(-2.5, 2.5),  # Set fixed x range to ±5m
-            y_range=(0, 5)   # Set fixed y range to ±5m
+            width=self.config.display.plot_width,
+            height=self.config.display.plot_height,
+            x_range=self.config.display.x_range,
+            y_range=self.config.display.y_range
         )
         
         # Set up the scatter plot with empty data source
@@ -699,6 +760,8 @@ class RadarGUI:
             self.recording_file.close()
         if self.radar is not None and self.radar.is_connected():
             self.radar.close()
+        # Save final configuration
+        self._save_current_config()
 
     def _detect_radar_type(self):
         """Auto-detect which radar is connected."""
@@ -745,13 +808,50 @@ class RadarGUI:
         if self.radar and self.radar.is_connected():
             self.enable_clustering = event.new
             logger.info(f"Clustering {'enabled' if event.new else 'disabled'}")
-            # Disable threshold slider if clustering is disabled
-            self.mob_threshold_slider.disabled = not event.new
+            # Update configuration
+            self._save_current_config()
+            # Enable/disable related controls
+            self.cluster_eps_slider.disabled = not event.new
+            self.cluster_min_samples_slider.disabled = not event.new
+            self.tracking_checkbox.disabled = not event.new
     
     def _tracking_callback(self, event):
         """Handle tracking checkbox changes."""
         if self.radar and self.radar.is_connected():
             self.enable_tracking = event.new
             logger.info(f"Tracking {'enabled' if event.new else 'disabled'}")
-            # Disable threshold slider if tracking is disabled
-            self.mob_threshold_slider.disabled = not event.new
+            # Update configuration
+            self._save_current_config()
+            # Enable/disable related controls
+            self.track_max_distance_slider.disabled = not event.new
+            self.track_min_hits_slider.disabled = not event.new
+            self.track_max_misses_slider.disabled = not event.new
+
+    def _save_current_config(self):
+        """Save current GUI state to configuration."""
+        updates = {
+            'processing': {
+                'clutter_removal': self.clutter_removal_checkbox.value,
+                'mob_enabled': self.mob_enabled_checkbox.value,
+                'mob_threshold': self.mob_threshold_slider.value,
+                'frame_period_ms': self.frame_period_slider.value
+            },
+            'clustering': {
+                'enabled': self.clustering_checkbox.value,
+                'eps': self.cluster_eps_slider.value,
+                'min_samples': self.cluster_min_samples_slider.value
+            },
+            'tracking': {
+                'enabled': self.tracking_checkbox.value,
+                'max_distance': self.track_max_distance_slider.value,
+                'min_hits': self.track_min_hits_slider.value,
+                'max_misses': self.track_max_misses_slider.value,
+                'dt': self.frame_period_slider.value / 1000.0
+            }
+        }
+        try:
+            self.config = self.config_manager.update_config(updates)
+            self.config_manager.save_config()
+            logger.info("Configuration saved successfully")
+        except Exception as e:
+            logger.error(f"Error saving configuration: {e}")
