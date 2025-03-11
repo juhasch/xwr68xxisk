@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from xwr68xxisk.radar import RadarConnection, create_radar, RadarConnectionError
 from xwr68xxisk.parse import RadarData
 from xwr68xxisk.point_cloud import RadarPointCloud
+from xwr68xxisk.clustering import Cluster
+from xwr68xxisk.tracking import Track
 
 RUNNER_CI = True if os.getenv("CI") == "true" else False
 
@@ -30,7 +32,11 @@ class PointCloudRecorder:
     def __init__(self, 
                  base_filename: str,
                  format_type: Literal['csv', 'pcd'],
-                 buffer_in_memory: bool = True):
+                 buffer_in_memory: bool = True,
+                 enable_clustering: bool = False,
+                 enable_tracking: bool = False,
+                 clustering_params: Optional[Dict] = None,
+                 tracking_params: Optional[Dict] = None):
         """
         Initialize the recorder.
         
@@ -38,10 +44,10 @@ class PointCloudRecorder:
             base_filename: Base filename without extension
             format_type: Type of file format to save ('csv' or 'pcd')
             buffer_in_memory: Whether to buffer frames in memory before saving
-                            (required for PCD format, optional for CSV)
-                            
-        Raises:
-            TypeError: If format_type is not one of the supported formats
+            enable_clustering: Whether to perform clustering on point clouds
+            enable_tracking: Whether to perform tracking on clusters
+            clustering_params: Parameters for clustering algorithm
+            tracking_params: Parameters for tracking algorithm
         """
         if format_type not in ['csv', 'pcd']:
             raise TypeError(f"Unsupported format type: {format_type}. Must be one of: csv, pcd")
@@ -49,6 +55,20 @@ class PointCloudRecorder:
         self.base_filename = base_filename
         self.format_type = format_type
         self.buffer_in_memory = buffer_in_memory or format_type == 'pcd'
+        
+        # Initialize clustering and tracking if enabled
+        self.enable_clustering = enable_clustering
+        self.enable_tracking = enable_tracking
+        
+        if enable_clustering:
+            from xwr68xxisk.clustering import PointCloudClustering
+            self.clusterer = PointCloudClustering(**(clustering_params or {}))
+            
+        if enable_tracking:
+            if not enable_clustering:
+                raise ValueError("Tracking requires clustering to be enabled")
+            from xwr68xxisk.tracking import PointCloudTracker
+            self.tracker = PointCloudTracker(**(tracking_params or {}))
         
         # Create output directory if it doesn't exist
         os.makedirs(os.path.dirname(base_filename), exist_ok=True)
@@ -59,16 +79,33 @@ class PointCloudRecorder:
         self.total_points = 0
         self.frame_count = 0
         
-        # Open file if not buffering in memory
+        # Open files if not buffering in memory
         if not self.buffer_in_memory:
             if format_type == 'csv':
                 self.csv_file = open(f"{base_filename}.csv", 'w')
                 self._write_csv_header()
+                
+            # Open additional files for clusters and tracks if enabled
+            if enable_clustering:
+                self.clusters_file = open(f"{base_filename}_clusters.csv", 'w')
+                self._write_clusters_header()
+                
+            if enable_tracking:
+                self.tracks_file = open(f"{base_filename}_tracks.csv", 'w')
+                self._write_tracks_header()
     
     def _write_csv_header(self):
         """Write the CSV header."""
         self.csv_file.write("timestamp_ns,frame,x,y,z,velocity,range,azimuth,elevation,snr,rcs\n")
-    
+        
+    def _write_clusters_header(self):
+        """Write the clusters CSV header."""
+        self.clusters_file.write("timestamp_ns,frame,cluster_id,x,y,z,velocity,size_x,size_y,size_z,num_points\n")
+        
+    def _write_tracks_header(self):
+        """Write the tracks CSV header."""
+        self.tracks_file.write("timestamp_ns,frame,track_id,x,y,z,vx,vy,vz,age,hits\n")
+
     def add_frame(self, point_cloud: RadarPointCloud, frame_number: int) -> None:
         """
         Add a new frame of point cloud data.
@@ -77,27 +114,39 @@ class PointCloudRecorder:
             point_cloud: RadarPointCloud object containing the frame data
             frame_number: Frame number
         """
+        # Create frame object
         frame = PointCloudFrame(
             timestamp_ns=time.time_ns(),
             frame_number=frame_number,
             points=point_cloud
         )
         
+        # Perform clustering if enabled
+        clusters = []
+        tracks = []
+        if self.enable_clustering:
+            clusters = self.clusterer.cluster(point_cloud)
+            frame.metadata['clusters'] = clusters
+            
+            # Perform tracking if enabled
+            if self.enable_tracking:
+                tracks = self.tracker.update(clusters)
+                frame.metadata['tracks'] = tracks
+        
         if self.buffer_in_memory:
             self.frames.append(frame)
         else:
             self._write_frame_csv(frame)
+            if clusters:
+                self._write_clusters_csv(frame.timestamp_ns, frame_number, clusters)
+            if tracks:
+                self._write_tracks_csv(frame.timestamp_ns, frame_number, tracks)
         
         self.total_points += point_cloud.num_points
         self.frame_count += 1
     
     def _write_frame_csv(self, frame: PointCloudFrame) -> None:
-        """
-        Write a single frame to CSV file.
-        
-        Args:
-            frame: PointCloudFrame object containing the frame data
-        """
+        """Write a single frame to CSV file."""
         x, y, z = frame.points.to_cartesian()
         
         for i in range(frame.points.num_points):
@@ -108,7 +157,30 @@ class PointCloudRecorder:
                 f"{frame.points.snr[i]:.3f},{frame.points.rcs[i]:.3f}\n"
             )
         self.csv_file.flush()
-    
+        
+    def _write_clusters_csv(self, timestamp_ns: int, frame_number: int, clusters: List[Cluster]) -> None:
+        """Write clusters to CSV file."""
+        for i, cluster in enumerate(clusters):
+            self.clusters_file.write(
+                f"{timestamp_ns},{frame_number},{i},"
+                f"{cluster.centroid[0]:.3f},{cluster.centroid[1]:.3f},{cluster.centroid[2]:.3f},"
+                f"{cluster.velocity:.3f},"
+                f"{cluster.size[0]:.3f},{cluster.size[1]:.3f},{cluster.size[2]:.3f},"
+                f"{cluster.num_points}\n"
+            )
+        self.clusters_file.flush()
+        
+    def _write_tracks_csv(self, timestamp_ns: int, frame_number: int, tracks: List[Track]) -> None:
+        """Write tracks to CSV file."""
+        for track in tracks:
+            self.tracks_file.write(
+                f"{timestamp_ns},{frame_number},{track.track_id},"
+                f"{track.state[0]:.3f},{track.state[1]:.3f},{track.state[2]:.3f},"
+                f"{track.state[3]:.3f},{track.state[4]:.3f},{track.state[5]:.3f},"
+                f"{track.age},{track.hits}\n"
+            )
+        self.tracks_file.flush()
+
     def _save_to_pcd(self) -> None:
         """Save all buffered frames to a PCD file."""
         if not self.frames:
@@ -162,11 +234,10 @@ class PointCloudRecorder:
     def save(self) -> None:
         """Save the recorded data to file(s)."""
         if self.buffer_in_memory:
+            # Save point cloud data
             if self.format_type == 'csv':
                 with open(f"{self.base_filename}.csv", 'w') as f:
-                    # Write header
                     f.write("timestamp_ns,frame,x,y,z,velocity,range,azimuth,elevation,snr,rcs\n")
-                    # Write frames
                     for frame in self.frames:
                         x, y, z = frame.points.to_cartesian()
                         for i in range(frame.points.num_points):
@@ -178,14 +249,36 @@ class PointCloudRecorder:
                             )
             elif self.format_type == 'pcd':
                 self._save_to_pcd()
+            
+            # Save clusters and tracks if enabled
+            if self.enable_clustering:
+                with open(f"{self.base_filename}_clusters.csv", 'w') as f:
+                    self._write_clusters_header()
+                    for frame in self.frames:
+                        if 'clusters' in frame.metadata:
+                            self._write_clusters_csv(frame.timestamp_ns, frame.frame_number, frame.metadata['clusters'])
+                            
+            if self.enable_tracking:
+                with open(f"{self.base_filename}_tracks.csv", 'w') as f:
+                    self._write_tracks_header()
+                    for frame in self.frames:
+                        if 'tracks' in frame.metadata:
+                            self._write_tracks_csv(frame.timestamp_ns, frame.frame_number, frame.metadata['tracks'])
     
     def close(self) -> None:
         """Close the recorder and save any buffered data."""
         if self.buffer_in_memory:
             self.save()
-        elif self.csv_file is not None:
-            self.csv_file.close()
-            self.csv_file = None
+        else:
+            if self.csv_file is not None:
+                self.csv_file.close()
+                self.csv_file = None
+            if hasattr(self, 'clusters_file') and self.clusters_file is not None:
+                self.clusters_file.close()
+                self.clusters_file = None
+            if hasattr(self, 'tracks_file') and self.tracks_file is not None:
+                self.tracks_file.close()
+                self.tracks_file = None
 
 
 def main(serial_number: Optional[str] = None):
@@ -197,9 +290,37 @@ def main(serial_number: Optional[str] = None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_filename = os.path.join(recording_dir, f"radar_data_{timestamp}")
     
-    # Create recorders for different formats
-    csv_recorder = PointCloudRecorder(base_filename, 'csv', buffer_in_memory=False)
-    pcd_recorder = PointCloudRecorder(base_filename, 'pcd')  # PCD requires buffering
+    # Create recorders for different formats with clustering and tracking enabled
+    clustering_params = {
+        'eps': 0.5,  # meters
+        'min_samples': 5
+    }
+    
+    tracking_params = {
+        'dt': 0.1,  # seconds
+        'max_distance': 2.0,  # meters
+        'min_hits': 3,
+        'max_misses': 5
+    }
+    
+    csv_recorder = PointCloudRecorder(
+        base_filename, 
+        'csv',
+        buffer_in_memory=False,
+        enable_clustering=True,
+        enable_tracking=True,
+        clustering_params=clustering_params,
+        tracking_params=tracking_params
+    )
+    
+    pcd_recorder = PointCloudRecorder(
+        base_filename,
+        'pcd',
+        enable_clustering=True,
+        enable_tracking=True,
+        clustering_params=clustering_params,
+        tracking_params=tracking_params
+    )
       
     print("Starting radar")
 
