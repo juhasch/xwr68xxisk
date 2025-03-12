@@ -152,7 +152,12 @@ class RadarPointCloud:
         azimuth = np.arctan2(x, y)
         
         # Calculate elevation (vertical angle)
-        elevation = np.arcsin(z / range_values)
+        # Handle zero range and ensure z/range is within [-1, 1] for arcsin
+        mask = range_values > 0
+        elevation = np.zeros_like(range_values)
+        if np.any(mask):
+            z_over_r = np.clip(z[mask] / range_values[mask], -1, 1)
+            elevation[mask] = np.arcsin(z_over_r)
         
         # If velocity, rcs, or snr are not provided, create arrays of zeros
         if velocity is None:
@@ -198,4 +203,56 @@ class RadarPointCloud:
         rcs = np.zeros_like(range_values)
         
         return cls(range=range_values, velocity=velocity, azimuth=azimuth,
-                  elevation=elevation, rcs=rcs, snr=snr, metadata=frame_data) 
+                  elevation=elevation, rcs=rcs, snr=snr, metadata=frame_data)
+
+    def to_cartesian_2d(self) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Convert spherical coordinates (range, azimuth) to 2D Cartesian coordinates (x, y).
+        
+        The coordinate system follows the convention:
+        - x-axis: points in front of the radar (forward)
+        - y-axis: points to the right of the radar
+        
+        Returns:
+            Tuple containing:
+                x: Array of x-coordinates (in meters)
+                y: Array of y-coordinates (in meters)
+        """
+        if self.num_points == 0:
+            return np.array([]), np.array([])
+            
+        # Convert spherical to Cartesian coordinates
+        x = self.range * np.sin(self.azimuth)
+        y = self.range * np.cos(self.azimuth)
+        
+        return x, y
+
+    @classmethod
+    def from_cartesian_2d(cls, x: np.ndarray, y: np.ndarray) -> 'RadarPointCloud':
+        """
+        Create a RadarPointCloud from 2D Cartesian coordinates.
+        
+        Args:
+            x: Array of x-coordinates (in meters)
+            y: Array of y-coordinates (in meters)
+            
+        Returns:
+            RadarPointCloud: New instance with converted coordinates
+        """
+        # Ensure all input arrays have the same length
+        if not (len(x) == len(y)):
+            raise ValueError("x and y arrays must have the same length")
+            
+        # Calculate range
+        range_values = np.sqrt(x**2 + y**2)
+        
+        # Calculate azimuth (horizontal angle)
+        azimuth = np.arctan2(x, y)
+        
+        # If velocity, rcs, or snr are not provided, create arrays of zeros
+        velocity = np.zeros_like(x)
+        rcs = np.zeros_like(x)
+        snr = np.zeros_like(x)
+        
+        return cls(range=range_values, velocity=velocity, azimuth=azimuth, 
+                  elevation=np.zeros_like(range_values), rcs=rcs, snr=snr) 

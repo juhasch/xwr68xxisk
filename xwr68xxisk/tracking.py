@@ -6,10 +6,13 @@ implementing a simple Kalman filter-based tracking system.
 
 import numpy as np
 from dataclasses import dataclass
+import logging
 from typing import List, Dict, Optional, Tuple
 from filterpy.kalman import KalmanFilter
 from xwr68xxisk.clustering import Cluster
 
+# Configure logging
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Track:
@@ -41,6 +44,9 @@ class PointCloudTracker:
             min_hits: Minimum hits before track is confirmed
             max_misses: Maximum misses before track is dropped
         """
+        logger.debug(f"Initializing PointCloudTracker with dt={dt}, max_distance={max_distance}, "
+                    f"min_hits={min_hits}, max_misses={max_misses}")
+        
         self.dt = dt
         self.max_distance = max_distance
         self.min_hits = min_hits
@@ -74,6 +80,8 @@ class PointCloudTracker:
         
     def _create_kalman_filter(self, cluster: Cluster) -> KalmanFilter:
         """Create and initialize a Kalman filter for a new track."""
+        logger.debug(f"Creating new Kalman filter for cluster with centroid {cluster.centroid}")
+        
         kf = KalmanFilter(dim_x=6, dim_z=3)
         kf.F = self.F
         kf.H = self.H
@@ -84,8 +92,9 @@ class PointCloudTracker:
         kf.x = np.zeros(6)
         kf.x[:3] = cluster.centroid
         # Estimate initial velocity from cluster velocity (project onto x,y,z)
-        # This is a simplification - could be improved with better velocity projection
         kf.x[3:] = cluster.velocity / np.sqrt(3)
+        
+        logger.debug(f"Initial state: position={kf.x[:3]}, velocity={kf.x[3:]}")
         
         # Initialize covariance matrix
         kf.P = np.eye(6) * 1.0
@@ -102,7 +111,10 @@ class PointCloudTracker:
                 - Dictionary mapping track indices to cluster indices
                 - List of unassigned cluster indices
         """
+        logger.debug(f"Associating {len(clusters)} clusters with {len(self.tracks)} existing tracks")
+        
         if not self.tracks or not clusters:
+            logger.debug("No tracks or clusters to associate")
             return {}, list(range(len(clusters)))
             
         # Calculate distance matrix
@@ -125,11 +137,14 @@ class PointCloudTracker:
                     best_match = j
                     
             if best_match >= 0:
+                logger.debug(f"Associated track {self.tracks[i].track_id} with cluster {best_match} "
+                           f"(distance: {min_dist:.3f}m)")
                 associations[i] = best_match
                 used_clusters.add(best_match)
                 
         # Get unassigned clusters
         unassigned = [j for j in range(len(clusters)) if j not in used_clusters]
+        logger.debug(f"Unassigned clusters: {len(unassigned)}")
         
         return associations, unassigned
         
@@ -143,6 +158,8 @@ class PointCloudTracker:
         Returns:
             List of confirmed tracks
         """
+        logger.debug(f"Updating tracker with {len(clusters)} new clusters")
+        
         # Associate clusters with existing tracks
         associations, unassigned_clusters = self._associate_clusters(clusters)
         
@@ -167,6 +184,9 @@ class PointCloudTracker:
             track.age += 1
             track.misses = 0
             
+            logger.debug(f"Updated track {track.track_id}: pos={track.state[:3]}, "
+                        f"vel={track.state[3:]}, hits={track.hits}, age={track.age}")
+            
         # Update tracks without associations
         for i in range(len(self.tracks)):
             if i not in associations:
@@ -175,6 +195,8 @@ class PointCloudTracker:
                     track.kf.predict()
                 track.misses += 1
                 track.age += 1
+                logger.debug(f"Track {track.track_id} missed detection: "
+                           f"misses={track.misses}, age={track.age}")
                 
         # Create new tracks for unassigned clusters
         for cluster_idx in unassigned_clusters:
@@ -192,15 +214,22 @@ class PointCloudTracker:
             track.state = track.kf.x
             track.covariance = track.kf.P
             
+            logger.debug(f"Created new track {track.track_id} at position {track.state[:3]}")
+            
             self.tracks.append(track)
             self.next_track_id += 1
             
         # Remove dead tracks
+        original_track_count = len(self.tracks)
         self.tracks = [track for track in self.tracks 
                       if track.misses <= self.max_misses]
+        removed_tracks = original_track_count - len(self.tracks)
+        if removed_tracks > 0:
+            logger.debug(f"Removed {removed_tracks} dead tracks")
         
         # Return only confirmed tracks
         confirmed_tracks = [track for track in self.tracks 
                           if track.hits >= self.min_hits]
         
+        logger.debug(f"Returning {len(confirmed_tracks)} confirmed tracks out of {len(self.tracks)} total")
         return confirmed_tracks 
