@@ -182,7 +182,20 @@ class RadarData:
         velocity_array = np.array(v)
         azimuth_array = np.array(azimuth)
         elevation_array = np.array(elevation)
-        snr_array = np.array(self.snr) if self.snr else None
+        snr_array = np.array(self.snr) if self.snr else np.zeros(len(range_values))
+        
+        # Calculate RCS values based on SNR and range
+        # This is a simplified model; actual RCS calculation would depend on radar parameters
+        if snr_array is not None and len(snr_array) > 0:
+            # Convert SNR from dB to linear scale
+            snr_linear = 10**(snr_array/10)
+            # RCS is proportional to SNR * range^4 (radar equation)
+            # This is a simplified calculation for demonstration
+            rcs_array = snr_linear * (range_array**4) / 1e6  # Scaling factor
+            # Convert back to dB scale
+            rcs_array = 10 * np.log10(np.maximum(rcs_array, 1e-10))
+        else:
+            rcs_array = np.zeros(len(range_values))
         
         return RadarPointCloud(
             range=range_array,
@@ -190,6 +203,7 @@ class RadarData:
             azimuth=azimuth_array,
             elevation=elevation_array,
             snr=snr_array,
+            rcs=rcs_array,
             metadata=metadata
         )
     

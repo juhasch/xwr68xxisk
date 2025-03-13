@@ -114,6 +114,10 @@ class PointCloudRecorder:
             point_cloud: RadarPointCloud object containing the frame data
             frame_number: Frame number
         """
+        # Skip empty point clouds
+        if point_cloud.num_points == 0:
+            return
+            
         # Create frame object
         frame = PointCloudFrame(
             timestamp_ns=time.time_ns(),
@@ -125,160 +129,333 @@ class PointCloudRecorder:
         clusters = []
         tracks = []
         if self.enable_clustering:
-            clusters = self.clusterer.cluster(point_cloud)
-            frame.metadata['clusters'] = clusters
-            
-            # Perform tracking if enabled
-            if self.enable_tracking:
-                tracks = self.tracker.update(clusters)
-                frame.metadata['tracks'] = tracks
+            try:
+                clusters = self.clusterer.cluster(point_cloud)
+                frame.metadata['clusters'] = clusters
+                
+                # Perform tracking if enabled
+                if self.enable_tracking:
+                    tracks = self.tracker.update(clusters)
+                    frame.metadata['tracks'] = tracks
+            except Exception as e:
+                print(f"Error during clustering/tracking: {e}")
         
         if self.buffer_in_memory:
             self.frames.append(frame)
         else:
-            self._write_frame_csv(frame)
-            if clusters:
-                self._write_clusters_csv(frame.timestamp_ns, frame_number, clusters)
-            if tracks:
-                self._write_tracks_csv(frame.timestamp_ns, frame_number, tracks)
+            try:
+                self._write_frame_csv(frame)
+                if clusters:
+                    self._write_clusters_csv(frame.timestamp_ns, frame_number, clusters)
+                if tracks:
+                    self._write_tracks_csv(frame.timestamp_ns, frame_number, tracks)
+            except Exception as e:
+                print(f"Error writing frame to CSV: {e}")
         
         self.total_points += point_cloud.num_points
         self.frame_count += 1
     
     def _write_frame_csv(self, frame: PointCloudFrame) -> None:
         """Write a single frame to CSV file."""
-        x, y, z = frame.points.to_cartesian()
-        
-        for i in range(frame.points.num_points):
-            self.csv_file.write(
-                f"{frame.timestamp_ns},{frame.frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
-                f"{frame.points.velocity[i]:.3f},{frame.points.range[i]:.3f},"
-                f"{frame.points.azimuth[i]:.3f},{frame.points.elevation[i]:.3f},"
-                f"{frame.points.snr[i]:.3f},{frame.points.rcs[i]:.3f}\n"
+        try:
+            x, y, z = frame.points.to_cartesian()
+            
+            # Ensure all required arrays exist and have the same length
+            num_points = frame.points.num_points
+            
+            # Check if all required attributes exist
+            if not hasattr(frame.points, 'velocity') or len(frame.points.velocity) == 0:
+                frame.points.velocity = np.zeros(num_points)
+            if not hasattr(frame.points, 'range') or len(frame.points.range) == 0:
+                frame.points.range = np.zeros(num_points)
+            if not hasattr(frame.points, 'azimuth') or len(frame.points.azimuth) == 0:
+                frame.points.azimuth = np.zeros(num_points)
+            if not hasattr(frame.points, 'elevation') or len(frame.points.elevation) == 0:
+                frame.points.elevation = np.zeros(num_points)
+            if not hasattr(frame.points, 'snr') or len(frame.points.snr) == 0:
+                frame.points.snr = np.zeros(num_points)
+            if not hasattr(frame.points, 'rcs') or len(frame.points.rcs) == 0:
+                frame.points.rcs = np.zeros(num_points)
+            
+            # Ensure all arrays have the same length
+            min_length = min(
+                len(x), len(y), len(z),
+                len(frame.points.velocity),
+                len(frame.points.range),
+                len(frame.points.azimuth),
+                len(frame.points.elevation),
+                len(frame.points.snr),
+                len(frame.points.rcs)
             )
-        self.csv_file.flush()
+            
+            for i in range(min_length):
+                self.csv_file.write(
+                    f"{frame.timestamp_ns},{frame.frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
+                    f"{frame.points.velocity[i]:.3f},{frame.points.range[i]:.3f},"
+                    f"{frame.points.azimuth[i]:.3f},{frame.points.elevation[i]:.3f},"
+                    f"{frame.points.snr[i]:.3f},{frame.points.rcs[i]:.3f}\n"
+                )
+            self.csv_file.flush()
+        except Exception as e:
+            print(f"Error in _write_frame_csv: {e}")
+            # Continue without crashing
         
     def _write_clusters_csv(self, timestamp_ns: int, frame_number: int, clusters: List[Cluster]) -> None:
         """Write clusters to CSV file."""
-        for i, cluster in enumerate(clusters):
-            self.clusters_file.write(
-                f"{timestamp_ns},{frame_number},{i},"
-                f"{cluster.centroid[0]:.3f},{cluster.centroid[1]:.3f},{cluster.centroid[2]:.3f},"
-                f"{cluster.velocity:.3f},"
-                f"{cluster.size[0]:.3f},{cluster.size[1]:.3f},{cluster.size[2]:.3f},"
-                f"{cluster.num_points}\n"
-            )
-        self.clusters_file.flush()
+        try:
+            if not clusters:
+                return
+                
+            for i, cluster in enumerate(clusters):
+                try:
+                    self.clusters_file.write(
+                        f"{timestamp_ns},{frame_number},{i},"
+                        f"{cluster.centroid[0]:.3f},{cluster.centroid[1]:.3f},{cluster.centroid[2]:.3f},"
+                        f"{cluster.velocity:.3f},"
+                        f"{cluster.size[0]:.3f},{cluster.size[1]:.3f},{cluster.size[2]:.3f},"
+                        f"{cluster.num_points}\n"
+                    )
+                except Exception as e:
+                    print(f"Error writing cluster {i}: {e}")
+                    continue
+            self.clusters_file.flush()
+        except Exception as e:
+            print(f"Error in _write_clusters_csv: {e}")
         
     def _write_tracks_csv(self, timestamp_ns: int, frame_number: int, tracks: List[Track]) -> None:
         """Write tracks to CSV file."""
-        for track in tracks:
-            self.tracks_file.write(
-                f"{timestamp_ns},{frame_number},{track.track_id},"
-                f"{track.state[0]:.3f},{track.state[1]:.3f},{track.state[2]:.3f},"
-                f"{track.state[3]:.3f},{track.state[4]:.3f},{track.state[5]:.3f},"
-                f"{track.age},{track.hits}\n"
-            )
-        self.tracks_file.flush()
+        try:
+            if not tracks:
+                return
+                
+            for track in tracks:
+                try:
+                    self.tracks_file.write(
+                        f"{timestamp_ns},{frame_number},{track.track_id},"
+                        f"{track.state[0]:.3f},{track.state[1]:.3f},{track.state[2]:.3f},"
+                        f"{track.state[3]:.3f},{track.state[4]:.3f},{track.state[5]:.3f},"
+                        f"{track.age},{track.hits}\n"
+                    )
+                except Exception as e:
+                    print(f"Error writing track {track.track_id}: {e}")
+                    continue
+            self.tracks_file.flush()
+        except Exception as e:
+            print(f"Error in _write_tracks_csv: {e}")
 
     def _save_to_pcd(self) -> None:
         """Save all buffered frames to a PCD file."""
         if not self.frames:
+            print("No frames to save to PCD file")
             return
             
-        # Calculate total number of points
-        total_points = sum(frame.points.num_points for frame in self.frames)
-        
-        # Create structured array for all points
-        dtype = np.dtype([
-            ('x', np.float32),
-            ('y', np.float32),
-            ('z', np.float32),
-            ('velocity', np.float32),
-            ('range', np.float32),
-            ('azimuth', np.float32),
-            ('elevation', np.float32),
-            ('snr', np.float32),
-            ('rcs', np.float32),
-            ('timestamp_ns', np.int64),
-            ('frame', np.int32)
-        ])
-        
-        data = np.zeros(total_points, dtype=dtype)
-        current_idx = 0
-        
-        # Fill the array with all points
-        for frame in self.frames:
-            x, y, z = frame.points.to_cartesian()
-            points_in_frame = frame.points.num_points
+        try:
+            # Calculate total number of points
+            total_points = sum(frame.points.num_points for frame in self.frames)
             
-            # Fill in the data for this frame
-            data['x'][current_idx:current_idx + points_in_frame] = x
-            data['y'][current_idx:current_idx + points_in_frame] = y
-            data['z'][current_idx:current_idx + points_in_frame] = z
-            data['velocity'][current_idx:current_idx + points_in_frame] = frame.points.velocity
-            data['range'][current_idx:current_idx + points_in_frame] = frame.points.range
-            data['azimuth'][current_idx:current_idx + points_in_frame] = frame.points.azimuth
-            data['elevation'][current_idx:current_idx + points_in_frame] = frame.points.elevation
-            data['snr'][current_idx:current_idx + points_in_frame] = frame.points.snr
-            data['rcs'][current_idx:current_idx + points_in_frame] = frame.points.rcs
-            data['timestamp_ns'][current_idx:current_idx + points_in_frame] = frame.timestamp_ns
-            data['frame'][current_idx:current_idx + points_in_frame] = frame.frame_number
+            if total_points == 0:
+                print("No points to save to PCD file")
+                return
+                
+            # Create structured array for all points
+            dtype = np.dtype([
+                ('x', np.float32),
+                ('y', np.float32),
+                ('z', np.float32),
+                ('velocity', np.float32),
+                ('range', np.float32),
+                ('azimuth', np.float32),
+                ('elevation', np.float32),
+                ('snr', np.float32),
+                ('rcs', np.float32),
+                ('timestamp_ns', np.int64),
+                ('frame', np.int32)
+            ])
             
-            current_idx += points_in_frame
-        
-        # Create and save PCD file
-        pc = pypcd.PointCloud.from_array(data)
-        pc.save_pcd(f"{self.base_filename}.pcd", compression='binary_compressed')
+            data = np.zeros(total_points, dtype=dtype)
+            current_idx = 0
+            
+            # Fill the array with all points
+            for frame in self.frames:
+                if frame.points.num_points == 0:
+                    continue
+                    
+                try:
+                    x, y, z = frame.points.to_cartesian()
+                    points_in_frame = frame.points.num_points
+                    
+                    # Ensure all required attributes exist
+                    if not hasattr(frame.points, 'velocity') or len(frame.points.velocity) == 0:
+                        frame.points.velocity = np.zeros(points_in_frame)
+                    if not hasattr(frame.points, 'range') or len(frame.points.range) == 0:
+                        frame.points.range = np.zeros(points_in_frame)
+                    if not hasattr(frame.points, 'azimuth') or len(frame.points.azimuth) == 0:
+                        frame.points.azimuth = np.zeros(points_in_frame)
+                    if not hasattr(frame.points, 'elevation') or len(frame.points.elevation) == 0:
+                        frame.points.elevation = np.zeros(points_in_frame)
+                    if not hasattr(frame.points, 'snr') or len(frame.points.snr) == 0:
+                        frame.points.snr = np.zeros(points_in_frame)
+                    if not hasattr(frame.points, 'rcs') or len(frame.points.rcs) == 0:
+                        frame.points.rcs = np.zeros(points_in_frame)
+                    
+                    # Ensure all arrays have the same length
+                    min_length = min(
+                        len(x), len(y), len(z),
+                        len(frame.points.velocity),
+                        len(frame.points.range),
+                        len(frame.points.azimuth),
+                        len(frame.points.elevation),
+                        len(frame.points.snr),
+                        len(frame.points.rcs)
+                    )
+                    
+                    if min_length == 0:
+                        continue
+                    
+                    # Fill in the data for this frame
+                    data['x'][current_idx:current_idx + min_length] = x[:min_length]
+                    data['y'][current_idx:current_idx + min_length] = y[:min_length]
+                    data['z'][current_idx:current_idx + min_length] = z[:min_length]
+                    data['velocity'][current_idx:current_idx + min_length] = frame.points.velocity[:min_length]
+                    data['range'][current_idx:current_idx + min_length] = frame.points.range[:min_length]
+                    data['azimuth'][current_idx:current_idx + min_length] = frame.points.azimuth[:min_length]
+                    data['elevation'][current_idx:current_idx + min_length] = frame.points.elevation[:min_length]
+                    data['snr'][current_idx:current_idx + min_length] = frame.points.snr[:min_length]
+                    data['rcs'][current_idx:current_idx + min_length] = frame.points.rcs[:min_length]
+                    data['timestamp_ns'][current_idx:current_idx + min_length] = frame.timestamp_ns
+                    data['frame'][current_idx:current_idx + min_length] = frame.frame_number
+                    
+                    current_idx += min_length
+                except Exception as e:
+                    print(f"Error processing frame for PCD: {e}")
+                    continue
+            
+            # Resize the array if we didn't fill it completely
+            if current_idx < total_points:
+                data = data[:current_idx]
+            
+            if len(data) == 0:
+                print("No valid points to save to PCD file")
+                return
+                
+            # Create and save PCD file
+            pc = pypcd.PointCloud.from_array(data)
+            pc.save_pcd(f"{self.base_filename}.pcd", compression='binary_compressed')
+            print(f"Saved {len(data)} points to {self.base_filename}.pcd")
+        except Exception as e:
+            print(f"Error saving to PCD file: {e}")
+            # Continue without crashing
     
     def save(self) -> None:
         """Save the recorded data to file(s)."""
-        if self.buffer_in_memory:
+        if not self.buffer_in_memory:
+            print("Data already saved (not buffering in memory)")
+            return
+            
+        try:
             # Save point cloud data
             if self.format_type == 'csv':
-                with open(f"{self.base_filename}.csv", 'w') as f:
-                    f.write("timestamp_ns,frame,x,y,z,velocity,range,azimuth,elevation,snr,rcs\n")
-                    for frame in self.frames:
-                        x, y, z = frame.points.to_cartesian()
-                        for i in range(frame.points.num_points):
-                            f.write(
-                                f"{frame.timestamp_ns},{frame.frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
-                                f"{frame.points.velocity[i]:.3f},{frame.points.range[i]:.3f},"
-                                f"{frame.points.azimuth[i]:.3f},{frame.points.elevation[i]:.3f},"
-                                f"{frame.points.snr[i]:.3f},{frame.points.rcs[i]:.3f}\n"
-                            )
+                try:
+                    with open(f"{self.base_filename}.csv", 'w') as f:
+                        f.write("timestamp_ns,frame,x,y,z,velocity,range,azimuth,elevation,snr,rcs\n")
+                        for frame in self.frames:
+                            if frame.points.num_points == 0:
+                                continue
+                                
+                            try:
+                                x, y, z = frame.points.to_cartesian()
+                                
+                                # Ensure all required attributes exist
+                                num_points = frame.points.num_points
+                                if not hasattr(frame.points, 'velocity') or len(frame.points.velocity) == 0:
+                                    frame.points.velocity = np.zeros(num_points)
+                                if not hasattr(frame.points, 'range') or len(frame.points.range) == 0:
+                                    frame.points.range = np.zeros(num_points)
+                                if not hasattr(frame.points, 'azimuth') or len(frame.points.azimuth) == 0:
+                                    frame.points.azimuth = np.zeros(num_points)
+                                if not hasattr(frame.points, 'elevation') or len(frame.points.elevation) == 0:
+                                    frame.points.elevation = np.zeros(num_points)
+                                if not hasattr(frame.points, 'snr') or len(frame.points.snr) == 0:
+                                    frame.points.snr = np.zeros(num_points)
+                                if not hasattr(frame.points, 'rcs') or len(frame.points.rcs) == 0:
+                                    frame.points.rcs = np.zeros(num_points)
+                                
+                                # Ensure all arrays have the same length
+                                min_length = min(
+                                    len(x), len(y), len(z),
+                                    len(frame.points.velocity),
+                                    len(frame.points.range),
+                                    len(frame.points.azimuth),
+                                    len(frame.points.elevation),
+                                    len(frame.points.snr),
+                                    len(frame.points.rcs)
+                                )
+                                
+                                for i in range(min_length):
+                                    f.write(
+                                        f"{frame.timestamp_ns},{frame.frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
+                                        f"{frame.points.velocity[i]:.3f},{frame.points.range[i]:.3f},"
+                                        f"{frame.points.azimuth[i]:.3f},{frame.points.elevation[i]:.3f},"
+                                        f"{frame.points.snr[i]:.3f},{frame.points.rcs[i]:.3f}\n"
+                                    )
+                            except Exception as e:
+                                print(f"Error writing frame to CSV: {e}")
+                                continue
+                    print(f"Saved {len(self.frames)} frames to {self.base_filename}.csv")
+                except Exception as e:
+                    print(f"Error saving to CSV file: {e}")
             elif self.format_type == 'pcd':
                 self._save_to_pcd()
             
             # Save clusters and tracks if enabled
             if self.enable_clustering:
-                with open(f"{self.base_filename}_clusters.csv", 'w') as f:
-                    self._write_clusters_header()
-                    for frame in self.frames:
-                        if 'clusters' in frame.metadata:
-                            self._write_clusters_csv(frame.timestamp_ns, frame.frame_number, frame.metadata['clusters'])
+                try:
+                    with open(f"{self.base_filename}_clusters.csv", 'w') as f:
+                        f.write("timestamp_ns,frame,cluster_id,x,y,z,velocity,size_x,size_y,size_z,num_points\n")
+                        for frame in self.frames:
+                            if 'clusters' in frame.metadata and frame.metadata['clusters']:
+                                try:
+                                    self._write_clusters_csv(frame.timestamp_ns, frame.frame_number, frame.metadata['clusters'])
+                                except Exception as e:
+                                    print(f"Error writing clusters for frame {frame.frame_number}: {e}")
+                    print(f"Saved clusters to {self.base_filename}_clusters.csv")
+                except Exception as e:
+                    print(f"Error saving clusters file: {e}")
                             
             if self.enable_tracking:
-                with open(f"{self.base_filename}_tracks.csv", 'w') as f:
-                    self._write_tracks_header()
-                    for frame in self.frames:
-                        if 'tracks' in frame.metadata:
-                            self._write_tracks_csv(frame.timestamp_ns, frame.frame_number, frame.metadata['tracks'])
+                try:
+                    with open(f"{self.base_filename}_tracks.csv", 'w') as f:
+                        f.write("timestamp_ns,frame,track_id,x,y,z,vx,vy,vz,age,hits\n")
+                        for frame in self.frames:
+                            if 'tracks' in frame.metadata and frame.metadata['tracks']:
+                                try:
+                                    self._write_tracks_csv(frame.timestamp_ns, frame.frame_number, frame.metadata['tracks'])
+                                except Exception as e:
+                                    print(f"Error writing tracks for frame {frame.frame_number}: {e}")
+                    print(f"Saved tracks to {self.base_filename}_tracks.csv")
+                except Exception as e:
+                    print(f"Error saving tracks file: {e}")
+        except Exception as e:
+            print(f"Error in save method: {e}")
     
     def close(self) -> None:
         """Close the recorder and save any buffered data."""
-        if self.buffer_in_memory:
-            self.save()
-        else:
-            if self.csv_file is not None:
-                self.csv_file.close()
-                self.csv_file = None
-            if hasattr(self, 'clusters_file') and self.clusters_file is not None:
-                self.clusters_file.close()
-                self.clusters_file = None
-            if hasattr(self, 'tracks_file') and self.tracks_file is not None:
-                self.tracks_file.close()
-                self.tracks_file = None
+        try:
+            if self.buffer_in_memory:
+                self.save()
+            else:
+                if self.csv_file is not None:
+                    self.csv_file.close()
+                    self.csv_file = None
+                if hasattr(self, 'clusters_file') and self.clusters_file is not None:
+                    self.clusters_file.close()
+                    self.clusters_file = None
+                if hasattr(self, 'tracks_file') and self.tracks_file is not None:
+                    self.tracks_file.close()
+                    self.tracks_file = None
+            print(f"Recorder closed. Recorded {self.frame_count} frames with {self.total_points} points.")
+        except Exception as e:
+            print(f"Error closing recorder: {e}")
 
 
 def main(serial_number: Optional[str] = None):
