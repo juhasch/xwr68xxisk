@@ -12,6 +12,7 @@ from xwr68xxisk.point_cloud import RadarPointCloud
 from xwr68xxisk.clustering import PointCloudClustering
 from xwr68xxisk.tracking import PointCloudTracker
 from xwr68xxisk.configs import ConfigManager
+from xwr68xxisk.record import PointCloudRecorder
 import os
 import logging
 from datetime import datetime
@@ -57,7 +58,7 @@ class RadarGUI:
         # Recording state
         self.is_recording = False
         self.recording_dir = "recordings"
-        self.recording_file = None
+        self.recorder = None
         
         # Create controls
         self.load_config_button = pn.widgets.FileInput(name='Load Config', accept='.cfg')
@@ -66,6 +67,14 @@ class RadarGUI:
         self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
         self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
         self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
+        
+        # Add recording format selection
+        self.record_format_select = pn.widgets.RadioButtonGroup(
+            name='Recording Format',
+            options=['CSV', 'PCD'],
+            value='CSV',
+            button_type='default'
+        )
         
         # Parameters panel controls
         self.modify_params_checkbox = pn.widgets.Checkbox(name='Modify Parameters', value=False)
@@ -348,19 +357,52 @@ class RadarGUI:
             # Start recording
             os.makedirs(self.recording_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = os.path.join(self.recording_dir, f"radar_data_{timestamp}.csv")
-            self.recording_file = open(filename, "w")
-            # Write header with more comprehensive fields
-            self.recording_file.write("frame,x,y,z,velocity,range,azimuth,elevation,snr\n")
-            self.is_recording = True
-            self.record_button.name = 'Stop Recording'
-            self.record_button.button_type = 'danger'
-            logger.info(f"Started recording to {filename}")
+            base_filename = os.path.join(self.recording_dir, f"radar_data_{timestamp}")
+            
+            # Get recording format
+            format_type = self.record_format_select.value.lower()
+            
+            # Create recorder with clustering and tracking settings
+            clustering_params = {
+                'eps': self.cluster_eps_slider.value,
+                'min_samples': self.cluster_min_samples_slider.value
+            }
+            
+            tracking_params = {
+                'dt': self.frame_period_slider.value / 1000.0,  # Convert ms to seconds
+                'max_distance': self.track_max_distance_slider.value,
+                'min_hits': self.track_min_hits_slider.value,
+                'max_misses': self.track_max_misses_slider.value
+            }
+            
+            try:
+                # Create recorder with current settings
+                self.recorder = PointCloudRecorder(
+                    base_filename,
+                    format_type,
+                    buffer_in_memory=(format_type == 'pcd'),  # Buffer in memory for PCD
+                    enable_clustering=self.enable_clustering,
+                    enable_tracking=self.enable_tracking,
+                    clustering_params=clustering_params,
+                    tracking_params=tracking_params
+                )
+                
+                self.is_recording = True
+                self.record_button.name = 'Stop Recording'
+                self.record_button.button_type = 'danger'
+                logger.info(f"Started recording to {base_filename}.{format_type}")
+            except Exception as e:
+                logger.error(f"Error starting recording: {e}")
+                self.recorder = None
         else:
             # Stop recording
-            if self.recording_file:
-                self.recording_file.close()
-                self.recording_file = None
+            if self.recorder:
+                try:
+                    self.recorder.close()
+                except Exception as e:
+                    logger.error(f"Error closing recorder: {e}")
+                finally:
+                    self.recorder = None
             self.is_recording = False
             self.record_button.name = 'Start Recording'
             self.record_button.button_type = 'primary'
@@ -646,17 +688,13 @@ class RadarGUI:
                             self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
                     
                     # Save data if recording is enabled
-                    if self.is_recording and self.recording_file:
-                        frame_number = point_cloud.metadata.get('frame_number', 0)
-                        for i in range(min_length):
-                            # Save both Cartesian and spherical coordinates
-                            self.recording_file.write(
-                                f"{frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
-                                f"{point_cloud.velocity[i]:.3f},{point_cloud.range[i]:.3f},"
-                                f"{point_cloud.azimuth[i]:.3f},{point_cloud.elevation[i]:.3f},"
-                                f"{snr_values[i]:.3f}\n"
-                            )
-                        self.recording_file.flush()  # Ensure data is written to disk
+                    if self.is_recording and self.recorder:
+                        try:
+                            frame_number = point_cloud.metadata.get('frame_number', 0)
+                            self.recorder.add_frame(point_cloud, frame_number)
+                        except Exception as e:
+                            logger.error(f"Error recording frame: {e}")
+                            # Don't stop recording on error, just log it
                 else:
                     # Clear all plots when no points are detected
                     self.data_source.data = {'x': [], 'y': [], 'velocity': [], 'size': []}
@@ -693,6 +731,9 @@ class RadarGUI:
             pn.layout.Divider(),
             self.start_button,
             self.stop_button,
+            pn.layout.Divider(),
+            pn.pane.Markdown('## Recording'),
+            self.record_format_select,
             self.record_button,
             pn.layout.Divider(),
             self.exit_button,     # Moved exit button up
@@ -756,8 +797,11 @@ class RadarGUI:
         """Clean up resources when closing the GUI."""
         if self.is_running:
             self._stop_callback(None)
-        if self.is_recording and self.recording_file:
-            self.recording_file.close()
+        if self.is_recording and self.recorder:
+            try:
+                self.recorder.close()
+            except Exception as e:
+                logger.error(f"Error closing recorder during cleanup: {e}")
         if self.radar is not None and self.radar.is_connected():
             self.radar.close()
         # Save final configuration
