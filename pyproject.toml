@@ -20,6 +20,9 @@ dependencies = [
     "holoviews >= 1.16.0",
     "mmwserial >= 0.1.0",
     "pypcd >= 0.2.0",
+    "opencv-python",
+    "scikit-learn",
+    "filterpy",
 ]
 
 [dependency-groups]
