@@ -102,24 +102,19 @@ class IMU:
         if header != 0xAAAA:
             return None
             
-        # Unpack the data
-        index = data[2]
-        # Note: Data is in little-endian format for the values
-        yaw = struct.unpack('<h', data[3:5])[0] / 100.0  # Convert to degrees
-        pitch = struct.unpack('<h', data[5:7])[0] / 100.0  # Convert to degrees
-        roll = struct.unpack('<h', data[7:9])[0] / 100.0  # Convert to degrees
-        x_accel = struct.unpack('<h', data[9:11])[0]  # mg
-        y_accel = struct.unpack('<h', data[11:13])[0]  # mg
-        z_accel = struct.unpack('<h', data[13:15])[0]  # mg
-        motion_intent = data[15]
-        motion_request = data[16]
-        reserved = data[17]
-        checksum = data[18]
-        
+        # Unpack all fields at once using little-endian format
+        index, yaw, pitch, roll, x_accel, y_accel, z_accel, motion_intent, motion_request, reserved, checksum = \
+            struct.unpack('<Bhhh hhh BB B B', data[2:])
+            
         # Calculate checksum
         calc_checksum = sum(data[2:18]) & 0xFF
         if calc_checksum != checksum:
             return None
+            
+        # Convert angular values to degrees
+        yaw = yaw / 100.0
+        pitch = pitch / 100.0
+        roll = roll / 100.0
             
         return {
             'index': index,
