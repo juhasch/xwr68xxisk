@@ -13,11 +13,13 @@ from xwr68xxisk.clustering import PointCloudClustering
 from xwr68xxisk.tracking import PointCloudTracker
 from xwr68xxisk.configs import ConfigManager
 from xwr68xxisk.record import PointCloudRecorder
+from xwr68xxisk.cameras import OpenCVCamera
 import os
 import logging
 from datetime import datetime
 from panel.widgets import TextAreaInput, Button
 from xwr68xxisk.radar import RadarConnection, create_radar
+import cv2
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,25 @@ class RadarGUI:
         self.radar = None
         self.radar_type = None
         self.radar_data = None
+        
+        # Initialize camera
+        self.camera = None
+        self.camera_source = ColumnDataSource({'image': [], 'dw': [], 'dh': []})
+        self.camera_plot = None
+        self.camera_running = False
+        
+        # Create camera controls
+        self.camera_select = pn.widgets.Select(
+            name='Camera Device',
+            value='0',
+            options=['0', '1', '2'],
+            width=100
+        )
+        self.camera_button = pn.widgets.Button(
+            name='Start Camera',
+            button_type='primary'
+        )
+        self.camera_button.on_click(self.start_camera)
         
         # Initialize clustering and tracking
         self.clusterer = None
@@ -739,6 +760,12 @@ class RadarGUI:
             self.connect_button,  # Connect button first
             self.config_button,   # Config button second
             pn.layout.Divider(),
+            pn.pane.Markdown('## Camera'),
+            pn.Row(
+                self.camera_select,
+                self.camera_button
+            ),
+            pn.layout.Divider(),
             self.start_button,
             self.stop_button,
             pn.layout.Divider(),
@@ -753,14 +780,17 @@ class RadarGUI:
             styles={'background': '#f8f8f8', 'padding': '10px'}
         )
         
-        # Create main content area
+        # Create main content area with side-by-side plots
         main = pn.Column(
             pn.pane.Markdown('## Real-time Data'),
-            self.plot,
+            pn.Row(
+                self.plot,
+                self.create_camera_plot(),
+            ),
             self.config_modal,  # Add the modal to main layout
             self.params_panel,  # Add the parameters panel to main layout
             styles={'padding': '10px'},
-            max_width=1000  # Add max width to prevent excessive stretching on wide screens
+            max_width=2000  # Increased max width to accommodate both plots
         )
         
         # Add CSS for modal and panel styling
@@ -814,6 +844,9 @@ class RadarGUI:
                 logger.error(f"Error closing recorder during cleanup: {e}")
         if self.radar is not None and self.radar.is_connected():
             self.radar.close()
+        # Stop camera if running
+        if self.camera_running:
+            self.stop_camera()
         # Save final configuration
         self._save_current_config()
 
@@ -909,3 +942,95 @@ class RadarGUI:
             logger.info("Configuration saved successfully")
         except Exception as e:
             logger.error(f"Error saving configuration: {e}")
+
+    def create_camera_plot(self):
+        """Create the camera display plot."""
+        p = figure(
+            title='Camera View',
+            width=640,
+            height=480,
+            x_range=(0, 640),
+            y_range=(0, 480),
+            tools=''
+        )
+        
+        # Set up the image plot with empty data source
+        self.camera_plot = p.image_rgba(
+            image='image',
+            x=0,
+            y=0,
+            dw='dw',
+            dh='dh',
+            source=self.camera_source
+        )
+        
+        # Disable axes
+        p.axis.visible = False
+        p.grid.visible = False
+        
+        return pn.pane.Bokeh(p)
+
+    def update_camera(self):
+        """Update the camera display."""
+        if not self.camera_running or self.camera is None:
+            return
+            
+        try:
+            frame_data = next(self.camera)
+            if frame_data is not None:
+                # Convert BGR to RGBA
+                frame = cv2.cvtColor(frame_data['image'], cv2.COLOR_BGR2RGBA)
+                
+                # Flatten the array and convert to uint32
+                img = frame.view(dtype=np.uint32).reshape(frame.shape[:-1])
+                
+                # Update the image source
+                self.camera_source.data = {
+                    'image': [img],
+                    'dw': [frame.shape[1]],
+                    'dh': [frame.shape[0]]
+                }
+                
+                # Schedule next update if still running
+                if self.camera_running:
+                    pn.state.add_periodic_callback(self.update_camera, period=33, count=1)  # ~30 FPS
+                    
+        except StopIteration:
+            logger.warning("Camera stream ended")
+            self.stop_camera()
+        except Exception as e:
+            logger.error(f"Error updating camera: {e}")
+            self.stop_camera()
+
+    def start_camera(self, event):
+        """Start or stop the camera stream."""
+        if not self.camera_running:
+            try:
+                device_id = int(self.camera_select.value)
+                self.camera = OpenCVCamera(device_id=device_id)
+                self.camera.start()
+                self.camera_running = True
+                self.camera_button.name = 'Stop Camera'
+                self.camera_button.button_type = 'danger'
+                # Start the update loop
+                pn.state.add_periodic_callback(self.update_camera, period=33, count=1)
+                logger.info(f"Started camera {device_id}")
+            except Exception as e:
+                logger.error(f"Error starting camera: {e}")
+                if self.camera:
+                    self.camera.stop()
+                    self.camera = None
+                self.camera_running = False
+        else:
+            self.stop_camera()
+
+    def stop_camera(self, event=None):
+        """Stop the camera stream."""
+        if self.camera_running:
+            self.camera_running = False
+            if self.camera:
+                self.camera.stop()
+                self.camera = None
+            self.camera_button.name = 'Start Camera'
+            self.camera_button.button_type = 'primary'
+            logger.info("Stopped camera")
