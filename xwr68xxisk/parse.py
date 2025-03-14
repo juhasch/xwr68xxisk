@@ -5,12 +5,8 @@ import time
 import logging
 import os
 import math
-
-# Magic number for radar data validation
-MAGIC_NUMBER = 0x708050603040102
-
-# Import RadarPointCloud
 from .point_cloud import RadarPointCloud
+
 
 class RadarData:
     """
@@ -89,7 +85,7 @@ class RadarData:
             tlv_type = int.from_bytes(data_bytes[idx:idx+4], byteorder='little')
             tlv_length = int.from_bytes(data_bytes[idx+4:idx+8], byteorder='little')
             idx += 8
-
+            print(f"TLV type: {tlv_type}, TLV length: {tlv_length}")
             if tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS:
                 idx = self._parse_point_cloud(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_PROFILE:
@@ -129,6 +125,7 @@ class RadarData:
                 if point_idx + 4 <= len(data):  # Check if we have enough data
                     self.snr.append(struct.unpack('h', data[point_idx:point_idx+2])[0] * 0.1)
                     self.noise.append(struct.unpack('h', data[point_idx+2:point_idx+4])[0] * 0.1)
+                    print(f"SNR: {self.snr[-1]}, Noise: {self.noise[-1]}")
         except struct.error:
             logging.warning("Error unpacking side info data")
             logging.debug(f"num_points: {num_points}")

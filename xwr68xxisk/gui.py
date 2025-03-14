@@ -55,7 +55,7 @@ class RadarGUI:
         self.track_source = ColumnDataSource({'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []})
         self.color_mapper = LinearColorMapper(palette=cc.rainbow, low=-1, high=1)
         
-        # Recording state
+        # Initialize recording state
         self.is_recording = False
         self.recording_dir = "recordings"
         self.recorder = None
@@ -388,8 +388,13 @@ class RadarGUI:
                 )
                 
                 self.is_recording = True
-                self.record_button.name = 'Stop Recording'
-                self.record_button.button_type = 'danger'
+                self.record_button.param.update(
+                    name='Stop Recording',
+                    button_type='danger'
+                )
+                self.record_button.param.trigger('name')
+                self.record_button.param.trigger('button_type')
+                
                 logger.info(f"Started recording to {base_filename}.{format_type}")
             except Exception as e:
                 logger.error(f"Error starting recording: {e}")
@@ -404,8 +409,13 @@ class RadarGUI:
                 finally:
                     self.recorder = None
             self.is_recording = False
-            self.record_button.name = 'Start Recording'
-            self.record_button.button_type = 'primary'
+            self.record_button.param.update(
+                name='Start Recording',
+                button_type='primary'
+            )
+            self.record_button.param.trigger('name')
+            self.record_button.param.trigger('button_type')
+            
             logger.info("Stopped recording")
     
     def _start_callback(self, event):
