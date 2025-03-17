@@ -55,7 +55,7 @@ def test_parse_config_file(sample_config_path):
     assert isinstance(config, RadarConfig)
     
     # Test that all values are positive
-    assert all(v > 0 for v in config.dict().values())
+    assert all(v > 0 for v in config.model_dump().values())
     
     # Test specific values
     assert config.num_range_bins == 256

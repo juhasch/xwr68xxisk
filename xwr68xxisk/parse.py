@@ -5,12 +5,8 @@ import time
 import logging
 import os
 import math
-
-# Magic number for radar data validation
-MAGIC_NUMBER = 0x708050603040102
-
-# Import RadarPointCloud
 from .point_cloud import RadarPointCloud
+
 
 class RadarData:
     """
@@ -89,7 +85,7 @@ class RadarData:
             tlv_type = int.from_bytes(data_bytes[idx:idx+4], byteorder='little')
             tlv_length = int.from_bytes(data_bytes[idx+4:idx+8], byteorder='little')
             idx += 8
-
+            print(f"TLV type: {tlv_type}, TLV length: {tlv_length}")
             if tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS:
                 idx = self._parse_point_cloud(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_PROFILE:
@@ -129,6 +125,7 @@ class RadarData:
                 if point_idx + 4 <= len(data):  # Check if we have enough data
                     self.snr.append(struct.unpack('h', data[point_idx:point_idx+2])[0] * 0.1)
                     self.noise.append(struct.unpack('h', data[point_idx+2:point_idx+4])[0] * 0.1)
+                    print(f"SNR: {self.snr[-1]}, Noise: {self.noise[-1]}")
         except struct.error:
             logging.warning("Error unpacking side info data")
             logging.debug(f"num_points: {num_points}")
@@ -182,7 +179,20 @@ class RadarData:
         velocity_array = np.array(v)
         azimuth_array = np.array(azimuth)
         elevation_array = np.array(elevation)
-        snr_array = np.array(self.snr) if self.snr else None
+        snr_array = np.array(self.snr) if self.snr else np.zeros(len(range_values))
+        
+        # Calculate RCS values based on SNR and range
+        # This is a simplified model; actual RCS calculation would depend on radar parameters
+        if snr_array is not None and len(snr_array) > 0:
+            # Convert SNR from dB to linear scale
+            snr_linear = 10**(snr_array/10)
+            # RCS is proportional to SNR * range^4 (radar equation)
+            # This is a simplified calculation for demonstration
+            rcs_array = snr_linear * (range_array**4) / 1e6  # Scaling factor
+            # Convert back to dB scale
+            rcs_array = 10 * np.log10(np.maximum(rcs_array, 1e-10))
+        else:
+            rcs_array = np.zeros(len(range_values))
         
         return RadarPointCloud(
             range=range_array,
@@ -190,6 +200,7 @@ class RadarData:
             azimuth=azimuth_array,
             elevation=elevation_array,
             snr=snr_array,
+            rcs=rcs_array,
             metadata=metadata
         )
     

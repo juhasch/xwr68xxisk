@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Dict
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 class ProfileConfig(BaseModel):
     start_freq: int
@@ -10,7 +10,8 @@ class ProfileConfig(BaseModel):
     num_adc_samples: int
     dig_out_sample_rate: int
 
-    @validator('num_adc_samples')
+    @field_validator('num_adc_samples')
+    @classmethod
     def round_adc_samples_to_power_of_2(cls, v):
         power_of_2 = 1
         while power_of_2 < v:
