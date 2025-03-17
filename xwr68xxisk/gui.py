@@ -4,11 +4,15 @@ import numpy as np
 import panel as pn
 import holoviews as hv
 from bokeh.plotting import figure
-from bokeh.models import ColorBar, LinearColorMapper, ColumnDataSource
+from bokeh.models import ColorBar, LinearColorMapper, ColumnDataSource, LabelSet
 import colorcet as cc
 from xwr68xxisk.radar import RadarConnectionError
 from xwr68xxisk.parse import RadarData
 from xwr68xxisk.point_cloud import RadarPointCloud
+from xwr68xxisk.clustering import PointCloudClustering
+from xwr68xxisk.tracking import PointCloudTracker
+from xwr68xxisk.configs import ConfigManager
+from xwr68xxisk.record import PointCloudRecorder
 import os
 import logging
 from datetime import datetime
@@ -24,13 +28,22 @@ pn.extension(design="material", sizing_mode="stretch_width")
 
 class RadarGUI:
     def __init__(self):
-        # Initialize radar connection
-        # Note: Actual connection to the physical device happens later via connect() method
-        self.radar = None
-        self.radar_type = None  # Will be set during connection
-        self.radar_data = None  # Will hold the RadarData instance
+        # Initialize configuration
+        self.config_manager = ConfigManager()
+        self.config = self.config_manager.load_config()
         
-        # Load default configuration - will be set when radar type is detected
+        # Initialize radar connection
+        self.radar = None
+        self.radar_type = None
+        self.radar_data = None
+        
+        # Initialize clustering and tracking
+        self.clusterer = None
+        self.tracker = None
+        self.enable_clustering = self.config.clustering.enabled
+        self.enable_tracking = self.config.tracking.enabled
+        
+        # Load default configuration
         self.config_file = None
         
         # Add timing variable
@@ -38,12 +51,14 @@ class RadarGUI:
         
         # Initialize plot data
         self.scatter_source = None
+        self.cluster_source = ColumnDataSource({'x': [], 'y': [], 'size': [], 'cluster_id': []})
+        self.track_source = ColumnDataSource({'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []})
         self.color_mapper = LinearColorMapper(palette=cc.rainbow, low=-1, high=1)
         
-        # Recording state
+        # Initialize recording state
         self.is_recording = False
         self.recording_dir = "recordings"
-        self.recording_file = None
+        self.recorder = None
         
         # Create controls
         self.load_config_button = pn.widgets.FileInput(name='Load Config', accept='.cfg')
@@ -53,12 +68,83 @@ class RadarGUI:
         self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
         self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
         
+        # Add recording format selection
+        self.record_format_select = pn.widgets.RadioButtonGroup(
+            name='Recording Format',
+            options=['CSV', 'PCD'],
+            value='CSV',
+            button_type='default'
+        )
+        
         # Parameters panel controls
         self.modify_params_checkbox = pn.widgets.Checkbox(name='Modify Parameters', value=False)
-        self.clutter_removal_checkbox = pn.widgets.Checkbox(name='Static Clutter Removal', value=False)
-        self.frame_period_slider = pn.widgets.FloatSlider(name='Frame Period (ms)', start=50, end=1000, value=100, step=10)
-        self.mob_enabled_checkbox = pn.widgets.Checkbox(name='Multi-object Beamforming', value=False)
-        self.mob_threshold_slider = pn.widgets.FloatSlider(name='MOB Threshold', start=0, end=1, value=0.5, step=0.01)
+        self.clutter_removal_checkbox = pn.widgets.Checkbox(
+            name='Static Clutter Removal',
+            value=self.config.processing.clutter_removal
+        )
+        self.frame_period_slider = pn.widgets.FloatSlider(
+            name='Frame Period (ms)',
+            start=50,
+            end=1000,
+            value=self.config.processing.frame_period_ms,
+            step=10
+        )
+        self.mob_enabled_checkbox = pn.widgets.Checkbox(
+            name='Multi-object Beamforming',
+            value=self.config.processing.mob_enabled
+        )
+        self.mob_threshold_slider = pn.widgets.FloatSlider(
+            name='MOB Threshold',
+            start=0,
+            end=1,
+            value=self.config.processing.mob_threshold,
+            step=0.01
+        )
+        
+        # Add clustering and tracking controls
+        self.clustering_checkbox = pn.widgets.Checkbox(
+            name='Enable Clustering',
+            value=self.config.clustering.enabled
+        )
+        self.tracking_checkbox = pn.widgets.Checkbox(
+            name='Enable Tracking',
+            value=self.config.tracking.enabled
+        )
+        self.cluster_eps_slider = pn.widgets.FloatSlider(
+            name='Cluster Size (m)',
+            start=0.1,
+            end=2.0,
+            value=self.config.clustering.eps,
+            step=0.1
+        )
+        self.cluster_min_samples_slider = pn.widgets.IntSlider(
+            name='Min Points per Cluster',
+            start=3,
+            end=20,
+            value=self.config.clustering.min_samples,
+            step=1
+        )
+        self.track_max_distance_slider = pn.widgets.FloatSlider(
+            name='Max Track Distance (m)',
+            start=0.5,
+            end=5.0,
+            value=self.config.tracking.max_distance,
+            step=0.1
+        )
+        self.track_min_hits_slider = pn.widgets.IntSlider(
+            name='Min Track Hits',
+            start=2,
+            end=10,
+            value=self.config.tracking.min_hits,
+            step=1
+        )
+        self.track_max_misses_slider = pn.widgets.IntSlider(
+            name='Max Track Misses',
+            start=2,
+            end=10,
+            value=self.config.tracking.max_misses,
+            step=1
+        )
         
         # Create floating panel for parameters
         self.params_panel = pn.layout.FloatPanel(
@@ -66,7 +152,17 @@ class RadarGUI:
                 self.clutter_removal_checkbox,
                 self.frame_period_slider,
                 self.mob_enabled_checkbox,
-                self.mob_threshold_slider
+                self.mob_threshold_slider,
+                pn.layout.Divider(),
+                pn.pane.Markdown('## Clustering & Tracking'),
+                self.clustering_checkbox,
+                self.cluster_eps_slider,
+                self.cluster_min_samples_slider,
+                pn.layout.Divider(),
+                self.tracking_checkbox,
+                self.track_max_distance_slider,
+                self.track_min_hits_slider,
+                self.track_max_misses_slider
             ),
             name='Radar Parameters',
             margin=20,
@@ -97,6 +193,8 @@ class RadarGUI:
         self.frame_period_slider.param.watch(self._frame_period_callback, 'value')
         self.mob_enabled_checkbox.param.watch(self._mob_enabled_callback, 'value')
         self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value')
+        self.clustering_checkbox.param.watch(self._clustering_callback, 'value')
+        self.tracking_checkbox.param.watch(self._tracking_callback, 'value')
         
         self.start_button.disabled = True
         self.stop_button.disabled = True
@@ -259,22 +357,65 @@ class RadarGUI:
             # Start recording
             os.makedirs(self.recording_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = os.path.join(self.recording_dir, f"radar_data_{timestamp}.csv")
-            self.recording_file = open(filename, "w")
-            # Write header with more comprehensive fields
-            self.recording_file.write("frame,x,y,z,velocity,range,azimuth,elevation,snr\n")
-            self.is_recording = True
-            self.record_button.name = 'Stop Recording'
-            self.record_button.button_type = 'danger'
-            logger.info(f"Started recording to {filename}")
+            base_filename = os.path.join(self.recording_dir, f"radar_data_{timestamp}")
+            
+            # Get recording format
+            format_type = self.record_format_select.value.lower()
+            
+            # Create recorder with clustering and tracking settings
+            clustering_params = {
+                'eps': self.cluster_eps_slider.value,
+                'min_samples': self.cluster_min_samples_slider.value
+            }
+            
+            tracking_params = {
+                'dt': self.frame_period_slider.value / 1000.0,  # Convert ms to seconds
+                'max_distance': self.track_max_distance_slider.value,
+                'min_hits': self.track_min_hits_slider.value,
+                'max_misses': self.track_max_misses_slider.value
+            }
+            
+            try:
+                # Create recorder with current settings
+                self.recorder = PointCloudRecorder(
+                    base_filename,
+                    format_type,
+                    buffer_in_memory=(format_type == 'pcd'),  # Buffer in memory for PCD
+                    enable_clustering=self.enable_clustering,
+                    enable_tracking=self.enable_tracking,
+                    clustering_params=clustering_params,
+                    tracking_params=tracking_params
+                )
+                
+                self.is_recording = True
+                self.record_button.param.update(
+                    name='Stop Recording',
+                    button_type='danger'
+                )
+                self.record_button.param.trigger('name')
+                self.record_button.param.trigger('button_type')
+                
+                logger.info(f"Started recording to {base_filename}.{format_type}")
+            except Exception as e:
+                logger.error(f"Error starting recording: {e}")
+                self.recorder = None
         else:
             # Stop recording
-            if self.recording_file:
-                self.recording_file.close()
-                self.recording_file = None
+            if self.recorder:
+                try:
+                    self.recorder.close()
+                except Exception as e:
+                    logger.error(f"Error closing recorder: {e}")
+                finally:
+                    self.recorder = None
             self.is_recording = False
-            self.record_button.name = 'Start Recording'
-            self.record_button.button_type = 'primary'
+            self.record_button.param.update(
+                name='Start Recording',
+                button_type='primary'
+            )
+            self.record_button.param.trigger('name')
+            self.record_button.param.trigger('button_type')
+            
             logger.info("Stopped recording")
     
     def _start_callback(self, event):
@@ -286,6 +427,26 @@ class RadarGUI:
             
             # Create a new RadarData instance for the running radar
             self.radar_data = RadarData(self.radar)
+            
+            # Initialize clustering and tracking if enabled
+            if self.clustering_checkbox.value:
+                self.enable_clustering = True
+                self.clusterer = PointCloudClustering(
+                    eps=self.cluster_eps_slider.value,
+                    min_samples=self.cluster_min_samples_slider.value
+                )
+                
+                if self.tracking_checkbox.value:
+                    self.enable_tracking = True
+                    self.tracker = PointCloudTracker(
+                        dt=self.frame_period_slider.value / 1000.0,  # Convert ms to seconds
+                        max_distance=self.track_max_distance_slider.value,
+                        min_hits=self.track_min_hits_slider.value,
+                        max_misses=self.track_max_misses_slider.value
+                    )
+            
+            # Save current configuration
+            self._save_current_config()
             
             # Instead of periodic callback, schedule the first update
             self.is_running = True
@@ -362,10 +523,10 @@ class RadarGUI:
         """Create the scatter plot."""
         p = figure(
             title='Radar Point Cloud', 
-            width=1100,     # Reduced from 1200 to better fit MacBook screens
-            height=600,    # Reduced from 800 to better fit MacBook screens
-            x_range=(-2.5, 2.5),  # Set fixed x range to ±5m
-            y_range=(0, 5)   # Set fixed y range to ±5m
+            width=self.config.display.plot_width,
+            height=self.config.display.plot_height,
+            x_range=self.config.display.x_range,
+            y_range=self.config.display.y_range
         )
         
         # Set up the scatter plot with empty data source
@@ -385,6 +546,39 @@ class RadarGUI:
             line_color=None,
             alpha=0.6,
             source=self.data_source
+        )
+        
+        # Add cluster centers
+        p.circle(
+            x='x',
+            y='y',
+            size='size',
+            color='red',
+            alpha=0.5,
+            line_width=2,
+            source=self.cluster_source
+        )
+        
+        # Add track IDs
+        labels = LabelSet(
+            x='x',
+            y='y',
+            text='track_id',
+            text_font_size='10pt',
+            text_color='blue',
+            source=self.track_source
+        )
+        p.add_layout(labels)
+        
+        # Add velocity vectors for tracks
+        p.segment(
+            x0='x',
+            y0='y',
+            x1='vx',
+            y1='vy',
+            color='blue',
+            line_width=2,
+            source=self.track_source
         )
         
         # Add colorbar
@@ -444,34 +638,78 @@ class RadarGUI:
                         'size': point_sizes[:min_length]
                     }
                     
+                    # Perform clustering if enabled
+                    if self.enable_clustering and self.clusterer is not None:
+                        clusters = self.clusterer.cluster(point_cloud)
+                        
+                        if clusters:
+                            cluster_x = []
+                            cluster_y = []
+                            cluster_sizes = []
+                            cluster_ids = []
+                            
+                            for i, cluster in enumerate(clusters):
+                                cluster_x.append(cluster.centroid[0])
+                                cluster_y.append(cluster.centroid[1])
+                                cluster_sizes.append(30 + cluster.num_points * 2)  # Size based on number of points
+                                cluster_ids.append(str(i))
+                            
+                            self.cluster_source.data = {
+                                'x': cluster_x,
+                                'y': cluster_y,
+                                'size': cluster_sizes,
+                                'cluster_id': cluster_ids
+                            }
+                            
+                            # Perform tracking if enabled
+                            if self.enable_tracking and self.tracker is not None:
+                                tracks = self.tracker.update(clusters)
+                                
+                                if tracks:
+                                    track_x = []
+                                    track_y = []
+                                    track_ids = []
+                                    track_vx = []  # End points for velocity vectors
+                                    track_vy = []
+                                    
+                                    for track in tracks:
+                                        track_x.append(track.state[0])  # x position
+                                        track_y.append(track.state[1])  # y position
+                                        track_ids.append(str(track.track_id))
+                                        
+                                        # Calculate velocity vector end points
+                                        vel_scale = 0.5  # Scale factor for velocity vectors
+                                        vx = track.state[0] + track.state[3] * vel_scale  # x + vx*scale
+                                        vy = track.state[1] + track.state[4] * vel_scale  # y + vy*scale
+                                        track_vx.append(vx)
+                                        track_vy.append(vy)
+                                    
+                                    self.track_source.data = {
+                                        'x': track_x,
+                                        'y': track_y,
+                                        'track_id': track_ids,
+                                        'vx': track_vx,
+                                        'vy': track_vy
+                                    }
+                                else:
+                                    self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+                        else:
+                            self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
+                            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+                    
                     # Save data if recording is enabled
-                    if self.is_recording and self.recording_file:
-                        frame_number = point_cloud.metadata.get('frame_number', 0)
-                        for i in range(min_length):
-                            # Save both Cartesian and spherical coordinates
-                            self.recording_file.write(
-                                f"{frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
-                                f"{point_cloud.velocity[i]:.3f},{point_cloud.range[i]:.3f},"
-                                f"{point_cloud.azimuth[i]:.3f},{point_cloud.elevation[i]:.3f},"
-                                f"{snr_values[i]:.3f}\n"
-                            )
-                        self.recording_file.flush()  # Ensure data is written to disk
+                    if self.is_recording and self.recorder:
+                        try:
+                            frame_number = point_cloud.metadata.get('frame_number', 0)
+                            self.recorder.add_frame(point_cloud, frame_number)
+                        except Exception as e:
+                            logger.error(f"Error recording frame: {e}")
+                            # Don't stop recording on error, just log it
                 else:
-                    # Clear the plot when no points are detected
-                    self.data_source.data = {
-                        'x': [],
-                        'y': [],
-                        'velocity': [],
-                        'size': []
-                    }
-            else:
-                # Clear the plot when no data is available
-                self.data_source.data = {
-                    'x': [],
-                    'y': [],
-                    'velocity': [],
-                    'size': []
-                }
+                    # Clear all plots when no points are detected
+                    self.data_source.data = {'x': [], 'y': [], 'velocity': [], 'size': []}
+                    self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
+                    self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
 
             # Schedule next update if still running
             if self.is_running:
@@ -483,13 +721,9 @@ class RadarGUI:
             self._stop_callback(None)
         except Exception as e:
             logger.error(f"Error updating plot: {e}")
-            # Clear the plot on error
-            self.data_source.data = {
-                'x': [],
-                'y': [],
-                'velocity': [],
-                'size': []
-            }
+            self.data_source.data = {'x': [], 'y': [], 'velocity': [], 'size': []}
+            self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
             self._stop_callback(None)
     
     def create_layout(self):
@@ -507,6 +741,9 @@ class RadarGUI:
             pn.layout.Divider(),
             self.start_button,
             self.stop_button,
+            pn.layout.Divider(),
+            pn.pane.Markdown('## Recording'),
+            self.record_format_select,
             self.record_button,
             pn.layout.Divider(),
             self.exit_button,     # Moved exit button up
@@ -570,10 +807,15 @@ class RadarGUI:
         """Clean up resources when closing the GUI."""
         if self.is_running:
             self._stop_callback(None)
-        if self.is_recording and self.recording_file:
-            self.recording_file.close()
+        if self.is_recording and self.recorder:
+            try:
+                self.recorder.close()
+            except Exception as e:
+                logger.error(f"Error closing recorder during cleanup: {e}")
         if self.radar is not None and self.radar.is_connected():
             self.radar.close()
+        # Save final configuration
+        self._save_current_config()
 
     def _detect_radar_type(self):
         """Auto-detect which radar is connected."""
@@ -614,3 +856,56 @@ class RadarGUI:
                 logger.info(f"MOB threshold set to {event.new}")
             except Exception as e:
                 logger.error(f"Error setting MOB threshold: {e}")
+
+    def _clustering_callback(self, event):
+        """Handle clustering checkbox changes."""
+        if self.radar and self.radar.is_connected():
+            self.enable_clustering = event.new
+            logger.info(f"Clustering {'enabled' if event.new else 'disabled'}")
+            # Update configuration
+            self._save_current_config()
+            # Enable/disable related controls
+            self.cluster_eps_slider.disabled = not event.new
+            self.cluster_min_samples_slider.disabled = not event.new
+            self.tracking_checkbox.disabled = not event.new
+    
+    def _tracking_callback(self, event):
+        """Handle tracking checkbox changes."""
+        if self.radar and self.radar.is_connected():
+            self.enable_tracking = event.new
+            logger.info(f"Tracking {'enabled' if event.new else 'disabled'}")
+            # Update configuration
+            self._save_current_config()
+            # Enable/disable related controls
+            self.track_max_distance_slider.disabled = not event.new
+            self.track_min_hits_slider.disabled = not event.new
+            self.track_max_misses_slider.disabled = not event.new
+
+    def _save_current_config(self):
+        """Save current GUI state to configuration."""
+        updates = {
+            'processing': {
+                'clutter_removal': self.clutter_removal_checkbox.value,
+                'mob_enabled': self.mob_enabled_checkbox.value,
+                'mob_threshold': self.mob_threshold_slider.value,
+                'frame_period_ms': self.frame_period_slider.value
+            },
+            'clustering': {
+                'enabled': self.clustering_checkbox.value,
+                'eps': self.cluster_eps_slider.value,
+                'min_samples': self.cluster_min_samples_slider.value
+            },
+            'tracking': {
+                'enabled': self.tracking_checkbox.value,
+                'max_distance': self.track_max_distance_slider.value,
+                'min_hits': self.track_min_hits_slider.value,
+                'max_misses': self.track_max_misses_slider.value,
+                'dt': self.frame_period_slider.value / 1000.0
+            }
+        }
+        try:
+            self.config = self.config_manager.update_config(updates)
+            self.config_manager.save_config()
+            logger.info("Configuration saved successfully")
+        except Exception as e:
+            logger.error(f"Error saving configuration: {e}")

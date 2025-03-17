@@ -142,7 +142,12 @@ class TestRadarPointCloud(unittest.TestCase):
         # Calculate expected values
         expected_range = np.sqrt(self.x**2 + self.y**2 + self.z**2)
         expected_azimuth = np.arctan2(self.x, self.y)
-        expected_elevation = np.arcsin(self.z / expected_range)
+        # Handle zero range and ensure z/range is within [-1, 1] for arcsin
+        expected_elevation = np.zeros_like(expected_range)
+        mask = expected_range > 0
+        if np.any(mask):
+            z_over_r = np.clip(self.z[mask] / expected_range[mask], -1, 1)
+            expected_elevation[mask] = np.arcsin(z_over_r)
         
         # Check that the calculated values match the expected values
         self.assertEqual(point_cloud_from_cartesian.num_points, len(self.x))
