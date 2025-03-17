@@ -970,38 +970,6 @@ class RadarGUI:
         
         return pn.pane.Bokeh(p)
 
-    def update_camera(self):
-        """Update the camera display."""
-        if not self.camera_running or self.camera is None:
-            return
-            
-        try:
-            frame_data = next(self.camera)
-            if frame_data is not None:
-                # Convert BGR to RGBA
-                frame = cv2.cvtColor(frame_data['image'], cv2.COLOR_BGR2RGBA)
-                
-                # Flatten the array and convert to uint32
-                img = frame.view(dtype=np.uint32).reshape(frame.shape[:-1])
-                
-                # Update the image source
-                self.camera_source.data = {
-                    'image': [img],
-                    'dw': [frame.shape[1]],
-                    'dh': [frame.shape[0]]
-                }
-                
-                # Schedule next update if still running
-                if self.camera_running:
-                    pn.state.add_periodic_callback(self.update_camera, period=33, count=1)  # ~30 FPS
-                    
-        except StopIteration:
-            logger.warning("Camera stream ended")
-            self.stop_camera()
-        except Exception as e:
-            logger.error(f"Error updating camera: {e}")
-            self.stop_camera()
-
     def start_camera(self, event):
         """Start or stop the camera stream."""
         if not self.camera_running:
@@ -1012,8 +980,16 @@ class RadarGUI:
                 self.camera_running = True
                 self.camera_button.name = 'Stop Camera'
                 self.camera_button.button_type = 'danger'
-                # Start the update loop
-                pn.state.add_periodic_callback(self.update_camera, period=33, count=1)
+                
+                # Stop existing callback if any
+                if hasattr(self, 'camera_callback'):
+                    self.camera_callback.stop()
+                    
+                # Create a new periodic callback
+                self.camera_callback = pn.state.add_periodic_callback(
+                    self.update_camera,
+                    period=33  # ~30 FPS - more stable than 60 FPS
+                )
                 logger.info(f"Started camera {device_id}")
             except Exception as e:
                 logger.error(f"Error starting camera: {e}")
@@ -1028,9 +1004,51 @@ class RadarGUI:
         """Stop the camera stream."""
         if self.camera_running:
             self.camera_running = False
+            if hasattr(self, 'camera_callback'):
+                try:
+                    self.camera_callback.stop()
+                except Exception as e:
+                    logger.error(f"Error stopping camera callback: {e}")
+                finally:
+                    del self.camera_callback
             if self.camera:
-                self.camera.stop()
-                self.camera = None
+                try:
+                    self.camera.stop()
+                except Exception as e:
+                    logger.error(f"Error stopping camera: {e}")
+                finally:
+                    self.camera = None
             self.camera_button.name = 'Start Camera'
             self.camera_button.button_type = 'primary'
             logger.info("Stopped camera")
+
+    def update_camera(self):
+        """Update the camera display."""
+        if not self.camera_running or self.camera is None:
+            return
+            
+        try:
+            # Skip frames if we're falling behind
+            while self.camera_running and self.camera._cap.get(cv2.CAP_PROP_POS_FRAMES) > 0:
+                self.camera._cap.grab()
+            
+            frame_data = next(self.camera)
+            if frame_data is not None:
+                # Convert BGR to RGBA more efficiently
+                frame = cv2.cvtColor(frame_data['image'], cv2.COLOR_BGR2RGBA).view(np.uint32).reshape(frame_data['image'].shape[:-1])
+                
+                # Update the image source only if the data has changed
+                if (len(self.camera_source.data['image']) == 0 or 
+                    not np.array_equal(self.camera_source.data['image'][0], frame)):
+                    self.camera_source.data.update({
+                        'image': [frame],
+                        'dw': [frame_data['width']],
+                        'dh': [frame_data['height']]
+                    })
+                    
+        except StopIteration:
+            logger.warning("Camera stream ended")
+            self.stop_camera()
+        except Exception as e:
+            logger.error(f"Error updating camera: {e}")
+            self.stop_camera()

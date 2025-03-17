@@ -104,12 +104,15 @@ class OpenCVCamera(BaseCamera):
         self._device_id = device_id
         self._cap = None
         self._config = {
-            'fps': 30,
+            'fps': 30,  # More stable FPS
             'width': 640,
             'height': 480,
             'exposure': -1,  # Auto exposure
             'gain': -1,      # Auto gain
+            'buffer_size': 1  # Minimize buffer size
         }
+        self._last_frame_time = 0
+        self._frame_interval = 1.0 / self._config['fps']
         
     def start(self):
         """Start the camera capture."""
@@ -122,6 +125,15 @@ class OpenCVCamera(BaseCamera):
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._config['height'])
         self._cap.set(cv2.CAP_PROP_FPS, self._config['fps'])
         
+        # Set minimal buffer size to reduce latency
+        self._cap.set(cv2.CAP_PROP_BUFFERSIZE, self._config['buffer_size'])
+        
+        # Set backend-specific optimizations if available
+        backend = self._cap.getBackendName()
+        if backend == 'V4L2':
+            # Linux-specific optimizations
+            self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+        
         if self._config['exposure'] > 0:
             self._cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0)  # Disable auto exposure
             self._cap.set(cv2.CAP_PROP_EXPOSURE, self._config['exposure'])
@@ -129,13 +141,20 @@ class OpenCVCamera(BaseCamera):
         if self._config['gain'] > 0:
             self._cap.set(cv2.CAP_PROP_GAIN, self._config['gain'])
             
+        # Clear the buffer
+        for _ in range(5):
+            self._cap.grab()
+            
+        self._last_frame_time = time.time()
         super().start()
         
     def stop(self):
         """Stop the camera capture."""
         if self._cap is not None:
-            self._cap.release()
-            self._cap = None
+            try:
+                self._cap.release()
+            finally:
+                self._cap = None
         super().stop()
         
     def __next__(self) -> Dict[str, Any]:
@@ -147,10 +166,23 @@ class OpenCVCamera(BaseCamera):
         if not self._is_running or self._cap is None:
             raise StopIteration
             
-        ret, frame = self._cap.read()
+        current_time = time.time()
+        elapsed = current_time - self._last_frame_time
+        
+        # Skip frames if we're behind
+        if elapsed < self._frame_interval:
+            time.sleep(self._frame_interval - elapsed)
+            
+        # Use grab() and retrieve() instead of read() to minimize latency
+        if not self._cap.grab():
+            raise StopIteration
+            
+        ret, frame = self._cap.retrieve()
         if not ret:
             raise StopIteration
             
+        self._last_frame_time = time.time()
+        
         # Get current camera properties
         current_fps = self._cap.get(cv2.CAP_PROP_FPS)
         current_exposure = self._cap.get(cv2.CAP_PROP_EXPOSURE)
@@ -158,7 +190,7 @@ class OpenCVCamera(BaseCamera):
         
         return {
             'image': frame,
-            'timestamp': time.time(),
+            'timestamp': self._last_frame_time,
             'exposure': current_exposure,
             'gain': current_gain,
             'fps': current_fps,
