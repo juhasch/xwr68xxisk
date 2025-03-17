@@ -29,8 +29,14 @@ class RadarData:
     # TLV (Type-Length-Value) types
     MMWDEMO_OUTPUT_MSG_DETECTED_POINTS = 1
     MMWDEMO_OUTPUT_MSG_RANGE_PROFILE = 2
-    MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO = 3
-
+    MMWDEMO_OUTPUT_MSG_NOISE_PROFILE = 3
+    MMWDEMO_OUTPUT_MSG_AZIMUT_STATIC_HEAT_MAP = 4
+    MMWDEMO_OUTPUT_MSG_RANGE_DOPPLER_HEAT_MAP = 5
+    MMWDEMO_OUTPUT_MSG_STATS = 6
+    MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO = 7
+    MMWDEMO_OUTPUT_MSG_AZIMUT_ELEVATION_STATIC_HEAT_MAP = 8
+    MMWDEMO_OUTPUT_MSG_TEMPERATURE_STATS = 9
+  
     def __init__(self, radar_connection=None):
         """
         Initialize and parse radar data packet.
@@ -85,7 +91,6 @@ class RadarData:
             tlv_type = int.from_bytes(data_bytes[idx:idx+4], byteorder='little')
             tlv_length = int.from_bytes(data_bytes[idx+4:idx+8], byteorder='little')
             idx += 8
-            print(f"TLV type: {tlv_type}, TLV length: {tlv_length}")
             if tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS:
                 idx = self._parse_point_cloud(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_PROFILE:
@@ -125,7 +130,6 @@ class RadarData:
                 if point_idx + 4 <= len(data):  # Check if we have enough data
                     self.snr.append(struct.unpack('h', data[point_idx:point_idx+2])[0] * 0.1)
                     self.noise.append(struct.unpack('h', data[point_idx+2:point_idx+4])[0] * 0.1)
-                    print(f"SNR: {self.snr[-1]}, Noise: {self.noise[-1]}")
         except struct.error:
             logging.warning("Error unpacking side info data")
             logging.debug(f"num_points: {num_points}")
