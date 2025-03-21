@@ -59,6 +59,12 @@ class RadarGUI:
         )
         self.camera_button.on_click(self.start_camera)
         
+        # Create camera focus controls
+        self.camera_autofocus = pn.widgets.Checkbox(name='Auto Focus', value=True)
+        self.camera_focus = pn.widgets.IntSlider(name='Focus', start=0, end=255, value=0, step=1, disabled=True)
+        self.camera_autofocus.param.watch(self._camera_autofocus_callback, 'value')
+        self.camera_focus.param.watch(self._camera_focus_callback, 'value')
+        
         # Initialize clustering and tracking
         self.clusterer = None
         self.tracker = None
@@ -178,6 +184,10 @@ class RadarGUI:
                 self.frame_period_slider,
                 self.mob_enabled_checkbox,
                 self.mob_threshold_slider,
+                pn.layout.Divider(),
+                pn.pane.Markdown('## Camera Settings'),
+                self.camera_autofocus,
+                self.camera_focus,
                 pn.layout.Divider(),
                 pn.pane.Markdown('## Clustering & Tracking'),
                 self.clustering_checkbox,
@@ -1091,3 +1101,29 @@ class RadarGUI:
         except Exception as e:
             logger.error(f"Error updating camera: {e}")
             self.stop_camera()
+
+    def _camera_autofocus_callback(self, event):
+        """Handle camera autofocus checkbox changes."""
+        if self.camera and self.camera_running:
+            try:
+                if not event.new:  # Autofocus disabled
+                    self.camera._cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+                    self.camera_focus.disabled = False
+                    # Get current focus value
+                    current_focus = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                    self.camera_focus.value = current_focus
+                else:  # Autofocus enabled
+                    self.camera._cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+                    self.camera_focus.disabled = True
+                logger.info(f"Camera autofocus {'enabled' if event.new else 'disabled'}")
+            except Exception as e:
+                logger.error(f"Error setting camera autofocus: {e}")
+
+    def _camera_focus_callback(self, event):
+        """Handle camera focus slider changes."""
+        if self.camera and self.camera_running and not self.camera_autofocus.value:
+            try:
+                self.camera._cap.set(cv2.CAP_PROP_FOCUS, event.new)
+                logger.info(f"Camera focus set to {event.new}")
+            except Exception as e:
+                logger.error(f"Error setting camera focus: {e}")
