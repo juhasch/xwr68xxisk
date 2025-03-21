@@ -109,7 +109,9 @@ class OpenCVCamera(BaseCamera):
             'height': 480,
             'exposure': -1,  # Auto exposure
             'gain': -1,      # Auto gain
-            'buffer_size': 1  # Minimize buffer size
+            'buffer_size': 1,  # Minimize buffer size
+            'autofocus': True,  # Enable autofocus by default
+            'focus': -1,      # Focus value when autofocus is disabled
         }
         self._last_frame_time = 0
         self._frame_interval = 1.0 / self._config['fps']
@@ -140,6 +142,14 @@ class OpenCVCamera(BaseCamera):
             
         if self._config['gain'] > 0:
             self._cap.set(cv2.CAP_PROP_GAIN, self._config['gain'])
+
+        # Set focus control
+        if not self._config['autofocus']:
+            self._cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # Disable autofocus
+            if self._config['focus'] > 0:
+                self._cap.set(cv2.CAP_PROP_FOCUS, self._config['focus'])
+        else:
+            self._cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)  # Enable autofocus
             
         # Clear the buffer
         for _ in range(5):
@@ -195,7 +205,9 @@ class OpenCVCamera(BaseCamera):
             'gain': current_gain,
             'fps': current_fps,
             'width': frame.shape[1],
-            'height': frame.shape[0]
+            'height': frame.shape[0],
+            'focus': self._cap.get(cv2.CAP_PROP_FOCUS),
+            'autofocus': bool(self._cap.get(cv2.CAP_PROP_AUTOFOCUS))
         }
 
     
