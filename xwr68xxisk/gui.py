@@ -14,6 +14,7 @@ from xwr68xxisk.tracking import PointCloudTracker
 from xwr68xxisk.configs import ConfigManager
 from xwr68xxisk.record import PointCloudRecorder
 from xwr68xxisk.cameras import OpenCVCamera
+from xwr68xxisk.camera_recorder import CameraRecorder
 import os
 import logging
 from datetime import datetime
@@ -80,6 +81,9 @@ class RadarGUI:
         self.is_recording = False
         self.recording_dir = "recordings"
         self.recorder = None
+        
+        # Add camera recorder
+        self.camera_recorder = None
         
         # Create controls
         self.load_config_button = pn.widgets.FileInput(name='Load Config', accept='.cfg')
@@ -397,7 +401,7 @@ class RadarGUI:
             }
             
             try:
-                # Create recorder with current settings
+                # Create radar recorder with current settings
                 self.recorder = PointCloudRecorder(
                     base_filename,
                     format_type,
@@ -407,6 +411,12 @@ class RadarGUI:
                     clustering_params=clustering_params,
                     tracking_params=tracking_params
                 )
+                
+                # Create camera recorder if camera is running
+                if self.camera_running and self.camera is not None:
+                    cameras = {'main': self.camera}  # Use 'main' as ID for single camera
+                    self.camera_recorder = CameraRecorder(self.recording_dir, cameras)
+                    self.camera_recorder.start()
                 
                 self.is_recording = True
                 self.record_button.param.update(
@@ -420,15 +430,30 @@ class RadarGUI:
             except Exception as e:
                 logger.error(f"Error starting recording: {e}")
                 self.recorder = None
+                if self.camera_recorder:
+                    try:
+                        self.camera_recorder.stop()
+                    except Exception as ce:
+                        logger.error(f"Error stopping camera recorder: {ce}")
+                    self.camera_recorder = None
         else:
             # Stop recording
             if self.recorder:
                 try:
                     self.recorder.close()
                 except Exception as e:
-                    logger.error(f"Error closing recorder: {e}")
+                    logger.error(f"Error closing radar recorder: {e}")
                 finally:
                     self.recorder = None
+                    
+            if self.camera_recorder:
+                try:
+                    self.camera_recorder.stop()
+                except Exception as e:
+                    logger.error(f"Error closing camera recorder: {e}")
+                finally:
+                    self.camera_recorder = None
+                    
             self.is_recording = False
             self.record_button.param.update(
                 name='Start Recording',
@@ -837,11 +862,17 @@ class RadarGUI:
         """Clean up resources when closing the GUI."""
         if self.is_running:
             self._stop_callback(None)
-        if self.is_recording and self.recorder:
-            try:
-                self.recorder.close()
-            except Exception as e:
-                logger.error(f"Error closing recorder during cleanup: {e}")
+        if self.is_recording:
+            if self.recorder:
+                try:
+                    self.recorder.close()
+                except Exception as e:
+                    logger.error(f"Error closing radar recorder during cleanup: {e}")
+            if self.camera_recorder:
+                try:
+                    self.camera_recorder.stop()
+                except Exception as e:
+                    logger.error(f"Error closing camera recorder during cleanup: {e}")
         if self.radar is not None and self.radar.is_connected():
             self.radar.close()
         # Stop camera if running
@@ -1045,6 +1076,14 @@ class RadarGUI:
                         'dw': [frame_data['width']],
                         'dh': [frame_data['height']]
                     })
+                    
+                    # If recording is active, add frame to synchronized queue
+                    if self.is_recording and self.camera_recorder:
+                        try:
+                            # The camera recorder will handle synchronization internally
+                            pass  # Frame is already being recorded by the camera_recorder thread
+                        except Exception as e:
+                            logger.error(f"Error recording camera frame: {e}")
                     
         except StopIteration:
             logger.warning("Camera stream ended")
