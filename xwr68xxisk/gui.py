@@ -14,6 +14,7 @@ from xwr68xxisk.tracking import PointCloudTracker
 from xwr68xxisk.configs import ConfigManager
 from xwr68xxisk.record import PointCloudRecorder
 from xwr68xxisk.cameras import OpenCVCamera
+from xwr68xxisk.camera_recorder import CameraRecorder
 import os
 import logging
 from datetime import datetime
@@ -58,6 +59,12 @@ class RadarGUI:
         )
         self.camera_button.on_click(self.start_camera)
         
+        # Create camera focus controls
+        self.camera_autofocus = pn.widgets.Checkbox(name='Auto Focus', value=True)
+        self.camera_focus = pn.widgets.IntSlider(name='Focus', start=0, end=255, value=0, step=1, disabled=True)
+        self.camera_autofocus.param.watch(self._camera_autofocus_callback, 'value')
+        self.camera_focus.param.watch(self._camera_focus_callback, 'value')
+        
         # Initialize clustering and tracking
         self.clusterer = None
         self.tracker = None
@@ -80,6 +87,9 @@ class RadarGUI:
         self.is_recording = False
         self.recording_dir = "recordings"
         self.recorder = None
+        
+        # Add camera recorder
+        self.camera_recorder = None
         
         # Create controls
         self.load_config_button = pn.widgets.FileInput(name='Load Config', accept='.cfg')
@@ -174,6 +184,10 @@ class RadarGUI:
                 self.frame_period_slider,
                 self.mob_enabled_checkbox,
                 self.mob_threshold_slider,
+                pn.layout.Divider(),
+                pn.pane.Markdown('## Camera Settings'),
+                self.camera_autofocus,
+                self.camera_focus,
                 pn.layout.Divider(),
                 pn.pane.Markdown('## Clustering & Tracking'),
                 self.clustering_checkbox,
@@ -397,7 +411,7 @@ class RadarGUI:
             }
             
             try:
-                # Create recorder with current settings
+                # Create radar recorder with current settings
                 self.recorder = PointCloudRecorder(
                     base_filename,
                     format_type,
@@ -407,6 +421,12 @@ class RadarGUI:
                     clustering_params=clustering_params,
                     tracking_params=tracking_params
                 )
+                
+                # Create camera recorder if camera is running
+                if self.camera_running and self.camera is not None:
+                    cameras = {'main': self.camera}  # Use 'main' as ID for single camera
+                    self.camera_recorder = CameraRecorder(self.recording_dir, cameras)
+                    self.camera_recorder.start()
                 
                 self.is_recording = True
                 self.record_button.param.update(
@@ -420,15 +440,30 @@ class RadarGUI:
             except Exception as e:
                 logger.error(f"Error starting recording: {e}")
                 self.recorder = None
+                if self.camera_recorder:
+                    try:
+                        self.camera_recorder.stop()
+                    except Exception as ce:
+                        logger.error(f"Error stopping camera recorder: {ce}")
+                    self.camera_recorder = None
         else:
             # Stop recording
             if self.recorder:
                 try:
                     self.recorder.close()
                 except Exception as e:
-                    logger.error(f"Error closing recorder: {e}")
+                    logger.error(f"Error closing radar recorder: {e}")
                 finally:
                     self.recorder = None
+                    
+            if self.camera_recorder:
+                try:
+                    self.camera_recorder.stop()
+                except Exception as e:
+                    logger.error(f"Error closing camera recorder: {e}")
+                finally:
+                    self.camera_recorder = None
+                    
             self.is_recording = False
             self.record_button.param.update(
                 name='Start Recording',
@@ -837,11 +872,17 @@ class RadarGUI:
         """Clean up resources when closing the GUI."""
         if self.is_running:
             self._stop_callback(None)
-        if self.is_recording and self.recorder:
-            try:
-                self.recorder.close()
-            except Exception as e:
-                logger.error(f"Error closing recorder during cleanup: {e}")
+        if self.is_recording:
+            if self.recorder:
+                try:
+                    self.recorder.close()
+                except Exception as e:
+                    logger.error(f"Error closing radar recorder during cleanup: {e}")
+            if self.camera_recorder:
+                try:
+                    self.camera_recorder.stop()
+                except Exception as e:
+                    logger.error(f"Error closing camera recorder during cleanup: {e}")
         if self.radar is not None and self.radar.is_connected():
             self.radar.close()
         # Stop camera if running
@@ -1046,9 +1087,43 @@ class RadarGUI:
                         'dh': [frame_data['height']]
                     })
                     
+                    # If recording is active, add frame to synchronized queue
+                    if self.is_recording and self.camera_recorder:
+                        try:
+                            # The camera recorder will handle synchronization internally
+                            pass  # Frame is already being recorded by the camera_recorder thread
+                        except Exception as e:
+                            logger.error(f"Error recording camera frame: {e}")
+                    
         except StopIteration:
             logger.warning("Camera stream ended")
             self.stop_camera()
         except Exception as e:
             logger.error(f"Error updating camera: {e}")
             self.stop_camera()
+
+    def _camera_autofocus_callback(self, event):
+        """Handle camera autofocus checkbox changes."""
+        if self.camera and self.camera_running:
+            try:
+                if not event.new:  # Autofocus disabled
+                    self.camera._cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+                    self.camera_focus.disabled = False
+                    # Get current focus value
+                    current_focus = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                    self.camera_focus.value = current_focus
+                else:  # Autofocus enabled
+                    self.camera._cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+                    self.camera_focus.disabled = True
+                logger.info(f"Camera autofocus {'enabled' if event.new else 'disabled'}")
+            except Exception as e:
+                logger.error(f"Error setting camera autofocus: {e}")
+
+    def _camera_focus_callback(self, event):
+        """Handle camera focus slider changes."""
+        if self.camera and self.camera_running and not self.camera_autofocus.value:
+            try:
+                self.camera._cap.set(cv2.CAP_PROP_FOCUS, event.new)
+                logger.info(f"Camera focus set to {event.new}")
+            except Exception as e:
+                logger.error(f"Error setting camera focus: {e}")
