@@ -21,6 +21,7 @@ from datetime import datetime
 from panel.widgets import TextAreaInput, Button
 from xwr68xxisk.radar import RadarConnection, create_radar
 import cv2
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,15 @@ class RadarGUI:
         self.camera_plot = None
         self.camera_running = False
         
+        # Create all control widgets first
+        self.load_config_button = pn.widgets.FileInput(name='Load Config', accept='.cfg')
+        self.connect_button = pn.widgets.Button(name='Connect to Sensor', button_type='primary')
+        self.start_button = pn.widgets.Button(name='Start', button_type='primary')
+        self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
+        self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
+        self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
+        self.config_button = Button(name="Configure Sensor", button_type="primary", disabled=True)
+        
         # Create camera controls
         self.camera_select = pn.widgets.Select(
             name='Camera Device',
@@ -57,47 +67,10 @@ class RadarGUI:
             name='Start Camera',
             button_type='primary'
         )
-        self.camera_button.on_click(self.start_camera)
         
         # Create camera focus controls
         self.camera_autofocus = pn.widgets.Checkbox(name='Auto Focus', value=True)
         self.camera_focus = pn.widgets.IntSlider(name='Focus', start=0, end=255, value=0, step=1, disabled=True)
-        self.camera_autofocus.param.watch(self._camera_autofocus_callback, 'value')
-        self.camera_focus.param.watch(self._camera_focus_callback, 'value')
-        
-        # Initialize clustering and tracking
-        self.clusterer = None
-        self.tracker = None
-        self.enable_clustering = self.config.clustering.enabled
-        self.enable_tracking = self.config.tracking.enabled
-        
-        # Load default configuration
-        self.config_file = None
-        
-        # Add timing variable
-        self.last_update_time = None
-        
-        # Initialize plot data
-        self.scatter_source = None
-        self.cluster_source = ColumnDataSource({'x': [], 'y': [], 'size': [], 'cluster_id': []})
-        self.track_source = ColumnDataSource({'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []})
-        self.color_mapper = LinearColorMapper(palette=cc.rainbow, low=-1, high=1)
-        
-        # Initialize recording state
-        self.is_recording = False
-        self.recording_dir = "recordings"
-        self.recorder = None
-        
-        # Add camera recorder
-        self.camera_recorder = None
-        
-        # Create controls
-        self.load_config_button = pn.widgets.FileInput(name='Load Config', accept='.cfg')
-        self.connect_button = pn.widgets.Button(name='Connect to Sensor', button_type='primary')
-        self.start_button = pn.widgets.Button(name='Start', button_type='primary')
-        self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
-        self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
-        self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
         
         # Add recording format selection
         self.record_format_select = pn.widgets.RadioButtonGroup(
@@ -216,29 +189,7 @@ class RadarGUI:
             }
         )
         
-        # Set up callbacks
-        self.load_config_button.param.watch(self._load_config_callback, 'value')
-        self.connect_button.on_click(self._connect_callback)
-        self.start_button.on_click(self._start_callback)
-        self.stop_button.on_click(self._stop_callback)
-        self.record_button.on_click(self._record_callback)
-        self.exit_button.on_click(self._exit_callback)
-        self.modify_params_checkbox.param.watch(self._toggle_params_panel, 'value')
-        self.clutter_removal_checkbox.param.watch(self._clutter_removal_callback, 'value')
-        self.frame_period_slider.param.watch(self._frame_period_callback, 'value')
-        self.mob_enabled_checkbox.param.watch(self._mob_enabled_callback, 'value')
-        self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value')
-        self.clustering_checkbox.param.watch(self._clustering_callback, 'value')
-        self.tracking_checkbox.param.watch(self._tracking_callback, 'value')
-        
-        self.start_button.disabled = True
-        self.stop_button.disabled = True
-        self.record_button.disabled = True
-        
-        # Create plot
-        self.plot = self.create_plot()
-        
-        # Add configuration modal components
+        # Create configuration modal components
         self.config_modal = pn.Column(
             pn.Row(
                 pn.pane.Markdown('## Sensor Configuration'),
@@ -281,13 +232,6 @@ class RadarGUI:
             css_classes=['modal', 'modal-content'],
         )
         
-        # Add configuration button to open modal
-        self.config_button = Button(
-            name="Configure Sensor",
-            button_type="primary",
-            disabled=True  # Initially disabled until connected
-        )
-        
         # Get references to modal buttons
         self.close_button = self.config_modal[0][2]
         self.config_text = self.config_modal[1]
@@ -295,11 +239,60 @@ class RadarGUI:
         self.cancel_button = self.config_modal[2][1]
         self.version_info = self.config_modal[3]
         
+        # Initialize clustering and tracking
+        self.clusterer = None
+        self.tracker = None
+        self.enable_clustering = self.config.clustering.enabled
+        self.enable_tracking = self.config.tracking.enabled
+        
+        # Load default configuration
+        self.config_file = None
+        
+        # Add timing variable
+        self.last_update_time = None
+        
+        # Initialize plot data
+        self.scatter_source = None
+        self.cluster_source = ColumnDataSource({'x': [], 'y': [], 'size': [], 'cluster_id': []})
+        self.track_source = ColumnDataSource({'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []})
+        self.color_mapper = LinearColorMapper(palette=cc.rainbow, low=-1, high=1)
+        
+        # Initialize recording state
+        self.is_recording = False
+        self.recording_dir = "recordings"
+        self.recorder = None
+        
+        # Add camera recorder
+        self.camera_recorder = None
+        
         # Set up callbacks
+        self.load_config_button.param.watch(self._load_config_callback, 'value')
+        self.connect_button.on_click(self._connect_callback)
+        self.start_button.on_click(self._start_callback)
+        self.stop_button.on_click(self._stop_callback)
+        self.record_button.on_click(self._record_callback)
+        self.exit_button.on_click(self._exit_callback)
+        self.modify_params_checkbox.param.watch(self._toggle_params_panel, 'value')
+        self.clutter_removal_checkbox.param.watch(self._clutter_removal_callback, 'value')
+        self.frame_period_slider.param.watch(self._frame_period_callback, 'value')
+        self.mob_enabled_checkbox.param.watch(self._mob_enabled_callback, 'value')
+        self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value')
+        self.clustering_checkbox.param.watch(self._clustering_callback, 'value')
+        self.tracking_checkbox.param.watch(self._tracking_callback, 'value')
+        self.camera_autofocus.param.watch(self._camera_autofocus_callback, 'value')
+        self.camera_focus.param.watch(self._camera_focus_callback, 'value')
+        self.camera_button.on_click(self.start_camera)
         self.config_button.on_click(self._show_config_modal)
         self.close_button.on_click(self._hide_config_modal)
         self.cancel_button.on_click(self._hide_config_modal)
         self.save_button.on_click(self._save_config)
+        
+        self.start_button.disabled = True
+        self.stop_button.disabled = True
+        self.record_button.disabled = True
+        
+        # Create plot
+        self.plot = self.create_plot()
         
         # Create layout
         self.layout = self.create_layout()
@@ -1022,6 +1015,15 @@ class RadarGUI:
                 self.camera_button.name = 'Stop Camera'
                 self.camera_button.button_type = 'danger'
                 
+                # Initialize camera controls based on current settings
+                if self.camera._cap:
+                    # Set autofocus control state
+                    is_autofocus = bool(self.camera._cap.get(cv2.CAP_PROP_AUTOFOCUS))
+                    self.camera_autofocus.value = is_autofocus
+                    self.camera_focus.disabled = is_autofocus
+                    if not is_autofocus:
+                        self.camera_focus.value = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                
                 # Stop existing callback if any
                 if hasattr(self, 'camera_callback'):
                     self.camera_callback.stop()
@@ -1061,13 +1063,14 @@ class RadarGUI:
                     self.camera = None
             self.camera_button.name = 'Start Camera'
             self.camera_button.button_type = 'primary'
+            
             logger.info("Stopped camera")
 
     def update_camera(self):
         """Update the camera display."""
         if not self.camera_running or self.camera is None:
             return
-            
+        
         try:
             # Skip frames if we're falling behind
             while self.camera_running and self.camera._cap.get(cv2.CAP_PROP_POS_FRAMES) > 0:
@@ -1094,7 +1097,13 @@ class RadarGUI:
                             pass  # Frame is already being recorded by the camera_recorder thread
                         except Exception as e:
                             logger.error(f"Error recording camera frame: {e}")
-                    
+                
+                # Update camera control info if properties changed
+                if not self.camera_autofocus.value:
+                    current_focus = self.camera._cap.get(cv2.CAP_PROP_FOCUS)
+                    if abs(current_focus - self.camera_focus.value) > 0.1:
+                        self.camera_focus.value = int(current_focus)
+            
         except StopIteration:
             logger.warning("Camera stream ended")
             self.stop_camera()

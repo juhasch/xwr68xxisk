@@ -404,14 +404,30 @@ class FrameConfigCommand(RadarCommand):
 
 
 class GuiMonitorCommand(RadarCommand):
-    """GUI monitoring configuration command"""
+    """GUI monitoring configuration command.
+    
+    Format: "guiMonitor <frame_index> <detectedObjects> <logMagRange> <noiseProfile> <rangeAzimuthHeatMap> <rangeDopplerHeatMap> <statsInfo>"
+
+        - Noise Profile (if noiseProfile enabled):
+            * Size = number of range bins × sizeof(uint16_t)
+        - Range-Azimuth Heat Map (if enabled):
+            * Zero Doppler column of range cubed matrix
+            * Size = number of Rx Azimuth virtual antennas × number of chirps per frame × sizeof(uint32_t)
+        - Range-Doppler Heat Map (if enabled):
+            * Log magnitude range-Doppler matrix
+            * Size = number of range bins × number of Doppler bins × sizeof(uint16_t)
+        - Statistics (if statsInfo enabled)
+    """
     
     def __init__(self, params: List[Union[int, float, str]]):
         super().__init__('guiMonitor', params)
+        # Ensure params list has all required elements
+        while len(self.params) < 7:
+            self.params.append(0)
     
     @property
     def subframe_idx(self) -> int:
-        """Subframe index"""
+        """Subframe index (-1 for legacy mode)"""
         return self.params[0]
     
     @subframe_idx.setter
@@ -420,7 +436,15 @@ class GuiMonitorCommand(RadarCommand):
     
     @property
     def detected_objects(self) -> int:
-        """Detected objects (0: None, 1: Objects+info, 2: Objects only)"""
+        """Detected objects output mode
+        0: Don't send anything
+        1: Send objects list with side info
+        2: Send objects list only
+
+        * DPIF_PointCloudCartesian: X,Y,Z location and velocity
+        * DPIF_PointCloudSideInfo: SNR and noise (only if detectedObjects=1)
+
+        """
         return self.params[1]
     
     @detected_objects.setter
@@ -428,6 +452,69 @@ class GuiMonitorCommand(RadarCommand):
         if value not in [0, 1, 2]:
             raise ValueError("detected_objects must be 0, 1, or 2")
         self.params[1] = value
+    
+    @property
+    def log_mag_range(self) -> int:
+        """Log magnitude range array output (0: disabled, 1: enabled)
+        Size = number of range bins × sizeof(uint16_t)
+        """
+        return self.params[2]
+    
+    @log_mag_range.setter
+    def log_mag_range(self, value: int):
+        if value not in [0, 1]:
+            raise ValueError("log_mag_range must be 0 or 1")
+        self.params[2] = value
+    
+    @property
+    def noise_profile(self) -> int:
+        """Noise floor profile output (0: disabled, 1: enabled)
+        Size = number of range bins × sizeof(uint16_t)
+        """
+        return self.params[3]
+    
+    @noise_profile.setter
+    def noise_profile(self, value: int):
+        if value not in [0, 1]:
+            raise ValueError("noise_profile must be 0 or 1")
+        self.params[3] = value
+    
+    @property
+    def range_azimuth_heat_map(self) -> int:
+        """Range-azimuth heat map output (0: disabled, 1: enabled)
+        Size = number of Rx Azimuth virtual antennas × number of chirps per frame × sizeof(uint32_t)
+        """
+        return self.params[4]
+    
+    @range_azimuth_heat_map.setter
+    def range_azimuth_heat_map(self, value: int):
+        if value not in [0, 1]:
+            raise ValueError("range_azimuth_heat_map must be 0 or 1")
+        self.params[4] = value
+    
+    @property
+    def range_doppler_heat_map(self) -> int:
+        """Range-doppler heat map output (0: disabled, 1: enabled)
+        Size = number of range bins × number of Doppler bins × sizeof(uint16_t)
+        """
+        return self.params[5]
+    
+    @range_doppler_heat_map.setter
+    def range_doppler_heat_map(self, value: int):
+        if value not in [0, 1]:
+            raise ValueError("range_doppler_heat_map must be 0 or 1")
+        self.params[5] = value
+    
+    @property
+    def stats_info(self) -> int:
+        """Statistics information output (0: disabled, 1: enabled)"""
+        return self.params[6]
+    
+    @stats_info.setter
+    def stats_info(self, value: int):
+        if value not in [0, 1]:
+            raise ValueError("stats_info must be 0 or 1")
+        self.params[6] = value
 
 
 class CfarConfigCommand(RadarCommand):
