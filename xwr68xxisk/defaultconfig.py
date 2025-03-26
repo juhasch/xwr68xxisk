@@ -4,7 +4,7 @@ This module contains predefined radar configurations for different hardware.
 """
 
 # Default frame period in milliseconds
-DEFAULT_FRAME_PERIOD = 100
+DEFAULT_FRAME_PERIOD = 400
 
 # Original hardcoded configurations as strings (kept for reference)
 awr2544_str = """
@@ -40,7 +40,7 @@ chirpCfg 0 0 0 0 0 0 0 1
 chirpCfg 1 1 0 0 0 0 0 4
 frameCfg 0 1 16 0 {DEFAULT_FRAME_PERIOD} 1 0
 lowPower 0 0
-guiMonitor -1 1 0 0 0 0 1
+guiMonitor -1 1 0 0 0 1 1
 cfarCfg -1 0 2 8 4 3 0 10 1
 cfarCfg -1 1 0 4 2 3 1 10 1
 multiObjBeamForming -1 1 0.88

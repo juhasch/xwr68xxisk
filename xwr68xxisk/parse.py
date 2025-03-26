@@ -103,7 +103,6 @@ class RadarData:
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO:
                 idx = self._parse_side_info(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_DOPPLER_HEAT_MAP:
-                print(f"Range-Doppler heatmap TLV length: {tlv_length}")
                 idx = self._parse_range_doppler_heatmap(data_bytes, idx, tlv_length)
             else:
                 idx += tlv_length
@@ -160,11 +159,18 @@ class RadarData:
         Returns:
             Updated index after parsing
         """
+        print('1:', idx, tlv_length, len(data))
+        #np.save('heatmap.npy', data[idx:])
+        #heatmap = np.frombuffer(data[idx:], dtype=np.uint16)
+        #np.save('heatmap16.npy', heatmap)
+        #return 0
         # Calculate dimensions based on TLV length and uint16 size
         total_bins = tlv_length // 2  # Each bin is 2 bytes (uint16)
-        
         # Create numpy array from raw bytes
-        heatmap = np.frombuffer(data[idx:idx+tlv_length], dtype=np.uint16)
+        heatmap = np.frombuffer(data[idx:idx+4096], dtype=np.uint16)
+        np.save('heatmap16.npy', heatmap)
+        self.range_doppler_heatmap = heatmap.reshape(128, 16)
+        return idx+4096
         
         # Get dimensions from radar configuration
         num_range_bins = self.config_params.get('rangeBins', 256)  # Default from config files
