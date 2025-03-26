@@ -1,7 +1,6 @@
 """Tests for the IMU BNO086 interface."""
 
 import unittest
-from unittest.mock import Mock, patch
 import time
 from xwr68xxisk.imu import IMU
 
@@ -25,12 +24,10 @@ class TestIMU(unittest.TestCase):
             'motion_request': 0
         }
 
-    @patch('serial.Serial')
-    def test_decode_data(self, mock_serial):
+    def test_decode_data(self):
         """Test decoding of a known message."""
-        # Create IMU instance with mocked serial
-        mock_serial.return_value.read.return_value = self.test_message
-        imu = IMU('/dev/ttyUSB0')
+        # Create IMU instance in mock mode
+        imu = IMU('/dev/ttyUSB0', mock_mode=True)
         
         # Test decoding
         result = imu.decode_data(self.test_message)
@@ -46,47 +43,39 @@ class TestIMU(unittest.TestCase):
         self.assertEqual(result['motion_intent'], self.expected_values['motion_intent'])
         self.assertEqual(result['motion_request'], self.expected_values['motion_request'])
 
-    @patch('serial.Serial')
-    def test_invalid_header(self, mock_serial):
+    def test_invalid_header(self):
         """Test handling of invalid header."""
         # Create message with invalid header
         invalid_header = bytes.fromhex('BBBB' + 'DE 0100 92FF 2508 8DFE ECFF D103 000000 E7')
-        mock_serial.return_value.read.return_value = invalid_header
-        imu = IMU('/dev/ttyUSB0')
+        imu = IMU('/dev/ttyUSB0', mock_mode=True)
         
         # Should return None for invalid header
         result = imu.decode_data(invalid_header)
         self.assertIsNone(result)
 
-    @patch('serial.Serial')
-    def test_invalid_checksum(self, mock_serial):
+    def test_invalid_checksum(self):
         """Test handling of invalid checksum."""
         # Create message with invalid checksum
         invalid_checksum = bytes.fromhex('AAAA DE 0100 92FF 2508 8DFE ECFF D103 000000 F7')
-        mock_serial.return_value.read.return_value = invalid_checksum
-        imu = IMU('/dev/ttyUSB0')
+        imu = IMU('/dev/ttyUSB0', mock_mode=True)
         
         # Should return None for invalid checksum
         result = imu.decode_data(invalid_checksum)
         self.assertIsNone(result)
 
-    @patch('serial.Serial')
-    def test_incomplete_message(self, mock_serial):
+    def test_incomplete_message(self):
         """Test handling of incomplete message."""
         # Create incomplete message
         incomplete = bytes.fromhex('AAAA DE 0100')
-        mock_serial.return_value.read.return_value = incomplete
-        imu = IMU('/dev/ttyUSB0')
+        imu = IMU('/dev/ttyUSB0', mock_mode=True)
         
         # Should return None for incomplete message
         result = imu.decode_data(incomplete)
         self.assertIsNone(result)
 
-    @patch('serial.Serial')
-    def test_iterator_interface(self, mock_serial):
+    def test_iterator_interface(self):
         """Test the iterator interface."""
-        mock_serial.return_value.read.return_value = self.test_message
-        imu = IMU('/dev/ttyUSB0')
+        imu = IMU('/dev/ttyUSB0', mock_mode=True)
         
         # Wait for first reading
         time.sleep(0.02)  # Wait for at least one reading at 100Hz

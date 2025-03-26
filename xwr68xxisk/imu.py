@@ -53,21 +53,45 @@ class IMU:
     - motion_intent, motion_request: BNO086 specific flags
     """
 
-    def __init__(self, port):
-        self.ser = serial.Serial(port, 115200)
-        self.buffer = []
-        self.thread = threading.Thread(target=self.read_thread)
-        self.thread.start()
+    def __init__(self, port, mock_mode=False):
+        """Initialize IMU interface.
+        
+        Args:
+            port: Serial port for IMU connection
+            mock_mode: If True, return test data instead of reading from hardware
+        """
+        self.mock_mode = mock_mode
+        self.mock_index = 0
+        
+        if not mock_mode:
+            self.ser = serial.Serial(port, 115200)
+            self.buffer = []
+            self.thread = threading.Thread(target=self.read_thread)
+            self.thread.start()
+        else:
+            # Initialize with test data
+            self.imu_dict = {
+                'index': 0,
+                'yaw': 0.01,
+                'pitch': -1.10,
+                'roll': 20.85,
+                'x_acceleration': -371,
+                'y_acceleration': -20,
+                'z_acceleration': 977,
+                'motion_intent': 0,
+                'motion_request': 0
+            }
 
     def read_thread(self):
         """Continuously read IMU data in background thread."""
         while True:
-            # Read exactly 19 bytes for a complete message
-            data = self.ser.read(19)
-            # decode the data into a dictionary
-            decoded = self.decode_data(data)
-            if decoded is not None:
-                self.imu_dict = decoded
+            if not self.mock_mode:
+                # Read exactly 19 bytes for a complete message
+                data = self.ser.read(19)
+                # decode the data into a dictionary
+                decoded = self.decode_data(data)
+                if decoded is not None:
+                    self.imu_dict = decoded
             time.sleep(0.01)  # 100Hz update rate
 
     def decode_data(self, data):
@@ -134,9 +158,19 @@ class IMU:
 
     def __next__(self):
         """Return the next IMU reading."""
-        if hasattr(self, 'imu_dict'):
+        if self.mock_mode:
+            # Update mock index
+            self.mock_index = (self.mock_index + 1) % 256
+            self.imu_dict['index'] = self.mock_index
+            return self.imu_dict
+        elif hasattr(self, 'imu_dict'):
             return self.imu_dict
         raise StopIteration
 
     def read(self):
+        """Read raw data from the serial port."""
+        if self.mock_mode:
+            # Return test message in the correct format
+            test_message = bytes.fromhex('AAAA DE 0100 92FF 2508 8DFE ECFF D103 000000 E7')
+            return test_message
         return self.ser.read()
