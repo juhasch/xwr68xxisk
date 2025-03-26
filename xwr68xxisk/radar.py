@@ -18,7 +18,7 @@ from . import defaultconfig
 import os
 import struct
 import math
-from mmwserial import UDPReader, RadarReader
+
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class RadarConnection:
         self.device_type = None  # 'CP2105' or 'XDS110'
         self.is_running = False
         self._clutter_removal = False  # Default value for clutter removal
-        self.frame_period = 100  # Default frame period in milliseconds
+        self.frame_period = 200  # Default frame period in milliseconds
         self.mob_enabled = False  # Default value for moving object detection
         self.mob_threshold = 0.5  # Default value for moving object detection threshold
         # Store detected ports
@@ -268,9 +268,6 @@ class RadarConnection:
         except (serial.SerialException, socket.error) as e:
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
             
-    def _connect_device(self, serial_number: Optional[str] = None) -> None:
-        """Connect to the physical device. Must be implemented by derived classes."""
-        raise NotImplementedError("Derived classes must implement _connect_device()")
 
     def set_frame_period(self, period_ms: float) -> None:
         """Set the frame period in milliseconds.
@@ -535,10 +532,16 @@ class RadarConnection:
             # Initialize the optimized reader
             logger.debug(f"Attempting to create reader for data port: {self._detected_data_port}")
             logger.debug(f"Using baudrate: {baudrate}")
-            
+
+            self.data_port = serial.Serial(
+                self._detected_data_port,
+                baudrate=baudrate,
+                timeout=1,
+                exclusive=True  # Ensure exclusive access to the port
+            )
+            logger.debug("Data port opened successfully")
+
             # Create the reader with the configured baudrate
-            self.reader = RadarReader(self._detected_data_port, baudrate=baudrate, debug=False)
-            logger.info("Successfully created optimized reader")
         except serial.SerialException as e:
             logger.error(f"Failed to open serial port: {str(e)}")
             # Clean up if partial connection was established
@@ -552,6 +555,21 @@ class RadarConnection:
                 self.cli_port.close()
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
 
+
+    def _parse_header(self, data: np.ndarray) -> None:
+        """Parse the radar data packet header."""
+        header = {
+            'version': int.from_bytes(data[0:4], byteorder='little'),
+            'total_packet_len': int.from_bytes(data[4:8], byteorder='little'),
+            'platform': int.from_bytes(data[8:12], byteorder='little'),
+            'frame_number': int.from_bytes(data[12:16], byteorder='little'),
+            'time_cpu_cycles': int.from_bytes(data[16:20], byteorder='little'),
+            'num_detected_obj': int.from_bytes(data[20:24], byteorder='little'),
+            'num_tlvs': int.from_bytes(data[24:28], byteorder='little'),
+            'subframe_number': int.from_bytes(data[28:32], byteorder='little') if  int.from_bytes(data[20:24], byteorder='little') > 0 else None
+        }
+        return header
+
     def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:
         """
         Read and parse data packets from the radar using the optimized mmwserial reader.
@@ -559,18 +577,17 @@ class RadarConnection:
         Returns:
             Tuple of (header, payload) arrays if successful, None otherwise
         """
-        if not self.reader:
-            logger.error("Reader not initialized. Please connect to the radar first.")
-            return None
+        MAGIC =  b'\x02\x01\x04\x03\x06\x05\x08\x07'
         
         if not self.is_running:
             logger.error("Radar is not running. Please start the radar first.")
             return None
             
         try:
-            if packet := self.reader.read_packet():
+            if packet := self.data_port.read_until(MAGIC):
                 self.total_frames += 1
-                frame = packet.header.frame_number
+                header = self._parse_header(packet)
+                frame = header['frame_number']
                 
                 # Track frame statistics
                 if self.last_frame is not None:
@@ -583,21 +600,11 @@ class RadarConnection:
                         self.invalid_packets += 1
                 
                 self.last_frame = frame
-                logger.debug(f"Frame {frame}: {packet.header.num_detected_obj} objects, "
-                           f"{packet.header.total_packet_len} bytes")
-                
-                # Convert packet data to numpy arrays
-                header = {
-                    'version': packet.header.version,
-                    'total_packet_len': packet.header.total_packet_len,
-                    'platform': packet.header.platform,
-                    'frame_number': packet.header.frame_number,
-                    'time_cpu_cycles': packet.header.time_cpu_cycles,
-                    'num_detected_obj': packet.header.num_detected_obj,
-                }
+                logger.debug(f"Frame {frame}: {header['num_detected_obj']} objects, "
+                           f"{header['total_packet_len']} bytes")
                 
                 # Convert payload to numpy array
-                payload = np.frombuffer(packet.data, dtype=np.uint8)
+                payload = np.frombuffer(packet[32:], dtype=np.uint8)
                 
                 return header, payload
             else:
@@ -643,7 +650,7 @@ class RadarConnection:
     def is_connected(self) -> bool:
         """Check if XWR68xx radar is connected."""
         return (self.cli_port is not None and self.cli_port.is_open and 
-                self.reader is not None)
+                self.data_port is not None and self.data_port.is_open)
 
     def _load_configuration(self, config: Optional[str], default_config: str) -> str:
         """Load configuration from file or use default.
@@ -703,144 +710,6 @@ class XWR68xxRadar(RadarConnection):
         self.total_frames = 0
         self.invalid_packets = 0
         self.failed_reads = 0
-
-    def _connect_device(self, serial_number: Optional[str] = None) -> None:
-        """Connect to the XWR68xx radar device."""
-        # Use already detected ports if available, otherwise detect them
-        if not (self._detected_cli_port and self._detected_data_port):
-            self._detected_cli_port, self._detected_data_port = self.find_serial_ports(serial_number)
-        
-        if not (self._detected_cli_port and self._detected_data_port):
-            raise RadarConnectionError("Failed to detect radar ports")
-            
-        try:
-            logger.debug(f"Attempting to open CLI port: {self._detected_cli_port}")
-            self.cli_port = serial.Serial(
-                self._detected_cli_port,
-                baudrate=115200,
-                timeout=0.05,
-                exclusive=True  # Ensure exclusive access to the port
-            )
-            logger.debug("CLI port opened successfully")
-            
-            # Set baudrate based on OS platform
-            if self._detected_cli_port.startswith('/dev/tty.'):  # macOS
-                baudrate = 460800
-            else:  # Windows/Linux
-                baudrate = 921600
-                
-            # Initialize the optimized reader
-            logger.debug(f"Attempting to create reader for data port: {self._detected_data_port}")
-            logger.debug(f"Using baudrate: {baudrate}")
-            
-            # Create the reader with the configured baudrate
-            self.reader = RadarReader(self._detected_data_port, baudrate=baudrate, debug=False)
-            logger.info("Successfully created optimized reader")
-        except serial.SerialException as e:
-            logger.error(f"Failed to open serial port: {str(e)}")
-            # Clean up if partial connection was established
-            if self.cli_port and self.cli_port.is_open:
-                self.cli_port.close()
-            raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
-        except Exception as e:
-            logger.error(f"Unexpected error during connection: {str(e)}")
-            # Clean up if partial connection was established
-            if self.cli_port and self.cli_port.is_open:
-                self.cli_port.close()
-            raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
-
-    def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:
-        """
-        Read and parse data packets from the radar using the optimized mmwserial reader.
-        
-        Returns:
-            Tuple of (header, payload) arrays if successful, None otherwise
-        """
-        if not self.reader:
-            logger.error("Reader not initialized. Please connect to the radar first.")
-            return None
-        
-        if not self.is_running:
-            logger.error("Radar is not running. Please start the radar first.")
-            return None
-            
-        try:
-            if packet := self.reader.read_packet():
-                self.total_frames += 1
-                frame = packet.header.frame_number
-                
-                # Track frame statistics
-                if self.last_frame is not None:
-                    if frame != self.last_frame + 1:
-                        missed = frame - self.last_frame - 1
-                        self.missed_frames += missed
-                        logger.warning(f"Missed {missed} frames between {self.last_frame} and {frame}")
-                    elif frame <= self.last_frame:
-                        logger.error(f"Invalid frame sequence: {self.last_frame} -> {frame}")
-                        self.invalid_packets += 1
-                
-                self.last_frame = frame
-                logger.debug(f"Frame {frame}: {packet.header.num_detected_obj} objects, "
-                           f"{packet.header.total_packet_len} bytes")
-                
-                # Convert packet data to numpy arrays
-                header = {
-                    'version': packet.header.version,
-                    'total_packet_len': packet.header.total_packet_len,
-                    'platform': packet.header.platform,
-                    'frame_number': packet.header.frame_number,
-                    'time_cpu_cycles': packet.header.time_cpu_cycles,
-                    'num_detected_obj': packet.header.num_detected_obj,
-                }
-                
-                # Convert payload to numpy array
-                payload = np.frombuffer(packet.data, dtype=np.uint8)
-                
-                return header, payload
-            else:
-                self.failed_reads += 1
-                logger.warning("Failed to read packet")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error reading frame: {e}")
-            return None
-
-    def configure_and_start(self) -> None:
-        """Configure the XWR68xx radar and start streaming data."""
-        self.send_configuration()
-        self.cli_port.write(b'sensorStart\n')
-        self.is_running = True
-        logger.info("Radar configured and started")
-
-    def stop(self) -> None:
-        """Stop the XWR68xx radar."""
-        self.send_command('sensorStop')
-        self.is_running = False
-
-    def close(self) -> None:
-        """Safely close the XWR68xx radar connection."""
-        if self.cli_port and self.cli_port.is_open:
-            self.stop()
-            self.cli_port.close()
-            
-        # Log statistics
-        if self.total_frames > 0:
-            total_attempted = self.total_frames + self.failed_reads
-            logger.info("\nStatistics:")
-            logger.info(f"Total successful frames: {self.total_frames}")
-            logger.info(f"Failed reads: {self.failed_reads}")
-            logger.info(f"Missed frames: {self.missed_frames}")
-            logger.info(f"Invalid packets: {self.invalid_packets}")
-            if total_attempted > 0:
-                logger.info(f"Success rate: {100.0*self.total_frames/total_attempted:.1f}%")
-            if self.total_frames + self.missed_frames > 0:
-                logger.info(f"Frame loss: {100*self.missed_frames/(self.total_frames+self.missed_frames):.1f}%")
-
-    def is_connected(self) -> bool:
-        """Check if XWR68xx radar is connected."""
-        return (self.cli_port is not None and self.cli_port.is_open and 
-                self.reader is not None)
 
 
 class AWR2544Radar(RadarConnection):
