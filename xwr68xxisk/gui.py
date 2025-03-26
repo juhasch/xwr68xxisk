@@ -84,25 +84,29 @@ class RadarGUI:
         self.modify_params_checkbox = pn.widgets.Checkbox(name='Modify Parameters', value=False)
         self.clutter_removal_checkbox = pn.widgets.Checkbox(
             name='Static Clutter Removal',
-            value=self.config.processing.clutter_removal
+            value=False,  # Will be set when radar is connected
+            disabled=True  # Initially disabled until connected
         )
         self.frame_period_slider = pn.widgets.FloatSlider(
             name='Frame Period (ms)',
             start=50,
             end=1000,
             value=self.config.processing.frame_period_ms,
-            step=10
+            step=10,
+            disabled=True  # Initially disabled until connected
         )
         self.mob_enabled_checkbox = pn.widgets.Checkbox(
             name='Multi-object Beamforming',
-            value=self.config.processing.mob_enabled
+            value=False,  # Will be set when radar is connected
+            disabled=True  # Initially disabled until connected
         )
         self.mob_threshold_slider = pn.widgets.FloatSlider(
             name='MOB Threshold',
             start=0,
             end=1,
-            value=self.config.processing.mob_threshold,
-            step=0.01
+            value=0.5,  # Will be set when radar is connected
+            step=0.01,
+            disabled=True  # Initially disabled until connected
         )
         
         # Add clustering and tracking controls
@@ -350,17 +354,22 @@ class RadarGUI:
                 self.clutter_removal_checkbox.disabled = False
                 self.frame_period_slider.disabled = False
                 self.mob_enabled_checkbox.disabled = False
-                # MOB threshold is only enabled if MOB is enabled
-                self.mob_threshold_slider.disabled = not self.mob_enabled_checkbox.value
                 
-                # Set initial values from radar if available
+                # Set initial values from radar
                 try:
+                    # Get clutter removal setting from radar
                     self.clutter_removal_checkbox.value = self.radar.clutterRemoval
+                    
+                    # Get frame period from radar
                     self.frame_period_slider.value = self.radar.frame_period
+                    
+                    # Get MOB settings from radar
                     self.mob_enabled_checkbox.value = self.radar.mob_enabled
                     self.mob_threshold_slider.value = self.radar.mob_threshold
+                    # MOB threshold is only enabled if MOB is enabled
+                    self.mob_threshold_slider.disabled = not self.radar.mob_enabled
                 except Exception as e:
-                    logger.warning(f"Could not initialize all parameter values: {e}")
+                    logger.warning(f"Could not initialize all parameter values from radar: {e}")
             
             self.connect_button.loading = False
             self.connect_button.name = "Connected"
@@ -469,7 +478,9 @@ class RadarGUI:
     
     def _start_callback(self, event):
         """Start periodic updates."""
+        print('1')
         if not self.is_running and self.radar.is_connected():
+            print('2')
             self.stop_button.disabled = False
             self.record_button.disabled = False
             self.radar.configure_and_start()
