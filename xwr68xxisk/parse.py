@@ -134,12 +134,21 @@ class RadarData:
         try:
             for point in range(num_points):
                 point_idx = idx + (point * 4)
-                if point_idx + 4 <= len(data):  # Check if we have enough data
-                    self.snr.append(struct.unpack('h', data[point_idx:point_idx+2])[0] * 0.1)
-                    self.noise.append(struct.unpack('h', data[point_idx+2:point_idx+4])[0] * 0.1)
-        except struct.error:
-            logging.warning("Error unpacking side info data")
-            logging.debug(f"num_points: {num_points}")
+                if point_idx + 4 > len(data):  # Check if we have enough data
+                    logging.warning(f"Insufficient data for side info at point {point}: needed 4 bytes, had {len(data) - point_idx}")
+                    break
+                    
+                try:
+                    snr_val = struct.unpack('h', data[point_idx:point_idx+2])[0] * 0.1
+                    noise_val = struct.unpack('h', data[point_idx+2:point_idx+4])[0] * 0.1
+                    self.snr.append(snr_val)
+                    self.noise.append(noise_val)
+                except struct.error as e:
+                    logging.warning(f"Error unpacking side info at point {point}: {e}")
+                    continue
+                
+        except Exception as e:
+            logging.warning(f"Error processing side info data: {e}")
             self.snr = []
             self.noise = []
         
@@ -238,11 +247,12 @@ class RadarData:
         # Calculate RCS values based on SNR and range
         # This is a simplified model; actual RCS calculation would depend on radar parameters
         if snr_array is not None and len(snr_array) > 0:
-            # Convert SNR from dB to linear scale
-            snr_linear = 10**(snr_array/10)
+            # Convert SNR from dB to linear scale with clipping to prevent overflow
+            snr_db = np.clip(snr_array, -100, 100)  # Limit SNR range to prevent overflow
+            snr_linear = np.power(10.0, snr_db/10.0)
             # RCS is proportional to SNR * range^4 (radar equation)
             # This is a simplified calculation for demonstration
-            rcs_array = snr_linear * (range_array**4) / 1e6  # Scaling factor
+            rcs_array = snr_linear * np.power(range_array, 4) / 1e6  # Scaling factor
             # Convert back to dB scale
             rcs_array = 10 * np.log10(np.maximum(rcs_array, 1e-10))
         else:

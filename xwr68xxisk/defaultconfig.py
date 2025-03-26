@@ -1,33 +1,9 @@
-"""
-Default radar configurations.
-This module contains predefined radar configurations for different hardware.
-"""
+"""Default radar configuration for XWR68XX hardware."""
+from .radar_config import RadarConfig
 
-# Default frame period in milliseconds
+
 DEFAULT_FRAME_PERIOD = 100
 
-# Original hardcoded configurations as strings (kept for reference)
-awr2544_str = """
-sensorStop
-flushCfg
-dfeDataOutputMode 1
-channelCfg 15 15 0 0 0
-adcCfg 2 0
-adcbufCfg -1 1 0 1 1
-lowPower 0 0
-profileCfg 0 77 7 7 20.81 0 0 8.883 0 256 30000 0 0 164
-chirpCfg 0 5 0 0 0 0 0 15
-frameCfg 0 5 128 0 100 50 1 0
-compressionCfg -1 1 0 0.5 8
-intfMitigCfg -1 15 18
-procChainCfg 1 0 530 0 1
-ddmPhaseShiftAntOrder 0 1 2 3
-adcDataDitherCfg 0 0 1
-analogMonitor 0 0 0
-calibData 0 0 0
-"""
-
-#profileCfg 0 60 567 7 57.14 0 0 70 1 256 5209 0 0 158
 xwr68xx_str = f"""
 sensorStop
 flushCfg
@@ -60,30 +36,6 @@ cfarFovCfg -1 1 -1 1.00
 calibData 0 0 0
 """
 
-# Keep the original string versions for backward compatibility
-awr2544 = awr2544_str
-xwr68xx = xwr68xx_str
-
-# Use the RadarConfig class for programmatic access to configurations
-try:
-    from radar_config import RadarConfig
     
-    # Create config objects from the string configurations
-    def get_awr2544_config() -> 'RadarConfig':
-        """Get AWR2544 configuration as a RadarConfig object"""
-        return RadarConfig.from_string(awr2544_str, "awr2544")
-    
-    def get_xwr68xx_config() -> 'RadarConfig':
-        """Get XWR68XX configuration as a RadarConfig object"""
-        return RadarConfig.from_string(xwr68xx_str, "xwr68xx")
-    
-except ImportError:
-    # If radar_config module is not available, provide dummy functions
-    # that will raise errors if called
-    def get_awr2544_config():
-        """Placeholder function when radar_config is not available"""
-        raise ImportError("radar_config module not available")
-    
-    def get_xwr68xx_config():
-        """Placeholder function when radar_config is not available"""
-        raise ImportError("radar_config module not available")
+def get_xwr68xx_config() -> 'RadarConfig':
+    return RadarConfig.from_string(xwr68xx_str, "xwr68xx")

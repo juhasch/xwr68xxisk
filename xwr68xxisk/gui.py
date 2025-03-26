@@ -331,7 +331,7 @@ class RadarGUI:
                 raise RadarConnectionError("No supported radar detected")
             
             logger.info(f"Creating {self.radar_type} radar instance")
-            self.radar = create_radar(self.radar_type)
+            self.radar = create_radar()
             
             # Now connect with the appropriate configuration
             self.radar.connect(self.config_file)
