@@ -198,14 +198,15 @@ class RadarPointCloud:
         elevation = point_cloud_data[:, 2]
         velocity = point_cloud_data[:, 3]
         snr = point_cloud_data[:, 4]
+        
+        # Initialize RCS values to zeros since they're not provided in the data
+        rcs = np.zeros_like(range_values)
 
         # print shape of point_cloud_data
         print(f"Shape of point_cloud_data: {point_cloud_data.shape}")
         # Debug SNR and RCS. Print out the largest values
         print(f"Largest SNR: {np.max(snr)}")
-#        print(f"Largest RCS: {np.max(rcs)}")
-
-
+        print(f"Largest RCS: {np.max(rcs)}")
         
         return cls(range=range_values, velocity=velocity, azimuth=azimuth,
                   elevation=elevation, rcs=rcs, snr=snr, metadata=frame_data)

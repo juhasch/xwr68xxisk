@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch
 import time
-from imu import IMU
+from xwr68xxisk.imu import IMU
 
 
 class TestIMU(unittest.TestCase):
