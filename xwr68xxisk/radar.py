@@ -490,12 +490,12 @@ class RadarConnection:
         # Configure data port baudrate after other configuration
         # Set baudrate based on OS platform
         if self._detected_cli_port.startswith('/dev/tty.'):  # macOS
-            baudrate = 460800
+            self.baudrate = 460800
         else:  # Windows/Linux
-            baudrate = 921600
+            self.baudrate = 921600
         
-        logger.debug(f"Configuring data port with baudrate: {baudrate}")
-        self.cli_port.write(f"configDataPort {baudrate} 0\n".encode())
+        logger.debug(f"Configuring data port with baudrate: {self.baudrate}")
+        self.cli_port.write(f"configDataPort {self.baudrate} 0\n".encode())
         if not ignore_response:
             response = self._read_cli_response()
             if response:
@@ -598,6 +598,7 @@ class RadarConnection:
                     elif frame <= self.last_frame:
                         logger.error(f"Invalid frame sequence: {self.last_frame} -> {frame}")
                         self.invalid_packets += 1
+
                 
                 self.last_frame = frame
                 logger.debug(f"Frame {frame}: {header['num_detected_obj']} objects, "
