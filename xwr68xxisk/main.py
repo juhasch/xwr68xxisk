@@ -75,7 +75,9 @@ def main():
 
     # Record subcommand
     record_parser = subparsers.add_parser('record', help='Record radar data to CSV file')
-    record_parser.set_defaults(func=lambda _: record_main(serial_number=args.serial_number))
+    record_parser.add_argument('--profile', default=os.path.join('configs', 'user_profile.cfg'),
+                           help='Path to the radar profile configuration file')
+    record_parser.set_defaults(func=lambda args: record_main(args.serial_number, args.profile))
 
     # Dora subcommand
     dora_parser = subparsers.add_parser('dora', help='Start the dora-rs node interface')
