@@ -35,7 +35,11 @@ class ConfigManager:
             config_dir: Directory containing configuration files.
                        If None, uses default config directory.
         """
-        self.config_dir = Path(config_dir) if config_dir else Path(__file__).parent.parent / "configs"
+        if config_dir:
+            self.config_dir = Path(config_dir)
+        else:
+            # Use 'configs' directory in project root
+            self.config_dir = Path(__file__).parent.parent.parent / "configs"
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.current_config: Optional[MainConfig] = None
     

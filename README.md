@@ -3,6 +3,7 @@
 ![AWR6843ISK](awr6843isk.png)
 
 Allows for recording radar data to a CSV file and displaying the data in a GUI.
+**Note**: This is a work-in-progress. Especially the part parsing the radar profiles is only partially functional.
 
 Works with the mmw demo application from TI by default:
 
