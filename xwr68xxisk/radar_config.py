@@ -1,3 +1,4 @@
+""" Work in progress """
 from typing import Dict, List, Union, Optional
 
 class RadarCommand:
@@ -14,10 +15,20 @@ class RadarCommand:
     
     @classmethod
     def from_string(cls, command_str: str) -> 'RadarCommand':
-        """Create a command from a string"""
+        """Create a command from a string
+        
+        Split lines into commands
+        Loop through commands
+        Call the appropriate command class constructor with the params
+        Return the command object
+        
+        """
         parts = command_str.strip().split()
         name = parts[0]
-        
+
+
+
+
         # Convert parameters to appropriate types (int/float)
         params = []
         for param in parts[1:]:
@@ -892,16 +903,3 @@ class RadarConfig:
         new_config = RadarConfig(self.name)
         new_config.commands = copy.deepcopy(self.commands)
         return new_config
-
-
-# Create predefined configurations
-def create_awr2544_config() -> RadarConfig:
-    """Create AWR2544 radar configuration"""
-    from defaultconfig import awr2544_str
-    return RadarConfig.from_string(awr2544_str, "awr2544")
-
-
-def create_xwr68xx_config() -> RadarConfig:
-    """Create XWR68XX radar configuration"""
-    from defaultconfig import xwr68xx_str
-    return RadarConfig.from_string(xwr68xx_str, "xwr68xx") 
