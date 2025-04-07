@@ -421,10 +421,8 @@ class RadarConnection:
             if line.startswith('frameCfg'):
                 self.frame_period = self.radar_params['framePeriod']
                 parts = line.split()
-                print('old:',line)
                 parts[5] = str(int(self.frame_period))
                 line = ' '.join(parts)
-                print('new:',line)
 
             # Temporary fix for multiObjBeamForming
             if line.startswith('multiObjBeamForming'):
