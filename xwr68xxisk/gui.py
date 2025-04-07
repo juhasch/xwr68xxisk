@@ -1,12 +1,29 @@
-"""Simple Bokeh GUI for the xwr68xxisk radar sensor evaluation kit."""
+"""
+Interactive GUI for xwr68xxisk radar sensor evaluation kit.
 
+This module provides a Bokeh-based GUI for visualizing and controlling 
+the Texas Instruments xwr68xxisk radar sensor. It includes real-time point cloud 
+visualization, clustering, tracking, camera integration, and recording functionality.
+"""
+
+# Standard library imports
+import os
+import logging
+import time
+from datetime import datetime
+
+# Third-party imports
 import numpy as np
 import panel as pn
 import holoviews as hv
+import colorcet as cc
+import cv2
 from bokeh.plotting import figure
 from bokeh.models import ColorBar, LinearColorMapper, ColumnDataSource, LabelSet
-import colorcet as cc
-from xwr68xxisk.radar import RadarConnectionError
+from panel.widgets import TextAreaInput, Button
+
+# Local imports
+from xwr68xxisk.radar import RadarConnection, create_radar, RadarConnectionError
 from xwr68xxisk.parse import RadarData
 from xwr68xxisk.point_cloud import RadarPointCloud
 from xwr68xxisk.clustering import PointCloudClustering
@@ -15,22 +32,47 @@ from xwr68xxisk.configs import ConfigManager
 from xwr68xxisk.record import PointCloudRecorder
 from xwr68xxisk.cameras import OpenCVCamera
 from xwr68xxisk.camera_recorder import CameraRecorder
-import os
-import logging
-from datetime import datetime
-from panel.widgets import TextAreaInput, Button
-from xwr68xxisk.radar import RadarConnection, create_radar
-import cv2
-import time
 
 logger = logging.getLogger(__name__)
 
-# Initialize extensions (fix order and syntax)
+# Initialize extensions
 hv.extension('bokeh')
 pn.extension(design="material", sizing_mode="stretch_width")
 
 
 class RadarGUI:
+    """
+    Interactive GUI for xwr68xxisk radar sensor.
+    
+    This class provides a complete GUI interface for controlling and visualizing 
+    data from the Texas Instruments xwr68xxisk radar sensor evaluation kit. 
+    It includes real-time point cloud visualization, clustering, tracking, and 
+    recording capabilities.
+    
+    The GUI is built using Panel and Bokeh for interactive visualization.
+    
+    Attributes
+    ----------
+    config_manager : ConfigManager
+        Manager for handling radar configuration
+    radar : RadarConnection
+        Connection to the radar sensor
+    camera : OpenCVCamera, optional
+        Connection to the camera, if enabled
+    is_running : bool
+        Whether the radar is currently running
+    is_recording : bool
+        Whether recording is currently active
+    enable_clustering : bool
+        Whether clustering is enabled
+    enable_tracking : bool
+        Whether tracking is enabled
+    
+    Notes
+    -----
+    The GUI initializes in a disconnected state. The user must first connect
+    to the radar sensor before starting visualization and recording.
+    """
     def __init__(self):
         # Initialize configuration
         self.config_manager = ConfigManager()
@@ -343,47 +385,33 @@ class RadarGUI:
             self.connect_button.loading = True
             logger.info("Attempting to connect to sensor...")
             
-            # Auto-detect radar type
             if not self._detect_radar_type():
                 raise RadarConnectionError("No supported radar detected")
             
             logger.info(f"Creating {self.radar_type} radar instance")
             self.radar = create_radar()
             
-            # Now connect with the appropriate profile
             self.radar.connect(self.config_file)
             
-            # Create RadarData instance for the connected radar
             self.radar_data = RadarData(self.radar)
             
-            # Update version info in the modal
             if self.radar.version_info:
                 formatted_info = '\n'.join(str(line) for line in self.radar.version_info)
                 self.version_info.value = formatted_info
                 
-            # Set the profile text directly
             if self.config_file:
                 self.config_text.value = self.config_file
             
-            # Initialize parameter controls with current radar settings
             if self.radar.is_connected():
-                # Enable all parameter controls
                 self.clutter_removal_checkbox.disabled = False
                 self.frame_period_slider.disabled = False
                 self.mob_enabled_checkbox.disabled = False
                 
-                # Set initial values from radar
                 try:
-                    # Get clutter removal setting from radar
                     self.clutter_removal_checkbox.value = self.radar.clutterRemoval
-                    
-                    # Get frame period from radar
                     self.frame_period_slider.value = self.radar.frame_period
-                    
-                    # Get MOB settings from radar
                     self.mob_enabled_checkbox.value = self.radar.mob_enabled
                     self.mob_threshold_slider.value = self.radar.mob_threshold
-                    # MOB threshold is only enabled if MOB is enabled
                     self.mob_threshold_slider.disabled = not self.radar.mob_enabled
                 except Exception as e:
                     logger.warning(f"Could not initialize all parameter values from radar: {e}")
@@ -408,15 +436,12 @@ class RadarGUI:
     def _record_callback(self, event):
         """Toggle recording state."""
         if not self.is_recording:
-            # Start recording
             os.makedirs(self.recording_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             base_filename = os.path.join(self.recording_dir, f"radar_data_{timestamp}")
             
-            # Get recording format
             format_type = self.record_format_select.value.lower()
             
-            # Create recorder with clustering and tracking settings
             clustering_params = {
                 'eps': self.cluster_eps_slider.value,
                 'min_samples': self.cluster_min_samples_slider.value
@@ -430,7 +455,6 @@ class RadarGUI:
             }
             
             try:
-                # Create radar recorder with current settings
                 self.recorder = PointCloudRecorder(
                     base_filename,
                     format_type,
@@ -441,7 +465,6 @@ class RadarGUI:
                     tracking_params=tracking_params
                 )
                 
-                # Create camera recorder if camera is running
                 if self.camera_running and self.camera is not None:
                     cameras = {'main': self.camera}  # Use 'main' as ID for single camera
                     self.camera_recorder = CameraRecorder(self.recording_dir, cameras)
@@ -494,7 +517,21 @@ class RadarGUI:
             logger.info("Stopped recording")
     
     def _start_callback(self, event):
-        """Start periodic updates."""
+        """
+        Start periodic updates.
+        
+        This method starts the radar data acquisition and visualization
+        when the user clicks the Start button.
+        
+        Parameters
+        ----------
+        event : param.Event
+            The button click event
+            
+        Returns
+        -------
+        None
+        """
         if not self.is_running and self.radar.is_connected():
             self.stop_button.disabled = False
             self.record_button.disabled = False
@@ -502,14 +539,14 @@ class RadarGUI:
 
             if self.radar.clutterRemoval:
                 self.clutter_removal_checkbox.value = True
-            if self.radar.mobEnabled:
+                
+            if self.radar.mob_enabled:
                 self.mob_enabled_checkbox.value = True
-                self.mob_threshold_slider.value = self.radar.mobThreshold
+                self.mob_threshold_slider.value = self.radar.mob_threshold
             
             # Create a new RadarData instance for the running radar
             self.radar_data = RadarData(self.radar)
             
-            # Initialize clustering and tracking if enabled
             if self.clustering_checkbox.value:
                 self.enable_clustering = True
                 self.clusterer = PointCloudClustering(
@@ -526,7 +563,6 @@ class RadarGUI:
                         max_misses=self.track_max_misses_slider.value
                     )
             
-            # Save current configuration
             self._save_current_config()
             
             # Instead of periodic callback, schedule the first update
@@ -559,7 +595,6 @@ class RadarGUI:
         # Stop the server more gracefully
         if pn.state.curdoc:
             pn.state.curdoc.remove_root(self.layout)
-        # Force exit the program
         os._exit(0)
     
     def _show_config_modal(self, event):
@@ -573,11 +608,9 @@ class RadarGUI:
     def _save_config(self, event):
         """Save the radar profile and hide modal."""
         try:
-            # Save to file
             with open(self.config_file, 'w') as f:
                 f.write(self.config_text.value)
                 
-            # If connected, send profile to sensor
             if self.radar.is_connected():
                 responses = self.radar.send_profile(self.config_text.value)
                 if responses:
@@ -592,16 +625,35 @@ class RadarGUI:
             logger.error(f"Error saving radar profile: {e}")
 
     def create_plot(self):
-        """Create the scatter plot."""
+        """
+        Create the radar point cloud visualization plot.
+        
+        This method initializes the Bokeh figure for visualizing radar data,
+        including point cloud, clusters, and tracks.
+        
+        Returns
+        -------
+        pn.pane.Bokeh
+            Panel pane containing the Bokeh figure
+            
+        Notes
+        -----
+        The plot includes:
+        - Scatter plot for radar points, colored by velocity
+        - Circle glyphs for cluster centers
+        - Labels and segments for tracks and their velocity vectors
+        - A color bar for the velocity scale
+        """
         p = figure(
             title='Radar Point Cloud', 
             width=self.config.display.plot_width,
             height=self.config.display.plot_height,
             x_range=self.config.display.x_range,
-            y_range=self.config.display.y_range
+            y_range=self.config.display.y_range,
+            tools='pan,wheel_zoom,box_zoom,reset,save',
+            toolbar_location='above'
         )
         
-        # Set up the scatter plot with empty data source
         self.data_source = ColumnDataSource({
             'x': [], 
             'y': [], 
@@ -609,7 +661,6 @@ class RadarGUI:
             'size': []
         })
         
-        # Set up the scatter plot
         self.scatter_source = p.scatter(
             x='x',
             y='y', 
@@ -617,10 +668,11 @@ class RadarGUI:
             fill_color={'field': 'velocity', 'transform': self.color_mapper},
             line_color=None,
             alpha=0.6,
-            source=self.data_source
+            source=self.data_source,
+            name='point_cloud'
         )
         
-        # Add cluster centers
+        # Add cluster centers visualization
         p.circle(
             x='x',
             y='y',
@@ -628,17 +680,19 @@ class RadarGUI:
             color='red',
             alpha=0.5,
             line_width=2,
-            source=self.cluster_source
+            source=self.cluster_source,
+            name='clusters'
         )
         
-        # Add track IDs
+        # Add track IDs visualization
         labels = LabelSet(
             x='x',
             y='y',
             text='track_id',
             text_font_size='10pt',
             text_color='blue',
-            source=self.track_source
+            source=self.track_source,
+            name='track_labels'
         )
         p.add_layout(labels)
         
@@ -650,10 +704,10 @@ class RadarGUI:
             y1='vy',
             color='blue',
             line_width=2,
-            source=self.track_source
+            source=self.track_source,
+            name='track_vectors'
         )
         
-        # Add colorbar
         color_bar = ColorBar(
             color_mapper=self.color_mapper,
             title='Velocity (m/s)',
@@ -661,134 +715,98 @@ class RadarGUI:
         )
         p.add_layout(color_bar, 'right')
         
-        # Set up axes
         p.axis.axis_label_text_font_size = '12pt'
         p.axis.axis_label_text_font_style = 'normal'
         p.xaxis.axis_label = 'X Position (m)'
         p.yaxis.axis_label = 'Y Position (m)'
         
+        # Enable grid lines for better readability
+        p.grid.grid_line_alpha = 0.3
+        
         return pn.pane.Bokeh(p)
     
     def update_plot(self):
-        """Update the plot with new radar data using RadarPointCloud."""
+        """
+        Update the plot with new radar data.
         
+        This method retrieves the next point cloud from the radar,
+        processes it and updates the visualization. It handles clustering
+        and tracking if enabled, and records data if recording is active.
+        
+        The method is called periodically when the radar is running.
+        
+        Returns
+        -------
+        None
+        
+        Notes
+        -----
+        This method schedules itself to run again if the radar is still running.
+        """
+        if not self.is_running or self.radar_data is None:
+            return
+            
         try:
-            # Get point cloud using the new iterator functionality
-            if self.radar_data is not None:
-                # Get the next point cloud from the iterator
-                point_cloud = next(iter(self.radar_data))
+            point_cloud = next(iter(self.radar_data))
+            
+            empty_data = {'x': [], 'y': [], 'velocity': [], 'size': []}
+            empty_cluster_data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
+            empty_track_data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            
+            if point_cloud.num_points == 0:
+                self.data_source.data = empty_data
+                self.cluster_source.data = empty_cluster_data
+                self.track_source.data = empty_track_data
                 
-                if point_cloud.num_points > 0:
-                    # Get Cartesian coordinates
-                    x, y, z = point_cloud.to_cartesian()
-                    
-                    # Clip x and y values to plot range
-                    x = np.clip(x, self.config.display.x_range[0], self.config.display.x_range[1])
-                    y = np.clip(y, self.config.display.y_range[0], self.config.display.y_range[1])
-                    
-                    # Clip velocity to color mapper range
-                    velocity = np.clip(point_cloud.velocity, -1, 1)
-                    
-                    # Get SNR values for point sizing
-                    if point_cloud.snr is not None and len(point_cloud.snr) > 0:
-                        snr_values = point_cloud.snr
-                    else:
-                        snr_values = np.ones(point_cloud.num_points) * 30  # Default to mid-range if no SNR
-                    
-                    # Scale and clip SNR only for display
-                    display_sizes = np.clip(snr_values / 60.0, 0, 1)  # Normalize to 0-1 range
-                    point_sizes = 5 + display_sizes * 15  # Scale to range 5-20 pixels
-                    
-                    # Ensure all arrays have the same length before updating
-                    min_length = min(len(x), len(y), len(velocity), len(point_sizes))
-                    
-                    # Update the scatter plot data with consistent lengths
-                    self.data_source.data = {
-                        'x': x[:min_length],
-                        'y': y[:min_length],
-                        'velocity': velocity[:min_length],
-                        'size': point_sizes[:min_length]
-                    }
-                    
-                    # Perform clustering if enabled
-                    if self.enable_clustering and self.clusterer is not None:
-                        clusters = self.clusterer.cluster(point_cloud)
-                        
-                        if clusters:
-                            cluster_x = []
-                            cluster_y = []
-                            cluster_sizes = []
-                            cluster_ids = []
-                            
-                            for i, cluster in enumerate(clusters):
-                                cluster_x.append(cluster.centroid[0])
-                                cluster_y.append(cluster.centroid[1])
-                                cluster_sizes.append(30 + cluster.num_points * 2)  # Size based on number of points
-                                cluster_ids.append(str(i))
-                            
-                            self.cluster_source.data = {
-                                'x': cluster_x,
-                                'y': cluster_y,
-                                'size': cluster_sizes,
-                                'cluster_id': cluster_ids
-                            }
-                            
-                            # Perform tracking if enabled
-                            if self.enable_tracking and self.tracker is not None:
-                                tracks = self.tracker.update(clusters)
-                                
-                                if tracks:
-                                    track_x = []
-                                    track_y = []
-                                    track_ids = []
-                                    track_vx = []  # End points for velocity vectors
-                                    track_vy = []
-                                    
-                                    for track in tracks:
-                                        track_x.append(track.state[0])  # x position
-                                        track_y.append(track.state[1])  # y position
-                                        track_ids.append(str(track.track_id))
-                                        
-                                        # Calculate velocity vector end points
-                                        vel_scale = 0.5  # Scale factor for velocity vectors
-                                        vx = track.state[0] + track.state[3] * vel_scale  # x + vx*scale
-                                        vy = track.state[1] + track.state[4] * vel_scale  # y + vy*scale
-                                        track_vx.append(vx)
-                                        track_vy.append(vy)
-                                    
-                                    self.track_source.data = {
-                                        'x': track_x,
-                                        'y': track_y,
-                                        'track_id': track_ids,
-                                        'vx': track_vx,
-                                        'vy': track_vy
-                                    }
-                                else:
-                                    self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
-                        else:
-                            self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
-                            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
-                    
-                    # Save data if recording is enabled
-                    if self.is_recording and self.recorder:
-                        try:
-                            frame_number = point_cloud.metadata.get('frame_number', 0)
-                            self.recorder.add_frame(point_cloud, frame_number)
-                        except Exception as e:
-                            logger.error(f"Error recording frame: {e}")
-                            # Don't stop recording on error, just log it
+                if self.is_running:
+                    pn.state.add_periodic_callback(self.update_plot, period=10, count=1)
+                return
+                
+            try:
+                x, y, z = point_cloud.to_cartesian()
+                
+                x_range = self.config.display.x_range
+                y_range = self.config.display.y_range
+                x = np.clip(x, x_range[0], x_range[1])
+                y = np.clip(y, y_range[0], y_range[1])
+                
+                velocity = np.clip(point_cloud.velocity, -1, 1)
+                
+                if hasattr(point_cloud, 'snr') and point_cloud.snr is not None and len(point_cloud.snr) > 0:
+                    snr_values = point_cloud.snr
                 else:
-                    # Clear all plots when no points are detected
-                    self.data_source.data = {'x': [], 'y': [], 'velocity': [], 'size': []}
-                    self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
-                    self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+                    snr_values = np.ones(point_cloud.num_points) * 30  # Default to mid-range if no SNR
+                
+                point_sizes = 5 + np.clip(snr_values / 60.0, 0, 1) * 15  # Scale to range 5-20 pixels
+                
+                # Ensure all arrays have the same length before updating
+                min_length = min(len(x), len(y), len(velocity), len(point_sizes))
+                
+                self.data_source.data = {
+                    'x': x[:min_length],
+                    'y': y[:min_length],
+                    'velocity': velocity[:min_length],
+                    'size': point_sizes[:min_length]
+                }
+                
+                self._process_clustering_tracking(point_cloud)
+                
+                if self.is_recording and self.recorder:
+                    try:
+                        frame_number = point_cloud.metadata.get('frame_number', 0)
+                        self.recorder.add_frame(point_cloud, frame_number)
+                    except Exception as e:
+                        logger.error(f"Error recording frame: {e}")
+            except Exception as e:
+                logger.error(f"Error processing point cloud: {e}")
+                self.data_source.data = empty_data
+                self.cluster_source.data = empty_cluster_data
+                self.track_source.data = empty_track_data
 
-            # Schedule next update if still running
             if self.is_running:
                 pn.state.add_periodic_callback(self.update_plot, period=10, count=1)
 
         except StopIteration:
-            # This happens when the radar stops sending data
             logger.warning("No more radar data available")
             self._stop_callback(None)
         except Exception as e:
@@ -798,6 +816,88 @@ class RadarGUI:
             self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
             self._stop_callback(None)
     
+    def _process_clustering_tracking(self, point_cloud):
+        """
+        Process clustering and tracking for a point cloud.
+        
+        This helper method performs clustering and tracking on the 
+        provided point cloud if these features are enabled.
+        
+        Parameters
+        ----------
+        point_cloud : RadarPointCloud
+            The radar point cloud to process
+            
+        Returns
+        -------
+        None
+        """
+        if not (self.enable_clustering and self.clusterer is not None):
+            self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            return
+            
+        clusters = self.clusterer.cluster(point_cloud)
+        
+        if not clusters:
+            self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            return
+            
+        cluster_x = []
+        cluster_y = []
+        cluster_sizes = []
+        cluster_ids = []
+        
+        for i, cluster in enumerate(clusters):
+            cluster_x.append(cluster.centroid[0])
+            cluster_y.append(cluster.centroid[1])
+            cluster_sizes.append(30 + cluster.num_points * 2)  # Size based on number of points
+            cluster_ids.append(str(i))
+        
+        self.cluster_source.data = {
+            'x': cluster_x,
+            'y': cluster_y,
+            'size': cluster_sizes,
+            'cluster_id': cluster_ids
+        }
+        
+        if not (self.enable_tracking and self.tracker is not None):
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            return
+            
+        tracks = self.tracker.update(clusters)
+        
+        if not tracks:
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            return
+            
+        track_x = []
+        track_y = []
+        track_ids = []
+        track_vx = []
+        track_vy = []
+        
+        vel_scale = 0.5
+        
+        for track in tracks:
+            track_x.append(track.state[0])
+            track_y.append(track.state[1])
+            track_ids.append(str(track.track_id))
+            
+            vx = track.state[0] + track.state[3] * vel_scale
+            vy = track.state[1] + track.state[4] * vel_scale
+            track_vx.append(vx)
+            track_vy.append(vy)
+        
+        self.track_source.data = {
+            'x': track_x,
+            'y': track_y,
+            'track_id': track_ids,
+            'vx': track_vx,
+            'vy': track_vy
+        }
+
     def create_layout(self):
         """Create the GUI layout."""
         # Create a header
@@ -885,27 +985,82 @@ class RadarGUI:
         return template
     
     def cleanup(self):
-        """Clean up resources when closing the GUI."""
+        """
+        Clean up resources when closing the GUI.
+        
+        This method ensures all resources are properly released when
+        the application is closing. It:
+        1. Stops radar if running
+        2. Stops recording if active
+        3. Closes radar connection
+        4. Stops camera if running
+        5. Saves final configuration
+        
+        Returns
+        -------
+        None
+        
+        Notes
+        -----
+        This method is designed to be robust, handling exceptions for
+        each cleanup step independently to ensure maximum cleanup success.
+        """
+        logger.info("Performing cleanup...")
+        
         if self.is_running:
-            self._stop_callback(None)
+            try:
+                logger.info("Stopping radar...")
+                self._stop_callback(None)
+            except Exception as e:
+                logger.error(f"Error stopping radar during cleanup: {e}")
+        
         if self.is_recording:
-            if self.recorder:
-                try:
-                    self.recorder.close()
-                except Exception as e:
-                    logger.error(f"Error closing radar recorder during cleanup: {e}")
-            if self.camera_recorder:
-                try:
-                    self.camera_recorder.stop()
-                except Exception as e:
-                    logger.error(f"Error closing camera recorder during cleanup: {e}")
-        if self.radar is not None and self.radar.is_connected():
-            self.radar.close()
-        # Stop camera if running
+            try:
+                logger.info("Stopping recording...")
+                if self.recorder:
+                    try:
+                        self.recorder.close()
+                        logger.info("Radar recorder closed successfully")
+                    except Exception as e:
+                        logger.error(f"Error closing radar recorder during cleanup: {e}")
+                    finally:
+                        self.recorder = None
+                
+                if self.camera_recorder:
+                    try:
+                        self.camera_recorder.stop()
+                        logger.info("Camera recorder closed successfully")
+                    except Exception as e:
+                        logger.error(f"Error closing camera recorder during cleanup: {e}")
+                    finally:
+                        self.camera_recorder = None
+            except Exception as e:
+                logger.error(f"Error stopping recording during cleanup: {e}")
+        
+        if self.radar is not None:
+            try:
+                if self.radar.is_connected():
+                    logger.info("Closing radar connection...")
+                    self.radar.close()
+            except Exception as e:
+                logger.error(f"Error closing radar connection during cleanup: {e}")
+            finally:
+                self.radar = None
+        
         if self.camera_running:
-            self.stop_camera()
-        # Save final configuration
-        self._save_current_config()
+            try:
+                logger.info("Stopping camera...")
+                self.stop_camera()
+            except Exception as e:
+                logger.error(f"Error stopping camera during cleanup: {e}")
+        
+        try:
+            logger.info("Saving configuration...")
+            self._save_current_config()
+        except Exception as e:
+            logger.error(f"Error saving configuration during cleanup: {e}")
+            
+        logger.info("Cleanup completed")
 
     def _detect_radar_type(self):
         """Auto-detect which radar is connected."""
@@ -1001,62 +1156,95 @@ class RadarGUI:
             logger.error(f"Error saving configuration: {e}")
 
     def create_camera_plot(self):
-        """Create the camera display plot."""
+        """
+        Create the camera display plot.
+        
+        This method initializes the Bokeh figure for displaying
+        the camera feed alongside the radar visualization.
+        
+        Returns
+        -------
+        pn.pane.Bokeh
+            Panel pane containing the Bokeh figure for camera display
+            
+        Notes
+        -----
+        The camera plot has no axes or grid lines, just the camera image.
+        """
         p = figure(
             title='Camera View',
             width=640,
             height=480,
             x_range=(0, 640),
             y_range=(0, 480),
-            tools=''
+            tools='',
+            toolbar_location=None
         )
         
-        # Set up the image plot with empty data source
+        self.camera_source = ColumnDataSource({'image': [], 'dw': [], 'dh': []})
+        
         self.camera_plot = p.image_rgba(
             image='image',
             x=0,
             y=0,
             dw='dw',
             dh='dh',
-            source=self.camera_source
+            source=self.camera_source,
+            name='camera_image'
         )
         
-        # Disable axes
         p.axis.visible = False
         p.grid.visible = False
+        p.min_border = 0
         
         return pn.pane.Bokeh(p)
 
     def start_camera(self, event):
-        """Start or stop the camera stream."""
+        """
+        Start or stop the camera stream.
+        
+        This method toggles the camera on/off. When starting, it initializes
+        the camera with the selected device ID and sets up the periodic callback
+        for updating the display.
+        
+        Parameters
+        ----------
+        event : param.Event
+            The button click event
+            
+        Returns
+        -------
+        None
+        """
         if not self.camera_running:
             try:
                 device_id = int(self.camera_select.value)
+                
                 self.camera = OpenCVCamera(device_id=device_id)
                 self.camera.start()
                 self.camera_running = True
+                
                 self.camera_button.name = 'Stop Camera'
                 self.camera_button.button_type = 'danger'
                 
-                # Initialize camera controls based on current settings
                 if self.camera._cap:
-                    # Set autofocus control state
                     is_autofocus = bool(self.camera._cap.get(cv2.CAP_PROP_AUTOFOCUS))
                     self.camera_autofocus.value = is_autofocus
                     self.camera_focus.disabled = is_autofocus
+                    
                     if not is_autofocus:
-                        self.camera_focus.value = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                        focus_value = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                        self.camera_focus.value = focus_value
                 
-                # Stop existing callback if any
-                if hasattr(self, 'camera_callback'):
+                if hasattr(self, 'camera_callback') and self.camera_callback is not None:
                     self.camera_callback.stop()
                     
-                # Create a new periodic callback
                 self.camera_callback = pn.state.add_periodic_callback(
                     self.update_camera,
-                    period=33  # ~30 FPS - more stable than 60 FPS
+                    period=33  # ~30 FPS
                 )
                 logger.info(f"Started camera {device_id}")
+                
             except Exception as e:
                 logger.error(f"Error starting camera: {e}")
                 if self.camera:
@@ -1067,65 +1255,97 @@ class RadarGUI:
             self.stop_camera()
 
     def stop_camera(self, event=None):
-        """Stop the camera stream."""
-        if self.camera_running:
-            self.camera_running = False
-            if hasattr(self, 'camera_callback'):
-                try:
-                    self.camera_callback.stop()
-                except Exception as e:
-                    logger.error(f"Error stopping camera callback: {e}")
-                finally:
-                    del self.camera_callback
-            if self.camera:
-                try:
-                    self.camera.stop()
-                except Exception as e:
-                    logger.error(f"Error stopping camera: {e}")
-                finally:
-                    self.camera = None
-            self.camera_button.name = 'Start Camera'
-            self.camera_button.button_type = 'primary'
+        """
+        Stop the camera stream.
+        
+        This method stops the camera stream, cleans up resources,
+        and updates the UI accordingly.
+        
+        Parameters
+        ----------
+        event : param.Event, optional
+            The button click event, if called from button
             
-            logger.info("Stopped camera")
+        Returns
+        -------
+        None
+        """
+        if not self.camera_running:
+            return
+            
+        self.camera_running = False
+        
+        if hasattr(self, 'camera_callback') and self.camera_callback is not None:
+            try:
+                self.camera_callback.stop()
+            except Exception as e:
+                logger.error(f"Error stopping camera callback: {e}")
+            finally:
+                self.camera_callback = None
+                
+        if self.camera:
+            try:
+                self.camera.stop()
+            except Exception as e:
+                logger.error(f"Error stopping camera: {e}")
+            finally:
+                self.camera = None
+                
+        self.camera_button.name = 'Start Camera'
+        self.camera_button.button_type = 'primary'
+        
+        if len(self.camera_source.data['image']) > 0:
+            self.camera_source.data.update({'image': [], 'dw': [], 'dh': []})
+        
+        logger.info("Stopped camera")
 
     def update_camera(self):
-        """Update the camera display."""
+        """
+        Update the camera display.
+        
+        This method retrieves the next frame from the camera
+        and updates the display. If recording is active, the frame
+        is also recorded.
+        
+        Returns
+        -------
+        None
+        
+        Notes
+        -----
+        This method is called periodically when the camera is running.
+        It skips frames if the camera is falling behind to maintain performance.
+        """
         if not self.camera_running or self.camera is None:
             return
         
         try:
-            # Skip frames if we're falling behind
-            while self.camera_running and self.camera._cap.get(cv2.CAP_PROP_POS_FRAMES) > 0:
-                self.camera._cap.grab()
+            frames_behind = self.camera._cap.get(cv2.CAP_PROP_POS_FRAMES)
+            if frames_behind > 0:
+                for _ in range(int(frames_behind) - 1):
+                    if self.camera_running:
+                        self.camera._cap.grab()
+                    else:
+                        return
             
             frame_data = next(self.camera)
-            if frame_data is not None:
-                # Convert BGR to RGBA more efficiently
-                frame = cv2.cvtColor(frame_data['image'], cv2.COLOR_BGR2RGBA).view(np.uint32).reshape(frame_data['image'].shape[:-1])
+            if frame_data is None:
+                return
                 
-                # Update the image source only if the data has changed
-                if (len(self.camera_source.data['image']) == 0 or 
-                    not np.array_equal(self.camera_source.data['image'][0], frame)):
-                    self.camera_source.data.update({
-                        'image': [frame],
-                        'dw': [frame_data['width']],
-                        'dh': [frame_data['height']]
-                    })
-                    
-                    # If recording is active, add frame to synchronized queue
-                    if self.is_recording and self.camera_recorder:
-                        try:
-                            # The camera recorder will handle synchronization internally
-                            pass  # Frame is already being recorded by the camera_recorder thread
-                        except Exception as e:
-                            logger.error(f"Error recording camera frame: {e}")
-                
-                # Update camera control info if properties changed
-                if not self.camera_autofocus.value:
-                    current_focus = self.camera._cap.get(cv2.CAP_PROP_FOCUS)
-                    if abs(current_focus - self.camera_focus.value) > 0.1:
-                        self.camera_focus.value = int(current_focus)
+            frame = cv2.cvtColor(frame_data['image'], cv2.COLOR_BGR2RGBA).view(np.uint32).reshape(frame_data['image'].shape[:-1])
+            
+            current_images = self.camera_source.data['image']
+            if len(current_images) == 0 or not np.array_equal(current_images[0], frame):
+                self.camera_source.data.update({
+                    'image': [frame],
+                    'dw': [frame_data['width']],
+                    'dh': [frame_data['height']]
+                })
+            
+            if not self.camera_autofocus.value:
+                current_focus = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                if abs(current_focus - self.camera_focus.value) > 0:
+                    self.camera_focus.value = current_focus
             
         except StopIteration:
             logger.warning("Camera stream ended")
