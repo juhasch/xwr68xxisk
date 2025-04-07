@@ -76,13 +76,19 @@ class RadarData:
         try:
             frame_data = radar_connection.read_frame()
             if frame_data is None:
+                logging.warning("No frame data received from radar")
                 return
                 
             header, payload = frame_data
             if header is not None:
                 self.frame_number = header.get('frame_number')
-                self.num_tlvs = header.get('num_detected_obj', 0)
-                self._parse_tlv_data(payload)
+                self.num_tlvs = header.get('num_tlvs', 0)  # Changed from num_detected_obj to num_tlvs
+                try:
+                    self._parse_tlv_data(payload)
+                except Exception as tlv_error:
+                    logging.error(f"Error parsing TLV data: {tlv_error}")
+            else:
+                logging.warning("Header information is missing")
         except Exception as e:
             logging.error(f"Error reading radar data: {e}")
             return
@@ -93,9 +99,19 @@ class RadarData:
         idx = 0  # Start after header
         
         for _ in range(self.num_tlvs):
+            if idx + 8 > len(data_bytes):  # Check if we have enough data to read TLV header
+                logging.warning(f"Insufficient data for TLV header at position {idx}")
+                break
+                
             tlv_type = int.from_bytes(data_bytes[idx:idx+4], byteorder='little')
             tlv_length = int.from_bytes(data_bytes[idx+4:idx+8], byteorder='little')
             idx += 8
+            
+            # Ensure we have enough data to process this TLV
+            if idx + tlv_length > len(data_bytes):
+                logging.warning(f"Insufficient data for TLV type {tlv_type} with length {tlv_length}")
+                break
+                
             if tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS:
                 idx = self._parse_point_cloud(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_PROFILE:
@@ -109,30 +125,65 @@ class RadarData:
 
     def _parse_point_cloud(self, data: bytes, idx: int, tlv_length: int) -> int:
         """Parse point cloud data from TLV."""
-        num_points = tlv_length // 16  # Each point is 16 bytes
+        # Ensure tlv_length is a multiple of 16 (each point is 16 bytes)
+        usable_length = tlv_length - (tlv_length % 16)
+        num_points = usable_length // 16
+        
         x, y, z, v = [], [], [], []
         
-        for point in range(num_points):
-            point_idx = idx + (point * 16)
-            x.append(struct.unpack('f', data[point_idx:point_idx+4])[0])
-            y.append(struct.unpack('f', data[point_idx+4:point_idx+8])[0])
-            z.append(struct.unpack('f', data[point_idx+8:point_idx+12])[0])
-            v.append(struct.unpack('f', data[point_idx+12:point_idx+16])[0])
+        if usable_length <= 0:
+            logging.warning("Point cloud data length is not a multiple of point size (16 bytes)")
+            self.pc = (x, y, z, v)
+            return idx + tlv_length
+        
+        try:
+            for point in range(num_points):
+                point_idx = idx + (point * 16)
+                if point_idx + 16 > len(data):  # Check if we have enough data
+                    logging.warning(f"Insufficient data for point cloud at point {point}")
+                    break
+                
+                try:
+                    x.append(struct.unpack('f', data[point_idx:point_idx+4])[0])
+                    y.append(struct.unpack('f', data[point_idx+4:point_idx+8])[0])
+                    z.append(struct.unpack('f', data[point_idx+8:point_idx+12])[0])
+                    v.append(struct.unpack('f', data[point_idx+12:point_idx+16])[0])
+                except struct.error as e:
+                    logging.warning(f"Error unpacking point cloud data at point {point}: {e}")
+                    continue
+        except Exception as e:
+            logging.error(f"Error processing point cloud data: {e}")
         
         self.pc = (x, y, z, v)
         return idx + tlv_length
 
     def _parse_range_profile(self, data: bytes, idx: int, tlv_length: int) -> int:
         """Parse range profile data from TLV."""
-        self.adc = np.frombuffer(data[idx:idx+tlv_length], dtype=np.uint16)
+        # Ensure tlv_length is a multiple of 2 (size of uint16)
+        usable_length = tlv_length - (tlv_length % 2)
+        if usable_length > 0:
+            self.adc = np.frombuffer(data[idx:idx+usable_length], dtype=np.uint16)
+        else:
+            logging.warning("Range profile data length is not a multiple of uint16 size")
+            self.adc = np.array([], dtype=np.uint16)
         return idx + tlv_length
 
     def _parse_side_info(self, data: bytes, idx: int, tlv_length: int) -> int:
         """Parse side information (SNR and noise) from TLV."""
         num_points = tlv_length // 4
+        self.snr = []
+        self.noise = []
         
         try:
-            for point in range(num_points):
+            # Ensure tlv_length is a multiple of 4 (each point is 4 bytes)
+            usable_length = tlv_length - (tlv_length % 4)
+            usable_points = usable_length // 4
+            
+            if usable_points == 0:
+                logging.warning("Side info data length is not a multiple of point size (4 bytes)")
+                return idx + tlv_length
+                
+            for point in range(usable_points):
                 point_idx = idx + (point * 4)
                 if point_idx + 4 > len(data):  # Check if we have enough data
                     logging.warning(f"Insufficient data for side info at point {point}: needed 4 bytes, had {len(data) - point_idx}")
@@ -168,32 +219,37 @@ class RadarData:
         Returns:
             Updated index after parsing
         """
-        print('1:', idx, tlv_length, len(data))
-        #np.save('heatmap.npy', data[idx:])
-        #heatmap = np.frombuffer(data[idx:], dtype=np.uint16)
-        #np.save('heatmap16.npy', heatmap)
-        #return 0
         # Calculate dimensions based on TLV length and uint16 size
         total_bins = tlv_length // 2  # Each bin is 2 bytes (uint16)
-        # Create numpy array from raw bytes
-        heatmap = np.frombuffer(data[idx:idx+4096], dtype=np.uint16)
-        np.save('heatmap16.npy', heatmap)
-        self.range_doppler_heatmap = heatmap.reshape(128, 16)
-        return idx+4096
         
-        # Get dimensions from radar configuration
-        num_range_bins = self.config_params.get('rangeBins', 256)  # Default from config files
-        num_doppler_bins = self.config_params.get('num_doppler_bins', 16)  # Default from config files
+        # Ensure tlv_length is a multiple of 2 (size of uint16)
+        usable_length = tlv_length - (tlv_length % 2)
         
-        # Verify dimensions match the data
-        if total_bins == num_range_bins * num_doppler_bins:
-            # Reshape using actual dimensions
-            self.range_doppler_heatmap = heatmap.reshape(num_range_bins, num_doppler_bins)
-        else:
-            # Log warning and use square matrix as fallback
-            logging.warning(f"Range-Doppler heatmap dimensions mismatch. Expected {num_range_bins}x{num_doppler_bins} bins but got {total_bins} total bins.")
-            dim = int(np.sqrt(total_bins))
-            self.range_doppler_heatmap = heatmap.reshape(dim, -1)
+        if usable_length <= 0:
+            logging.warning("Range-Doppler heatmap data length is not a multiple of uint16 size")
+            self.range_doppler_heatmap = np.array([], dtype=np.uint16)
+            return idx + tlv_length
+        
+        try:
+            # Create numpy array from raw bytes
+            heatmap = np.frombuffer(data[idx:idx+usable_length], dtype=np.uint16)
+            
+            # Get dimensions from radar configuration
+            num_range_bins = self.config_params.get('rangeBins', 256)  # Default from config files
+            num_doppler_bins = self.config_params.get('num_doppler_bins', 16)  # Default from config files
+            
+            # Verify dimensions match the data
+            if total_bins == num_range_bins * num_doppler_bins:
+                # Reshape using actual dimensions
+                self.range_doppler_heatmap = heatmap.reshape(num_range_bins, num_doppler_bins)
+            else:
+                # Log warning and use square matrix as fallback
+                logging.warning(f"Range-Doppler heatmap dimensions mismatch. Expected {num_range_bins}x{num_doppler_bins} bins but got {total_bins} total bins.")
+                dim = int(np.sqrt(total_bins))
+                self.range_doppler_heatmap = heatmap.reshape(dim, -1)
+        except Exception as e:
+            logging.error(f"Error processing range-Doppler heatmap: {e}")
+            self.range_doppler_heatmap = np.array([], dtype=np.uint16)
         
         return idx + tlv_length
 

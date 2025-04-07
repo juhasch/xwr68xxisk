@@ -395,6 +395,17 @@ class RadarConnection:
                 line = 'clutterRemoval -1 ' + ('1' if self.radar_params['clutterRemoval'] else '0') + '\n'
                 self._clutter_removal = self.radar_params['clutterRemoval']
 
+            # Temporary fix for framePeriod
+            if line.startswith('framePeriod'):
+                line = 'framePeriod ' + str(self.radar_params['framePeriod']) + '\n'
+                self.frame_period = self.radar_params['framePeriod']
+
+            # Temporary fix for multiObjBeamForming
+            if line.startswith('multiObjBeamForming'):
+                line = 'multiObjBeamForming -1 ' + ('1' if self.radar_params['mobEnabled'] else '0') + ' ' + str(self.radar_params['mobThreshold']) + '\n'
+                self.mob_enabled = self.radar_params['mobEnabled']
+                self.mob_threshold = self.radar_params['mobThreshold']
+
             parts = line.split()
             if not parts:
                 continue
