@@ -12,7 +12,6 @@ from typing import Tuple, Optional, List
 import logging
 import os
 import math
-from . import defaultconfig
 
 
 logger = logging.getLogger(__name__)
@@ -39,7 +38,7 @@ class RadarConnection:
         """Initialize RadarConnection instance."""
         self.cli_port: Optional[serial.Serial] = None
         self.data_port: Optional[serial.Serial] = None
-        self.configuration = ""
+        self.profile = ""
         self.version_info = None
         self.serial_number = None
         self.device_type = 'CP2105'  # Only CP2105 is supported
@@ -129,14 +128,14 @@ class RadarConnection:
         
         return cli_port_path, data_port_path
 
-    def detect_radar_type(self) -> Tuple[Optional[str], Optional[str]]:
-        """Detect which type of radar is connected and return its type and config file."""
+    def detect_radar_type(self) -> str:
+        """Detect which type of radar is connected and return its type."""
         if not (self._detected_cli_port and self._detected_data_port):
             self._detected_cli_port, self._detected_data_port = self.find_serial_ports()
         
         if self._detected_cli_port and self._detected_data_port:
             logger.info("Detected XWR68xx radar via CP2105 interface")
-            return "xwr68xx", defaultconfig.xwr68xx_str
+            return "xwr68xx"
             
         return None, None
 
@@ -207,17 +206,33 @@ class RadarConnection:
         except Exception as e:
             return [f"Error getting version: {e}"]
 
-    def connect(self, config: Optional[str] = None, serial_number: Optional[str] = None) -> None:
-        """Connect to the radar sensor."""
+    def connect(self, config: str, serial_number: Optional[str] = None) -> None:
+        """Connect to the radar sensor.
+        
+        Args:
+            config: Configuration string or path to a configuration file.
+            serial_number: Optional[str] = None - Serial number of the radar to connect to.
+        """
         try:
             self._connect_device(serial_number)
-            self.configuration = self._load_configuration(config, defaultconfig.xwr68xx_str)
+            
+            # If config is a file path, read it
+            if config and os.path.isfile(config):
+                logger.info(f"Reading configuration from file: {config}")
+                with open(config, 'r') as f:
+                    self.profile = f.read()
+            else:
+                logger.info("Using supplied configuration")
+                self.profile = config
             self.version_info = self.get_version()
             
             if not self.version_info:
                 raise RadarConnectionError("No response from sensor - check connections")
                 
         except serial.SerialException as e:
+            raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
+            
+        except Exception as e:
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
 
     def set_frame_period(self, period_ms: float) -> None:
@@ -311,11 +326,14 @@ class RadarConnection:
         
         return "\n".join(formatted_lines)
 
-    def send_configuration(self, ignore_response: bool = False) -> None:
-        """Send the configuration to the radar efficiently."""
+    def send_profile(self, ignore_response: bool = False) -> None:
+        """Send the profile to the radar efficiently."""
         self.cli_port.flushInput()
         
-        config_lines = [line.strip() for line in self.configuration.split('\n') if line.strip()]
+        if self.profile is None:
+            raise RadarConnectionError("No radar profile available. Please load a profile before sending.")
+            
+        config_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
         self.radar_params = self.parse_configuration(config_lines)
         logger.info(f"Parsed radar parameters:{self._format_radar_params(self.radar_params)}")
         
@@ -333,7 +351,7 @@ class RadarConnection:
         }
         
         for line in config_lines:
-            if not line or line.startswith('%'):
+            if not line or line.startswith('%') or line.startswith('sensorStart'):
                 continue
                 
             parts = line.split()
@@ -476,7 +494,7 @@ class RadarConnection:
 
     def configure_and_start(self) -> None:
         """Configure the radar and start streaming data."""
-        self.send_configuration()
+        self.send_profile()
         self.cli_port.write(b'sensorStart\n')
         self.is_running = True
         logger.info("Radar configured and started")
@@ -511,20 +529,6 @@ class RadarConnection:
         """Check if radar is connected."""
         return (self.cli_port is not None and self.cli_port.is_open and 
                 self.data_port is not None and self.data_port.is_open)
-
-    def _load_configuration(self, config: Optional[str], default_config: str) -> str:
-        """Load configuration from file or use default."""
-        if config is None:
-            return default_config
-            
-        if os.path.isfile(config):
-            try:
-                with open(config, 'r') as f:
-                    return f.read()
-            except Exception as e:
-                raise RadarConnectionError(f"Failed to read configuration file: {e}")
-                
-        return config
 
 
 def create_radar() -> RadarConnection:

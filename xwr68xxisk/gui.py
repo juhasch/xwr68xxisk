@@ -41,6 +41,15 @@ class RadarGUI:
         self.radar_type = None
         self.radar_data = None
         
+        # Set default profile path
+        self.config_file = os.path.join('configs', 'user_profile.cfg')
+        # Create configs directory if it doesn't exist
+        os.makedirs('configs', exist_ok=True)
+        # Create default profile if it doesn't exist
+        if not os.path.exists(self.config_file):
+            with open(self.config_file, 'w') as f:
+                f.write("% Default radar profile\n% This file can be modified or replaced using the 'Load Profile' button\n")
+        
         # Initialize camera
         self.camera = None
         self.camera_source = ColumnDataSource({'image': [], 'dw': [], 'dh': []})
@@ -48,13 +57,13 @@ class RadarGUI:
         self.camera_running = False
         
         # Create all control widgets first
-        self.load_config_button = pn.widgets.FileInput(name='Load Config', accept='.cfg')
+        self.load_config_button = pn.widgets.FileInput(name='Load Profile', accept='.cfg')
         self.connect_button = pn.widgets.Button(name='Connect to Sensor', button_type='primary')
         self.start_button = pn.widgets.Button(name='Start', button_type='primary')
         self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
         self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
         self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
-        self.config_button = Button(name="Configure Sensor", button_type="primary", disabled=True)
+        self.config_button = Button(name="Configure Profile", button_type="primary", disabled=True)
         
         # Create camera controls
         self.camera_select = pn.widgets.Select(
@@ -196,13 +205,13 @@ class RadarGUI:
         # Create configuration modal components
         self.config_modal = pn.Column(
             pn.Row(
-                pn.pane.Markdown('## Sensor Configuration'),
+                pn.pane.Markdown('## Sensor Profile'),
                 pn.layout.HSpacer(),
                 pn.widgets.Button(name='✕', width=30, align='end'),
                 sizing_mode='stretch_width'
             ),
             TextAreaInput(
-                name="Configuration",
+                name="Profile Settings",
                 height=300,
                 width=750,
                 value="",  # Will be loaded from file
@@ -248,9 +257,6 @@ class RadarGUI:
         self.tracker = None
         self.enable_clustering = self.config.clustering.enabled
         self.enable_tracking = self.config.tracking.enabled
-        
-        # Load default configuration
-        self.config_file = None
         
         # Add timing variable
         self.last_update_time = None
@@ -306,13 +312,24 @@ class RadarGUI:
         self.is_running = False
         
         # Set initial configuration text
-        self.config_text.value = "# Connect to sensor to load configuration"
+        self.config_text.value = "# Connect to sensor to load profile"
     
     def _load_config_callback(self, event):
-        """Handle loading of configuration file."""
+        """Handle loading of radar profile file."""
         if event.new:  # Check if a file was actually uploaded
-            self.config_file = event.new.decode('utf-8')
-            logger.info("Loaded configuration file")
+            try:
+                # Get the uploaded profile content
+                profile_str = event.new.decode('utf-8')
+                
+                # Write to the default profile location, overwriting if it exists
+                with open(self.config_file, 'w') as f:
+                    f.write(profile_str)
+                
+                logger.info(f"Loaded radar profile: {self.config_file}")
+                
+            except Exception as e:
+                logger.error(f"Error loading radar profile: {e}")
+                # Don't reset config_file on error since we want to keep the default
     
     def _clutter_removal_callback(self, event):
         """Handle clutter removal checkbox changes."""
@@ -333,7 +350,7 @@ class RadarGUI:
             logger.info(f"Creating {self.radar_type} radar instance")
             self.radar = create_radar()
             
-            # Now connect with the appropriate configuration
+            # Now connect with the appropriate profile
             self.radar.connect(self.config_file)
             
             # Create RadarData instance for the connected radar
@@ -344,7 +361,7 @@ class RadarGUI:
                 formatted_info = '\n'.join(str(line) for line in self.radar.version_info)
                 self.version_info.value = formatted_info
                 
-            # Set the configuration text directly
+            # Set the profile text directly
             if self.config_file:
                 self.config_text.value = self.config_file
             
@@ -541,43 +558,34 @@ class RadarGUI:
         # Force exit the program
         os._exit(0)
     
-    def _load_initial_config(self):
-        """Load the initial configuration from file."""
-        try:
-            with open(self.config_file, 'r') as f:
-                self.config_text.value = f.read()
-        except Exception as e:
-            logger.error(f"Error loading configuration: {e}")
-            self.config_text.value = "# Error loading configuration file"
-
     def _show_config_modal(self, event):
-        """Show the configuration modal."""
+        """Show the sensor profile modal."""
         self.config_modal.visible = True
 
     def _hide_config_modal(self, event):
-        """Hide the configuration modal."""
+        """Hide the sensor profile modal."""
         self.config_modal.visible = False
 
     def _save_config(self, event):
-        """Save the configuration and hide modal."""
+        """Save the radar profile and hide modal."""
         try:
             # Save to file
             with open(self.config_file, 'w') as f:
                 f.write(self.config_text.value)
                 
-            # If connected, send configuration to sensor
+            # If connected, send profile to sensor
             if self.radar.is_connected():
-                responses = self.radar.send_config(self.config_text.value)
+                responses = self.radar.send_profile(self.config_text.value)
                 if responses:
                     logger.info("Sensor responses:")
                     for response in responses:
                         logger.info(f"  {response}")
                 
-            logger.info("Configuration saved successfully")
+            logger.info("Radar profile saved successfully")
             self._hide_config_modal(None)
             
         except Exception as e:
-            logger.error(f"Error saving configuration: {e}")
+            logger.error(f"Error saving radar profile: {e}")
 
     def create_plot(self):
         """Create the scatter plot."""
@@ -899,7 +907,7 @@ class RadarGUI:
         """Auto-detect which radar is connected."""
         # Check serial ports and identify device type
         radar_base = RadarConnection()
-        self.radar_type, self.config_file = radar_base.detect_radar_type()
+        self.radar_type = radar_base.detect_radar_type()
         return self.radar_type is not None
 
     def _toggle_params_panel(self, event):
