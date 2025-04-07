@@ -18,7 +18,6 @@ dependencies = [
     "bokeh >= 3.5.0",
     "colorcet >= 3.0.0",
     "holoviews >= 1.16.0",
-    "mmwserial >= 0.1.0",
     "pypcd >= 0.2.0",
     "opencv-python",
     "scikit-learn",

@@ -24,6 +24,7 @@ class RadarData:
         side_info (Tuple[List[float], List[float]]): SNR and noise data
         snr (List[float]): Signal-to-noise ratio for each point
         noise (List[float]): Noise level for each point
+        range_doppler_heatmap (np.ndarray): Range-Doppler heat map matrix (range bins × Doppler bins)
     """
     
     # TLV (Type-Length-Value) types
@@ -37,18 +38,19 @@ class RadarData:
     MMWDEMO_OUTPUT_MSG_AZIMUT_ELEVATION_STATIC_HEAT_MAP = 8
     MMWDEMO_OUTPUT_MSG_TEMPERATURE_STATS = 9
   
-    def __init__(self, radar_connection=None):
+    def __init__(self, radar_connection=None, config_params: Dict[str, Any] = None):
         """
         Initialize and parse radar data packet.
 
         Args:
             radar_connection: RadarConnection instance to read data from
+            config_params: Optional dictionary containing radar configuration parameters
 
         Raises:
             ValueError: If packet format is invalid or magic number doesn't match
         """
         # Initialize data containers
-        self.pc: Optional[Tuple[List[float], ...]] = None
+        self.pc: Optional[Tuple[List[float], List[float], List[float], List[float]]] = None
         self.adc: Optional[np.ndarray] = None
         self.snr: List[float] = []
         self.noise: List[float] = []
@@ -61,9 +63,12 @@ class RadarData:
         self.time_cpu_cycles = None
         self.num_detected_obj = 0
         self.subframe_number = None
+        self.range_doppler_heatmap = None
         
         # Store the radar connection for iterator functionality
         self.radar_connection = radar_connection
+        
+        self.config_params = config_params or {}
         
         if radar_connection is None or not radar_connection.is_connected() or not radar_connection.is_running:
             return
@@ -97,6 +102,8 @@ class RadarData:
                 idx = self._parse_range_profile(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO:
                 idx = self._parse_side_info(data_bytes, idx, tlv_length)
+            elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_DOPPLER_HEAT_MAP:
+                idx = self._parse_range_doppler_heatmap(data_bytes, idx, tlv_length)
             else:
                 idx += tlv_length
 
@@ -127,14 +134,66 @@ class RadarData:
         try:
             for point in range(num_points):
                 point_idx = idx + (point * 4)
-                if point_idx + 4 <= len(data):  # Check if we have enough data
-                    self.snr.append(struct.unpack('h', data[point_idx:point_idx+2])[0] * 0.1)
-                    self.noise.append(struct.unpack('h', data[point_idx+2:point_idx+4])[0] * 0.1)
-        except struct.error:
-            logging.warning("Error unpacking side info data")
-            logging.debug(f"num_points: {num_points}")
+                if point_idx + 4 > len(data):  # Check if we have enough data
+                    logging.warning(f"Insufficient data for side info at point {point}: needed 4 bytes, had {len(data) - point_idx}")
+                    break
+                    
+                try:
+                    snr_val = struct.unpack('h', data[point_idx:point_idx+2])[0] * 0.1
+                    noise_val = struct.unpack('h', data[point_idx+2:point_idx+4])[0] * 0.1
+                    self.snr.append(snr_val)
+                    self.noise.append(noise_val)
+                except struct.error as e:
+                    logging.warning(f"Error unpacking side info at point {point}: {e}")
+                    continue
+                
+        except Exception as e:
+            logging.warning(f"Error processing side info data: {e}")
             self.snr = []
             self.noise = []
+        
+        return idx + tlv_length
+
+    def _parse_range_doppler_heatmap(self, data: bytes, idx: int, tlv_length: int) -> int:
+        """Parse range-Doppler heat map data from TLV.
+        
+        The heat map is a log magnitude range-Doppler matrix stored as uint16_t values.
+        Size = number of range bins × number of Doppler bins
+        
+        Args:
+            data: Raw data bytes
+            idx: Current index in data
+            tlv_length: Length of TLV data in bytes
+            
+        Returns:
+            Updated index after parsing
+        """
+        print('1:', idx, tlv_length, len(data))
+        #np.save('heatmap.npy', data[idx:])
+        #heatmap = np.frombuffer(data[idx:], dtype=np.uint16)
+        #np.save('heatmap16.npy', heatmap)
+        #return 0
+        # Calculate dimensions based on TLV length and uint16 size
+        total_bins = tlv_length // 2  # Each bin is 2 bytes (uint16)
+        # Create numpy array from raw bytes
+        heatmap = np.frombuffer(data[idx:idx+4096], dtype=np.uint16)
+        np.save('heatmap16.npy', heatmap)
+        self.range_doppler_heatmap = heatmap.reshape(128, 16)
+        return idx+4096
+        
+        # Get dimensions from radar configuration
+        num_range_bins = self.config_params.get('rangeBins', 256)  # Default from config files
+        num_doppler_bins = self.config_params.get('num_doppler_bins', 16)  # Default from config files
+        
+        # Verify dimensions match the data
+        if total_bins == num_range_bins * num_doppler_bins:
+            # Reshape using actual dimensions
+            self.range_doppler_heatmap = heatmap.reshape(num_range_bins, num_doppler_bins)
+        else:
+            # Log warning and use square matrix as fallback
+            logging.warning(f"Range-Doppler heatmap dimensions mismatch. Expected {num_range_bins}x{num_doppler_bins} bins but got {total_bins} total bins.")
+            dim = int(np.sqrt(total_bins))
+            self.range_doppler_heatmap = heatmap.reshape(dim, -1)
         
         return idx + tlv_length
 
@@ -188,11 +247,12 @@ class RadarData:
         # Calculate RCS values based on SNR and range
         # This is a simplified model; actual RCS calculation would depend on radar parameters
         if snr_array is not None and len(snr_array) > 0:
-            # Convert SNR from dB to linear scale
-            snr_linear = 10**(snr_array/10)
+            # Convert SNR from dB to linear scale with clipping to prevent overflow
+            snr_db = np.clip(snr_array, -100, 100)  # Limit SNR range to prevent overflow
+            snr_linear = np.power(10.0, snr_db/10.0)
             # RCS is proportional to SNR * range^4 (radar equation)
             # This is a simplified calculation for demonstration
-            rcs_array = snr_linear * (range_array**4) / 1e6  # Scaling factor
+            rcs_array = snr_linear * np.power(range_array, 4) / 1e6  # Scaling factor
             # Convert back to dB scale
             rcs_array = 10 * np.log10(np.maximum(rcs_array, 1e-10))
         else:
@@ -228,6 +288,38 @@ class RadarData:
                 f"Number of Detected Objects: {self.num_detected_obj}\n"
                 f"Number of TLVs: {self.num_tlvs}\n"
                 f"Subframe Number: {hex(self.subframe_number) if self.subframe_number is not None else 'N/A'}")
+
+    def get_range_doppler_heatmap(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Get the range-Doppler heatmap with proper scaling and axes.
+        
+        Returns:
+            Tuple containing:
+            - 2D numpy array of heatmap values in dB
+            - 1D numpy array of range values in meters
+            - 1D numpy array of velocity values in m/s
+        """
+        if self.range_doppler_heatmap is None:
+            return np.array([]), np.array([]), np.array([])
+            
+        # Get radar parameters
+        num_range_bins = self.config_params.get('rangeBins', 256)
+        range_resolution = self.config_params.get('rangeStep', 0.1)  # meters per bin
+        
+        # Calculate velocity resolution from chirp parameters
+        chirp_duration = self.config_params.get('rampEndTime', 60) * 1e-6  # Convert μs to seconds
+        chirps_per_frame = self.config_params.get('chirpsPerFrame', 32)
+        wavelength = 3e8 / (77e9)  # Speed of light / radar frequency (assuming 77 GHz)
+        velocity_resolution = wavelength / (4 * chirp_duration * chirps_per_frame)  # m/s per bin
+        
+        # Create range and velocity axes
+        range_axis = np.arange(num_range_bins) * range_resolution
+        num_doppler_bins = self.range_doppler_heatmap.shape[1]
+        velocity_axis = np.linspace(-num_doppler_bins//2, num_doppler_bins//2-1, num_doppler_bins) * velocity_resolution
+        
+        # Convert heatmap values to dB (assuming they are linear magnitude)
+        heatmap_db = 20 * np.log10(self.range_doppler_heatmap + 1)  # Add 1 to avoid log(0)
+        print(heatmap_db.shape)
+        return heatmap_db, range_axis, velocity_axis
 
 
 class RadarDataIterator:

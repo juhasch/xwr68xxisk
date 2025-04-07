@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from xwr68xxisk.parse import RadarData, MAGIC_NUMBER
+from xwr68xxisk.parse import RadarData
 
 class MockRadarConnection:
     def __init__(self, data):

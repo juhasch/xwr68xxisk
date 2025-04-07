@@ -129,6 +129,10 @@ class CameraRecorder:
         for csv_file in self.csv_files.values():
             csv_file.close()
             
+        # Stop all cameras
+        for camera in self.cameras.values():
+            camera.stop()
+            
         self.video_writers.clear()
         self.csv_files.clear()
         self.csv_writers.clear()
