@@ -45,7 +45,7 @@ class RadarConnection:
         self.device_type = 'CP2105'  # Only CP2105 is supported
         self.is_running = False
         self._clutter_removal = False  # Default value for clutter removal
-        self.frame_period = 200  # Default frame period in milliseconds
+
         self.mob_enabled = False  # Default value for moving object detection
         self.mob_threshold = 0.5  # Default value for moving object detection threshold
         
@@ -57,7 +57,7 @@ class RadarConnection:
         self.byte_buffer = np.zeros(self.MAX_BUFFER_SIZE, dtype='uint8')
         self.byte_buffer_length = 0
         self.current_index = 0
-        self.radar_params = {}  # Work in progress
+        self.radar_params = None  # Work in progress
         self.debug_dir = "debug_data"
         os.makedirs(self.debug_dir, exist_ok=True)
         self.reader = None
@@ -66,6 +66,16 @@ class RadarConnection:
         self.total_frames = 0
         self.invalid_packets = 0
         self.failed_reads = 0
+
+    @property
+    def frame_period(self) -> float:
+        """Get the frame period in milliseconds."""
+        return self.radar_params['framePeriod']
+
+    @frame_period.setter
+    def frame_period(self, value: float) -> None:
+        """Set the frame period in milliseconds."""
+        self.radar_params['framePeriod'] = value
 
     @property
     def clutterRemoval(self) -> bool:
@@ -169,7 +179,12 @@ class RadarConnection:
         return response
 
     def send_command(self, command: str, ignore_response: bool = False) -> None:
-        """Send a command to the radar and verify responses."""
+        """Send a command to the radar and verify responses.
+        
+        Args:
+            command: Command to send to the radar.
+            ignore_response: If True, do not wait for a response from the radar.
+        """
         self.cli_port.write(f"{command}\n".encode())
         logger.debug(f"Sent command: {command}")
         
@@ -194,7 +209,8 @@ class RadarConnection:
     def get_version(self):
         """Get version information from the sensor."""
         if not self.is_connected():
-            return "Error: Sensor not connected"
+            logger.error("Radar not connected")
+            return
             
         try:
             self.cli_port.flushInput()
@@ -237,14 +253,23 @@ class RadarConnection:
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
 
     def set_frame_period(self, period_ms: float) -> None:
-        """Set the frame period in milliseconds."""
+        """Set the frame period in milliseconds.
+        
+        Args:
+            period_ms: Frame period in milliseconds.
+
+        Somehow, we need to send a complete profile to the radar to set the frame period.
+        """
         if not self.is_connected():
             logger.error("Radar not connected")
             return
             
         try:
-            self.send_command(f'frameCfg 0 1 16 0 {int(period_ms)} 1 0')
             self.frame_period = period_ms
+            self.cli_port.write(b'\n')
+            time.sleep(0.05)
+            self.send_command('sensorStop')
+            self.configure_and_start()
             logger.info(f"Frame period set to {period_ms}ms")
         except Exception as e:
             logger.error(f"Error setting frame period: {e}")
@@ -293,7 +318,6 @@ class RadarConnection:
                     # Only override framePeriod if not set from YAML
                     if 'framePeriod' not in config_params:
                         config_params['framePeriod'] = float(args[4])
-                        self.frame_period = float(args[4])
                     
                 elif cmd == 'multiObjBeamForming':
                     if len(args) >= 3:
@@ -331,8 +355,8 @@ class RadarConnection:
             self.mob_enabled = config_params['mobEnabled']
         if 'mobThreshold' in config_params:
             self.mob_threshold = config_params['mobThreshold']
-        if 'framePeriod' in config_params:
-            self.frame_period = config_params['framePeriod']
+#        if 'framePeriod' in config_params:
+#            self.frame_period = config_params['framePeriod']
             
         return config_params
 
@@ -366,18 +390,15 @@ class RadarConnection:
         profile_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
 
         # Work in progress, parsing leads to nothing right now
-        self.radar_params = self.parse_configuration(profile_lines)
+        if self.radar_params is None:
+            self.radar_params = self.parse_configuration(profile_lines)
         #logger.info(f"Parsed radar parameters:{self._format_radar_params(self.radar_params)}")
-
     
         init_commands = [
             'sensorStop',
             'flushCfg'
         ]
         
-
-        #self.send_command('clutterRemoval -1 ' + ('1' if self.radar_params['clutterRemoval'] else '0') + '\n')
-
         ordered_commands = {
             'init': init_commands,
             'dfe': [],
@@ -395,10 +416,15 @@ class RadarConnection:
                 line = 'clutterRemoval -1 ' + ('1' if self.radar_params['clutterRemoval'] else '0') + '\n'
                 self._clutter_removal = self.radar_params['clutterRemoval']
 
-            # Temporary fix for framePeriod
-            if line.startswith('framePeriod'):
-                line = 'framePeriod ' + str(self.radar_params['framePeriod']) + '\n'
+            # Temporary fix for frame period
+            # replace 5th argument with framePeriod
+            if line.startswith('frameCfg'):
                 self.frame_period = self.radar_params['framePeriod']
+                parts = line.split()
+                print('old:',line)
+                parts[5] = str(int(self.frame_period))
+                line = ' '.join(parts)
+                print('new:',line)
 
             # Temporary fix for multiObjBeamForming
             if line.startswith('multiObjBeamForming'):
@@ -547,7 +573,7 @@ class RadarConnection:
     def configure_and_start(self) -> None:
         """Configure the radar and start streaming data."""
         self.send_profile()
-        self.cli_port.write(b'sensorStart\n')
+        self.send_command('sensorStart')
         self.is_running = True
         logger.info("Radar configured and started")
 
