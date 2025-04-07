@@ -679,8 +679,8 @@ class RadarGUI:
                     x, y, z = point_cloud.to_cartesian()
                     
                     # Clip x and y values to plot range
-                    x = np.clip(x, -2.5, 2.5)
-                    y = np.clip(y, 0, 5)
+                    x = np.clip(x, self.config.display.x_range[0], self.config.display.x_range[1])
+                    y = np.clip(y, self.config.display.y_range[0], self.config.display.y_range[1])
                     
                     # Clip velocity to color mapper range
                     velocity = np.clip(point_cloud.velocity, -1, 1)
