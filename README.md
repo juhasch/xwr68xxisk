@@ -28,12 +28,12 @@ pip install .
 ```bash
 xwr68xxisk --help
 
-usage: xwr68xxisk [-h] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--serial-number SERIAL_NUMBER] {gui,record} ...
+usage: xwr68xxisk [-h] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--serial-number SERIAL_NUMBER] {gui,record,dora} ...
 
 XWR68XX ISK Radar Tools
 
 positional arguments:
-  {gui,record}          Available commands
+  {gui,record,dora}     Available commands
     gui                 Start the radar GUI
     record              Record radar data to CSV file
     dora                Start the dora-rs node interface
@@ -44,13 +44,28 @@ options:
                         Set the logging level (default: INFO)
   --serial-number SERIAL_NUMBER
                         Radar serial number in hex format "1234ABCD"
+
 ```
 
 The serial number is unique and read from the USB interface of the sensor.
 
-### Commandline usage
+### Configuration
+
+The default radar profile is stored in `configs/user_profile.cfg`. 
+The package configuration can be found in `configs/default_config.yaml`
+
+### Commandline recording
 
 ```bash
+
+$ xwr68xxisk record --help
+usage: xwr68xxisk record [-h] [--profile PROFILE]
+
+options:
+  -h, --help         show this help message and exit
+  --profile PROFILE  Path to the radar profile configuration file
+
+
 $ xwr68xxisk record
 2025-02-20 09:49:47 - INFO - Found CLI port: /dev/ttyUSB0
 2025-02-20 09:49:47 - INFO - Found Data port: /dev/ttyUSB1
@@ -73,5 +88,7 @@ $ xwr68xxisk gui
 
 ![GUI](output.gif)
 
+### Dora
 
+The [Dora](https://github.com/dora-rs/dora) node is work in progress.
 
