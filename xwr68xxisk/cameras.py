@@ -596,7 +596,6 @@ class RaspberryPiCamera(BaseCamera):
             'buffer_size': 1,  # Minimize buffer size
             'autofocus': True,  # Enable autofocus by default
             'focus': -1,      # Focus value when autofocus is disabled
-            'format': 'RGB888'  # Default format
         }
         self._last_frame_time = 0
         self._frame_interval = 1.0 / self._config['fps']
@@ -607,12 +606,9 @@ class RaspberryPiCamera(BaseCamera):
         
         self._picam2 = Picamera2()
         
-        # Configure camera
-        config = self._picam2.create_still_configuration(
-            main={
-                "size": (self._config['width'], self._config['height']),
-                "format": self._config['format']
-            },
+        # Configure camera for video streaming
+        config = self._picam2.create_video_configuration(
+            main={"size": (self._config['width'], self._config['height'])},
             controls={
                 "FrameDurationLimits": (int(1e6 / self._config['fps']), int(1e6 / self._config['fps']))
             }
