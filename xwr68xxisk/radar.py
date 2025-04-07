@@ -12,6 +12,7 @@ from typing import Tuple, Optional, List
 import logging
 import os
 import math
+import yaml
 
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class RadarConnection:
         self.byte_buffer = np.zeros(self.MAX_BUFFER_SIZE, dtype='uint8')
         self.byte_buffer_length = 0
         self.current_index = 0
-        self.radar_params = {}
+        self.radar_params = {}  # Work in progress
         self.debug_dir = "debug_data"
         os.makedirs(self.debug_dir, exist_ok=True)
         self.reader = None
@@ -252,6 +253,20 @@ class RadarConnection:
         """Parse configuration lines and extract radar parameters."""
         config_params = {}
         
+        # First load default values from YAML if available
+        yaml_config_path = 'configs/default_config.yaml'
+        if os.path.exists(yaml_config_path):
+            try:
+                with open(yaml_config_path, 'r') as f:
+                    yaml_config = yaml.safe_load(f)
+                    # Pre-populate with YAML settings
+                    config_params['clutterRemoval'] = yaml_config['processing']['clutter_removal']
+                    config_params['framePeriod'] = yaml_config['processing']['frame_period_ms']
+                    config_params['mobEnabled'] = yaml_config['processing']['mob_enabled']
+                    config_params['mobThreshold'] = yaml_config['processing']['mob_threshold']
+            except Exception as e:
+                logger.warning(f"Failed to load YAML config: {e}")
+        
         for line in config_lines:
             if not line or line.startswith('%'):
                 continue
@@ -275,21 +290,26 @@ class RadarConnection:
                     
                 elif cmd == 'frameCfg':
                     config_params['chirpsPerFrame'] = (int(args[1]) - int(args[0]) + 1) * int(args[2])
-                    config_params['framePeriod'] = float(args[4])
-                    self.frame_period = float(args[4])
+                    # Only override framePeriod if not set from YAML
+                    if 'framePeriod' not in config_params:
+                        config_params['framePeriod'] = float(args[4])
+                        self.frame_period = float(args[4])
                     
                 elif cmd == 'multiObjBeamForming':
                     if len(args) >= 3:
-                        self.mob_enabled = int(args[1]) == 1
-                        self.mob_threshold = float(args[2])
-                        config_params['mobEnabled'] = self.mob_enabled
-                        config_params['mobThreshold'] = self.mob_threshold
+                        # Only override if not set from YAML
+                        if 'mobEnabled' not in config_params:
+                            self.mob_enabled = int(args[1]) == 1
+                            self.mob_threshold = float(args[2])
+                            config_params['mobEnabled'] = self.mob_enabled
+                            config_params['mobThreshold'] = self.mob_threshold
                         
                 elif cmd == 'clutterRemoval':
                     if len(args) >= 2:
-                        self._clutter_removal = int(args[1]) == 1
-                        config_params['clutterRemoval'] = self._clutter_removal
-                    
+                        # Only override if not set from YAML
+                        if 'clutterRemoval' not in config_params:
+                            self._clutter_removal = int(args[1]) == 1
+                            config_params['clutterRemoval'] = self._clutter_removal
             except (ValueError, IndexError) as e:
                 logger.warning(f"Error parsing configuration line '{line}': {e}")
                 continue
@@ -303,7 +323,17 @@ class RadarConnection:
         if all(k in config_params for k in ['sampleRate', 'slope', 'rangeBins']):
             config_params['rangeStep'] = (3e8 * config_params['sampleRate'] * 1e3) / (2 * config_params['slope'] * 1e12 * config_params['rangeBins'] * 2)
             config_params['maxRange'] = config_params['rangeStep'] * config_params['rangeBins']
-        
+            
+        # Apply the parsed configuration to instance variables
+        if 'clutterRemoval' in config_params:
+            self._clutter_removal = config_params['clutterRemoval']
+        if 'mobEnabled' in config_params:
+            self.mob_enabled = config_params['mobEnabled']
+        if 'mobThreshold' in config_params:
+            self.mob_threshold = config_params['mobThreshold']
+        if 'framePeriod' in config_params:
+            self.frame_period = config_params['framePeriod']
+            
         return config_params
 
     def _format_radar_params(self, params: dict) -> str:
@@ -333,15 +363,21 @@ class RadarConnection:
         if self.profile is None:
             raise RadarConnectionError("No radar profile available. Please load a profile before sending.")
             
-        config_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
-        self.radar_params = self.parse_configuration(config_lines)
-        logger.info(f"Parsed radar parameters:{self._format_radar_params(self.radar_params)}")
-        
+        profile_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
+
+        # Work in progress, parsing leads to nothing right now
+        self.radar_params = self.parse_configuration(profile_lines)
+        #logger.info(f"Parsed radar parameters:{self._format_radar_params(self.radar_params)}")
+
+    
         init_commands = [
             'sensorStop',
             'flushCfg'
         ]
         
+
+        #self.send_command('clutterRemoval -1 ' + ('1' if self.radar_params['clutterRemoval'] else '0') + '\n')
+
         ordered_commands = {
             'init': init_commands,
             'dfe': [],
@@ -350,10 +386,15 @@ class RadarConnection:
             'other': []
         }
         
-        for line in config_lines:
+        for line in profile_lines:
             if not line or line.startswith('%') or line.startswith('sensorStart'):
                 continue
-                
+
+            # Temporary fix for clutterRemoval
+            if line.startswith('clutterRemoval'):
+                line = 'clutterRemoval -1 ' + ('1' if self.radar_params['clutterRemoval'] else '0') + '\n'
+                self._clutter_removal = self.radar_params['clutterRemoval']
+
             parts = line.split()
             if not parts:
                 continue

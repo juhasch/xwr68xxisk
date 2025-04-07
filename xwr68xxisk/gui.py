@@ -495,12 +495,16 @@ class RadarGUI:
     
     def _start_callback(self, event):
         """Start periodic updates."""
-        print('1')
         if not self.is_running and self.radar.is_connected():
-            print('2')
             self.stop_button.disabled = False
             self.record_button.disabled = False
             self.radar.configure_and_start()
+
+            if self.radar.clutterRemoval:
+                self.clutter_removal_checkbox.value = True
+            if self.radar.mobEnabled:
+                self.mob_enabled_checkbox.value = True
+                self.mob_threshold_slider.value = self.radar.mobThreshold
             
             # Create a new RadarData instance for the running radar
             self.radar_data = RadarData(self.radar)
