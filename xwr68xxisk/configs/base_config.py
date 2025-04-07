@@ -1,7 +1,7 @@
 """Base configuration classes and utilities."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from pydantic import BaseModel, Field, ConfigDict
 import yaml
 import logging

@@ -485,13 +485,18 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
         logger.error(f"Profile file not found: {profile}")
         raise FileNotFoundError(f"Profile file not found: {profile}")
 
+    # Get recording configuration
+    recording_config = config.recording
+    if not recording_config.enabled:
+        logger.error("Recording is disabled in configuration")
+        return
+
     # Create recordings directory if it doesn't exist
-    recording_dir = "recordings"
-    os.makedirs(recording_dir, exist_ok=True)
+    os.makedirs(recording_config.directory, exist_ok=True)
 
     # Create base filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_filename = os.path.join(recording_dir, f"radar_data_{timestamp}")
+    base_filename = os.path.join(recording_config.directory, f"{recording_config.prefix}_{timestamp}")
     
     # Get clustering and tracking configuration
     clustering_enabled = config.clustering.enabled
@@ -515,31 +520,30 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
             'max_misses': config.tracking.max_misses
         }
     
-    # Create recorders for different formats
-    csv_recorder = PointCloudRecorder(
-        base_filename, 
-        'csv',
-        buffer_in_memory=False,
-        enable_clustering=clustering_enabled,
-        enable_tracking=tracking_enabled,
-        clustering_params=clustering_params,
-        tracking_params=tracking_params
-    )
+    # Create recorders based on configured formats
+    recorders = []
+    for fmt in recording_config.formats:
+        recorder = PointCloudRecorder(
+            base_filename,
+            fmt,
+            buffer_in_memory=recording_config.buffer_in_memory,
+            enable_clustering=clustering_enabled,
+            enable_tracking=tracking_enabled,
+            clustering_params=clustering_params,
+            tracking_params=tracking_params
+        )
+        recorders.append(recorder)
     
-    pcd_recorder = PointCloudRecorder(
-        base_filename,
-        'pcd',
-        enable_clustering=clustering_enabled,
-        enable_tracking=tracking_enabled,
-        clustering_params=clustering_params,
-        tracking_params=tracking_params
-    )
+    if not recorders:
+        logger.error("No valid recording formats specified in configuration")
+        return
       
     logger.info("Starting radar")
     if clustering_enabled:
         logger.info("Clustering enabled with parameters: " + str(config.clustering))
     if tracking_enabled:
         logger.info("Tracking enabled with parameters: " + str(config.tracking))
+    logger.info(f"Recording enabled with parameters: {recording_config}")
 
     radar_base = RadarConnection()
     radar_type = radar_base.detect_radar_type()
@@ -561,7 +565,7 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
     radar.configure_and_start()
 
     try:
-        logger.info(f"Recording data to {base_filename}.[csv,pcd]")
+        logger.info(f"Recording data to {base_filename}.[{','.join(recording_config.formats)}]")
         logger.info("Press Ctrl+C to stop recording")
         
         frame_count = 0
@@ -569,6 +573,7 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
         max_no_data = 10  # Maximum number of consecutive frames with no data
         start_time = time.time()
         last_status_update = time.time()
+        total_points = 0
         
         while True:
             # Check for data with a short timeout
@@ -579,17 +584,18 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
                 point_cloud = data.to_point_cloud()
                 frame_number = point_cloud.metadata.get('frame_number', frame_count)
                 
-                # Add frame to both recorders
-                csv_recorder.add_frame(point_cloud, frame_number)
-                pcd_recorder.add_frame(point_cloud, frame_number)
+                # Add frame to all recorders
+                for recorder in recorders:
+                    recorder.add_frame(point_cloud, frame_number)
                 
                 # Update statistics for display
                 elapsed_time = time.time() - start_time
-                points_per_second = csv_recorder.total_points / elapsed_time if elapsed_time > 0 else 0
+                total_points = recorders[0].total_points  # Use first recorder for stats
+                points_per_second = total_points / elapsed_time if elapsed_time > 0 else 0
                 
                 # Print status update (overwrite previous line)
                 status_msg = f"\rFrame: {frame_number}, Points: {point_cloud.num_points}, " \
-                           f"Total: {csv_recorder.total_points}, " \
+                           f"Total: {total_points}, " \
                            f"Rate: {points_per_second:.1f} pts/s"
                 if clustering_enabled:
                     clusters = point_cloud.metadata.get('clusters', [])
@@ -622,20 +628,20 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
         logger.info("\nRecording stopped by user")
     finally:
         # Close recorders and radar
-        csv_recorder.close()
-        pcd_recorder.close()
+        for recorder in recorders:
+            recorder.close()
         radar.close()
         
         # Print final statistics
         elapsed_time = time.time() - start_time
         logger.info("\nRecording completed:")
         logger.info(f"Total frames: {frame_count}")
-        logger.info(f"Total points: {csv_recorder.total_points}")
-        logger.info(f"Average points per frame: {csv_recorder.total_points/frame_count:.1f}" if frame_count > 0 else "No frames recorded")
-        logger.info(f"Average points per second: {csv_recorder.total_points/elapsed_time:.1f}" if elapsed_time > 0 else "No time elapsed")
+        logger.info(f"Total points: {total_points}")
+        logger.info(f"Average points per frame: {total_points/frame_count:.1f}" if frame_count > 0 else "No frames recorded")
+        logger.info(f"Average points per second: {total_points/elapsed_time:.1f}" if elapsed_time > 0 else "No time elapsed")
         logger.info(f"Data saved to:")
-        logger.info(f"  - {base_filename}.csv")
-        logger.info(f"  - {base_filename}.pcd")
+        for fmt in recording_config.formats:
+            logger.info(f"  - {base_filename}.{fmt}")
         if clustering_enabled:
             logger.info(f"  - {base_filename}_clusters.csv")
         if tracking_enabled:
