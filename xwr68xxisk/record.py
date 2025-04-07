@@ -2,6 +2,7 @@
 
 import os
 import time
+import logging
 import numpy as np
 from typing import Tuple, List, Optional, Dict, Any, Literal
 from datetime import datetime
@@ -13,6 +14,9 @@ from xwr68xxisk.parse import RadarData
 from xwr68xxisk.point_cloud import RadarPointCloud
 from xwr68xxisk.clustering import Cluster
 from xwr68xxisk.tracking import Track
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 RUNNER_CI = True if os.getenv("CI") == "true" else False
 
@@ -138,7 +142,7 @@ class PointCloudRecorder:
                     tracks = self.tracker.update(clusters)
                     frame.metadata['tracks'] = tracks
             except Exception as e:
-                print(f"Error during clustering/tracking: {e}")
+                logger.error(f"Error during clustering/tracking: {e}")
         
         if self.buffer_in_memory:
             self.frames.append(frame)
@@ -150,7 +154,7 @@ class PointCloudRecorder:
                 if tracks:
                     self._write_tracks_csv(frame.timestamp_ns, frame_number, tracks)
             except Exception as e:
-                print(f"Error writing frame to CSV: {e}")
+                logger.error(f"Error writing frame to CSV: {e}")
         
         self.total_points += point_cloud.num_points
         self.frame_count += 1
@@ -197,7 +201,7 @@ class PointCloudRecorder:
                 )
             self.csv_file.flush()
         except Exception as e:
-            print(f"Error in _write_frame_csv: {e}")
+            logger.error(f"Error in _write_frame_csv: {e}")
             # Continue without crashing
         
     def _write_clusters_csv(self, timestamp_ns: int, frame_number: int, clusters: List[Cluster]) -> None:
@@ -216,11 +220,11 @@ class PointCloudRecorder:
                         f"{cluster.num_points}\n"
                     )
                 except Exception as e:
-                    print(f"Error writing cluster {i}: {e}")
+                    logger.error(f"Error writing cluster {i}: {e}")
                     continue
             self.clusters_file.flush()
         except Exception as e:
-            print(f"Error in _write_clusters_csv: {e}")
+            logger.error(f"Error in _write_clusters_csv: {e}")
         
     def _write_tracks_csv(self, timestamp_ns: int, frame_number: int, tracks: List[Track]) -> None:
         """Write tracks to CSV file."""
@@ -237,16 +241,16 @@ class PointCloudRecorder:
                         f"{track.age},{track.hits}\n"
                     )
                 except Exception as e:
-                    print(f"Error writing track {track.track_id}: {e}")
+                    logger.error(f"Error writing track {track.track_id}: {e}")
                     continue
             self.tracks_file.flush()
         except Exception as e:
-            print(f"Error in _write_tracks_csv: {e}")
+            logger.error(f"Error in _write_tracks_csv: {e}")
 
     def _save_to_pcd(self) -> None:
         """Save all buffered frames to a PCD file."""
         if not self.frames:
-            print("No frames to save to PCD file")
+            logger.warning("No frames to save to PCD file")
             return
             
         try:
@@ -254,7 +258,7 @@ class PointCloudRecorder:
             total_points = sum(frame.points.num_points for frame in self.frames)
             
             if total_points == 0:
-                print("No points to save to PCD file")
+                logger.warning("No points to save to PCD file")
                 return
                 
             # Create structured array for all points
@@ -327,7 +331,7 @@ class PointCloudRecorder:
                     
                     current_idx += min_length
                 except Exception as e:
-                    print(f"Error processing frame for PCD: {e}")
+                    logger.error(f"Error processing frame for PCD: {e}")
                     continue
             
             # Resize the array if we didn't fill it completely
@@ -335,21 +339,21 @@ class PointCloudRecorder:
                 data = data[:current_idx]
             
             if len(data) == 0:
-                print("No valid points to save to PCD file")
+                logger.warning("No valid points to save to PCD file")
                 return
                 
             # Create and save PCD file
             pc = pypcd.PointCloud.from_array(data)
             pc.save_pcd(f"{self.base_filename}.pcd", compression='binary_compressed')
-            print(f"Saved {len(data)} points to {self.base_filename}.pcd")
+            logger.info(f"Saved {len(data)} points to {self.base_filename}.pcd")
         except Exception as e:
-            print(f"Error saving to PCD file: {e}")
+            logger.error(f"Error saving to PCD file: {e}")
             # Continue without crashing
     
     def save(self) -> None:
         """Save the recorded data to file(s)."""
         if not self.buffer_in_memory:
-            print("Data already saved (not buffering in memory)")
+            logger.warning("Data already saved (not buffering in memory)")
             return
             
         try:
@@ -399,11 +403,11 @@ class PointCloudRecorder:
                                         f"{frame.points.snr[i]:.3f},{frame.points.rcs[i]:.3f}\n"
                                     )
                             except Exception as e:
-                                print(f"Error writing frame to CSV: {e}")
+                                logger.error(f"Error writing frame to CSV: {e}")
                                 continue
-                    print(f"Saved {len(self.frames)} frames to {self.base_filename}.csv")
+                    logger.info(f"Saved {len(self.frames)} frames to {self.base_filename}.csv")
                 except Exception as e:
-                    print(f"Error saving to CSV file: {e}")
+                    logger.error(f"Error saving to CSV file: {e}")
             elif self.format_type == 'pcd':
                 self._save_to_pcd()
             
@@ -417,10 +421,10 @@ class PointCloudRecorder:
                                 try:
                                     self._write_clusters_csv(frame.timestamp_ns, frame.frame_number, frame.metadata['clusters'])
                                 except Exception as e:
-                                    print(f"Error writing clusters for frame {frame.frame_number}: {e}")
-                    print(f"Saved clusters to {self.base_filename}_clusters.csv")
+                                    logger.error(f"Error writing clusters for frame {frame.frame_number}: {e}")
+                    logger.info(f"Saved clusters to {self.base_filename}_clusters.csv")
                 except Exception as e:
-                    print(f"Error saving clusters file: {e}")
+                    logger.error(f"Error saving clusters file: {e}")
                             
             if self.enable_tracking:
                 try:
@@ -431,12 +435,12 @@ class PointCloudRecorder:
                                 try:
                                     self._write_tracks_csv(frame.timestamp_ns, frame.frame_number, frame.metadata['tracks'])
                                 except Exception as e:
-                                    print(f"Error writing tracks for frame {frame.frame_number}: {e}")
-                    print(f"Saved tracks to {self.base_filename}_tracks.csv")
+                                    logger.error(f"Error writing tracks for frame {frame.frame_number}: {e}")
+                    logger.info(f"Saved tracks to {self.base_filename}_tracks.csv")
                 except Exception as e:
-                    print(f"Error saving tracks file: {e}")
+                    logger.error(f"Error saving tracks file: {e}")
         except Exception as e:
-            print(f"Error in save method: {e}")
+            logger.error(f"Error in save method: {e}")
     
     def close(self) -> None:
         """Close the recorder and save any buffered data."""
@@ -453,12 +457,29 @@ class PointCloudRecorder:
                 if hasattr(self, 'tracks_file') and self.tracks_file is not None:
                     self.tracks_file.close()
                     self.tracks_file = None
-            print(f"Recorder closed. Recorded {self.frame_count} frames with {self.total_points} points.")
+            logger.info(f"Recorder closed. Recorded {self.frame_count} frames with {self.total_points} points.")
         except Exception as e:
-            print(f"Error closing recorder: {e}")
+            logger.error(f"Error closing recorder: {e}")
 
 
-def main(serial_number: Optional[str] = None):
+def main(serial_number: Optional[str] = None, profile: str = os.path.join('configs', 'user_profile.cfg')):
+    """Record radar data from the sensor.
+    
+    Args:
+        serial_number: Optional serial number of the radar
+        profile: Path to the radar profile configuration file
+    """
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    # Check if profile exists
+    if not os.path.exists(profile):
+        logger.error(f"Profile file not found: {profile}")
+        raise FileNotFoundError(f"Profile file not found: {profile}")
+
     # Create recordings directory if it doesn't exist
     recording_dir = "recordings"
     os.makedirs(recording_dir, exist_ok=True)
@@ -499,26 +520,30 @@ def main(serial_number: Optional[str] = None):
         tracking_params=tracking_params
     )
       
-    print("Starting radar")
+    logger.info("Starting radar")
 
     radar_base = RadarConnection()
-    radar_type, config_file = radar_base.detect_radar_type()
+    radar_type = radar_base.detect_radar_type()
     if not radar_type:
+        logger.error("No supported radar detected")
         raise RadarConnectionError("No supported radar detected")
     
-    print(f"Creating {radar_type} radar instance")
-    radar = create_radar(radar_type)            
-    radar.connect(config_file)
+    logger.info(f"Creating {radar_type} radar instance")
+    radar = create_radar()
+    
+    # Connect using the specified profile
+    logger.info(f"Using radar profile: {profile}")
+    radar.connect(profile)
 
     if radar.version_info:
         formatted_info = '\n'.join(str(line) for line in radar.version_info)
-        print(formatted_info)
+        logger.info(f"Radar version info:\n{formatted_info}")
 
     radar.configure_and_start()
 
     try:
-        print(f"Recording data to {base_filename}.[csv,pcd]")
-        print("Press Ctrl+C to stop recording")
+        logger.info(f"Recording data to {base_filename}.[csv,pcd]")
+        logger.info("Press Ctrl+C to stop recording")
         
         frame_count = 0
         no_data_count = 0
@@ -561,13 +586,13 @@ def main(serial_number: Optional[str] = None):
                     last_status_update = current_time
                 
                 if no_data_count >= max_no_data:
-                    print("\nNo data received from radar for too long. Please check the connection and configuration.")
+                    logger.error("No data received from radar for too long. Please check the connection and configuration.")
                     break
                 
             time.sleep(0.1)  # Wait a bit longer when no data is received
                     
     except KeyboardInterrupt:
-        print("\nRecording stopped by user")
+        logger.info("\nRecording stopped by user")
     finally:
         # Close recorders and radar
         csv_recorder.close()
@@ -576,14 +601,14 @@ def main(serial_number: Optional[str] = None):
         
         # Print final statistics
         elapsed_time = time.time() - start_time
-        print("\nRecording completed:")
-        print(f"Total frames: {frame_count}")
-        print(f"Total points: {csv_recorder.total_points}")
-        print(f"Average points per frame: {csv_recorder.total_points/frame_count:.1f}" if frame_count > 0 else "No frames recorded")
-        print(f"Average points per second: {csv_recorder.total_points/elapsed_time:.1f}" if elapsed_time > 0 else "No time elapsed")
-        print(f"Data saved to:")
-        print(f"  - {base_filename}.csv")
-        print(f"  - {base_filename}.pcd")
+        logger.info("\nRecording completed:")
+        logger.info(f"Total frames: {frame_count}")
+        logger.info(f"Total points: {csv_recorder.total_points}")
+        logger.info(f"Average points per frame: {csv_recorder.total_points/frame_count:.1f}" if frame_count > 0 else "No frames recorded")
+        logger.info(f"Average points per second: {csv_recorder.total_points/elapsed_time:.1f}" if elapsed_time > 0 else "No time elapsed")
+        logger.info(f"Data saved to:")
+        logger.info(f"  - {base_filename}.csv")
+        logger.info(f"  - {base_filename}.pcd")
 
 if __name__ == "__main__":
     main() 
