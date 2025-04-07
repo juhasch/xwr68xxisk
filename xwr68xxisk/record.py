@@ -14,6 +14,7 @@ from xwr68xxisk.parse import RadarData
 from xwr68xxisk.point_cloud import RadarPointCloud
 from xwr68xxisk.clustering import Cluster
 from xwr68xxisk.tracking import Track
+from xwr68xxisk.configs import ConfigManager
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -475,6 +476,10 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
+    # Load configuration
+    config_manager = ConfigManager()
+    config = config_manager.load_config()
+
     # Check if profile exists
     if not os.path.exists(profile):
         logger.error(f"Profile file not found: {profile}")
@@ -488,25 +493,35 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_filename = os.path.join(recording_dir, f"radar_data_{timestamp}")
     
-    # Create recorders for different formats with clustering and tracking enabled
-    clustering_params = {
-        'eps': 0.5,  # meters
-        'min_samples': 5
-    }
+    # Get clustering and tracking configuration
+    clustering_enabled = config.clustering.enabled
+    tracking_enabled = config.tracking.enabled
     
-    tracking_params = {
-        'dt': 0.1,  # seconds
-        'max_distance': 2.0,  # meters
-        'min_hits': 3,
-        'max_misses': 5
-    }
+    # Only create clustering params if enabled
+    clustering_params = None
+    if clustering_enabled:
+        clustering_params = {
+            'eps': config.clustering.eps,
+            'min_samples': config.clustering.min_samples
+        }
     
+    # Only create tracking params if both clustering and tracking are enabled
+    tracking_params = None
+    if clustering_enabled and tracking_enabled:
+        tracking_params = {
+            'dt': config.tracking.dt,
+            'max_distance': config.tracking.max_distance,
+            'min_hits': config.tracking.min_hits,
+            'max_misses': config.tracking.max_misses
+        }
+    
+    # Create recorders for different formats
     csv_recorder = PointCloudRecorder(
         base_filename, 
         'csv',
         buffer_in_memory=False,
-        enable_clustering=True,
-        enable_tracking=True,
+        enable_clustering=clustering_enabled,
+        enable_tracking=tracking_enabled,
         clustering_params=clustering_params,
         tracking_params=tracking_params
     )
@@ -514,13 +529,17 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
     pcd_recorder = PointCloudRecorder(
         base_filename,
         'pcd',
-        enable_clustering=True,
-        enable_tracking=True,
+        enable_clustering=clustering_enabled,
+        enable_tracking=tracking_enabled,
         clustering_params=clustering_params,
         tracking_params=tracking_params
     )
       
     logger.info("Starting radar")
+    if clustering_enabled:
+        logger.info("Clustering enabled with parameters: " + str(config.clustering))
+    if tracking_enabled:
+        logger.info("Tracking enabled with parameters: " + str(config.tracking))
 
     radar_base = RadarConnection()
     radar_type = radar_base.detect_radar_type()
@@ -569,9 +588,17 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
                 points_per_second = csv_recorder.total_points / elapsed_time if elapsed_time > 0 else 0
                 
                 # Print status update (overwrite previous line)
-                print(f"\rFrame: {frame_number}, Points: {point_cloud.num_points}, "
-                      f"Total: {csv_recorder.total_points}, "
-                      f"Rate: {points_per_second:.1f} pts/s    ", end="", flush=True)
+                status_msg = f"\rFrame: {frame_number}, Points: {point_cloud.num_points}, " \
+                           f"Total: {csv_recorder.total_points}, " \
+                           f"Rate: {points_per_second:.1f} pts/s"
+                if clustering_enabled:
+                    clusters = point_cloud.metadata.get('clusters', [])
+                    status_msg += f", Clusters: {len(clusters)}"
+                if tracking_enabled:
+                    tracks = point_cloud.metadata.get('tracks', [])
+                    status_msg += f", Tracks: {len(tracks)}"
+                print(status_msg + "    ", end="", flush=True)
+                
                 last_status_update = time.time()
                 
                 frame_count += 1
@@ -609,6 +636,10 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
         logger.info(f"Data saved to:")
         logger.info(f"  - {base_filename}.csv")
         logger.info(f"  - {base_filename}.pcd")
+        if clustering_enabled:
+            logger.info(f"  - {base_filename}_clusters.csv")
+        if tracking_enabled:
+            logger.info(f"  - {base_filename}_tracks.csv")
 
 if __name__ == "__main__":
     main() 
