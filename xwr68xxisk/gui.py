@@ -21,6 +21,7 @@ from datetime import datetime
 from panel.widgets import TextAreaInput, Button
 from xwr68xxisk.radar import RadarConnection, create_radar
 import cv2
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,29 @@ class RadarGUI:
         self.radar_type = None
         self.radar_data = None
         
+        # Set default profile path
+        self.config_file = os.path.join('configs', 'user_profile.cfg')
+        # Create configs directory if it doesn't exist
+        os.makedirs('configs', exist_ok=True)
+        # Create default profile if it doesn't exist
+        if not os.path.exists(self.config_file):
+            with open(self.config_file, 'w') as f:
+                f.write("% Default radar profile\n% This file can be modified or replaced using the 'Load Profile' button\n")
+        
         # Initialize camera
         self.camera = None
         self.camera_source = ColumnDataSource({'image': [], 'dw': [], 'dh': []})
         self.camera_plot = None
         self.camera_running = False
+        
+        # Create all control widgets first
+        self.load_config_button = pn.widgets.FileInput(name='Load Profile', accept='.cfg')
+        self.connect_button = pn.widgets.Button(name='Connect to Sensor', button_type='primary')
+        self.start_button = pn.widgets.Button(name='Start', button_type='primary')
+        self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
+        self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
+        self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
+        self.config_button = Button(name="Configure Profile", button_type="primary", disabled=True)
         
         # Create camera controls
         self.camera_select = pn.widgets.Select(
@@ -57,47 +76,10 @@ class RadarGUI:
             name='Start Camera',
             button_type='primary'
         )
-        self.camera_button.on_click(self.start_camera)
         
         # Create camera focus controls
         self.camera_autofocus = pn.widgets.Checkbox(name='Auto Focus', value=True)
         self.camera_focus = pn.widgets.IntSlider(name='Focus', start=0, end=255, value=0, step=1, disabled=True)
-        self.camera_autofocus.param.watch(self._camera_autofocus_callback, 'value')
-        self.camera_focus.param.watch(self._camera_focus_callback, 'value')
-        
-        # Initialize clustering and tracking
-        self.clusterer = None
-        self.tracker = None
-        self.enable_clustering = self.config.clustering.enabled
-        self.enable_tracking = self.config.tracking.enabled
-        
-        # Load default configuration
-        self.config_file = None
-        
-        # Add timing variable
-        self.last_update_time = None
-        
-        # Initialize plot data
-        self.scatter_source = None
-        self.cluster_source = ColumnDataSource({'x': [], 'y': [], 'size': [], 'cluster_id': []})
-        self.track_source = ColumnDataSource({'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []})
-        self.color_mapper = LinearColorMapper(palette=cc.rainbow, low=-1, high=1)
-        
-        # Initialize recording state
-        self.is_recording = False
-        self.recording_dir = "recordings"
-        self.recorder = None
-        
-        # Add camera recorder
-        self.camera_recorder = None
-        
-        # Create controls
-        self.load_config_button = pn.widgets.FileInput(name='Load Config', accept='.cfg')
-        self.connect_button = pn.widgets.Button(name='Connect to Sensor', button_type='primary')
-        self.start_button = pn.widgets.Button(name='Start', button_type='primary')
-        self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
-        self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
-        self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
         
         # Add recording format selection
         self.record_format_select = pn.widgets.RadioButtonGroup(
@@ -111,25 +93,29 @@ class RadarGUI:
         self.modify_params_checkbox = pn.widgets.Checkbox(name='Modify Parameters', value=False)
         self.clutter_removal_checkbox = pn.widgets.Checkbox(
             name='Static Clutter Removal',
-            value=self.config.processing.clutter_removal
+            value=False,  # Will be set when radar is connected
+            disabled=True  # Initially disabled until connected
         )
         self.frame_period_slider = pn.widgets.FloatSlider(
             name='Frame Period (ms)',
             start=50,
             end=1000,
             value=self.config.processing.frame_period_ms,
-            step=10
+            step=10,
+            disabled=True  # Initially disabled until connected
         )
         self.mob_enabled_checkbox = pn.widgets.Checkbox(
             name='Multi-object Beamforming',
-            value=self.config.processing.mob_enabled
+            value=False,  # Will be set when radar is connected
+            disabled=True  # Initially disabled until connected
         )
         self.mob_threshold_slider = pn.widgets.FloatSlider(
             name='MOB Threshold',
             start=0,
             end=1,
-            value=self.config.processing.mob_threshold,
-            step=0.01
+            value=0.5,  # Will be set when radar is connected
+            step=0.01,
+            disabled=True  # Initially disabled until connected
         )
         
         # Add clustering and tracking controls
@@ -216,38 +202,16 @@ class RadarGUI:
             }
         )
         
-        # Set up callbacks
-        self.load_config_button.param.watch(self._load_config_callback, 'value')
-        self.connect_button.on_click(self._connect_callback)
-        self.start_button.on_click(self._start_callback)
-        self.stop_button.on_click(self._stop_callback)
-        self.record_button.on_click(self._record_callback)
-        self.exit_button.on_click(self._exit_callback)
-        self.modify_params_checkbox.param.watch(self._toggle_params_panel, 'value')
-        self.clutter_removal_checkbox.param.watch(self._clutter_removal_callback, 'value')
-        self.frame_period_slider.param.watch(self._frame_period_callback, 'value')
-        self.mob_enabled_checkbox.param.watch(self._mob_enabled_callback, 'value')
-        self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value')
-        self.clustering_checkbox.param.watch(self._clustering_callback, 'value')
-        self.tracking_checkbox.param.watch(self._tracking_callback, 'value')
-        
-        self.start_button.disabled = True
-        self.stop_button.disabled = True
-        self.record_button.disabled = True
-        
-        # Create plot
-        self.plot = self.create_plot()
-        
-        # Add configuration modal components
+        # Create configuration modal components
         self.config_modal = pn.Column(
             pn.Row(
-                pn.pane.Markdown('## Sensor Configuration'),
+                pn.pane.Markdown('## Sensor Profile'),
                 pn.layout.HSpacer(),
                 pn.widgets.Button(name='✕', width=30, align='end'),
                 sizing_mode='stretch_width'
             ),
             TextAreaInput(
-                name="Configuration",
+                name="Profile Settings",
                 height=300,
                 width=750,
                 value="",  # Will be loaded from file
@@ -281,13 +245,6 @@ class RadarGUI:
             css_classes=['modal', 'modal-content'],
         )
         
-        # Add configuration button to open modal
-        self.config_button = Button(
-            name="Configure Sensor",
-            button_type="primary",
-            disabled=True  # Initially disabled until connected
-        )
-        
         # Get references to modal buttons
         self.close_button = self.config_modal[0][2]
         self.config_text = self.config_modal[1]
@@ -295,11 +252,57 @@ class RadarGUI:
         self.cancel_button = self.config_modal[2][1]
         self.version_info = self.config_modal[3]
         
+        # Initialize clustering and tracking
+        self.clusterer = None
+        self.tracker = None
+        self.enable_clustering = self.config.clustering.enabled
+        self.enable_tracking = self.config.tracking.enabled
+        
+        # Add timing variable
+        self.last_update_time = None
+        
+        # Initialize plot data
+        self.scatter_source = None
+        self.cluster_source = ColumnDataSource({'x': [], 'y': [], 'size': [], 'cluster_id': []})
+        self.track_source = ColumnDataSource({'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []})
+        self.color_mapper = LinearColorMapper(palette=cc.rainbow, low=-1, high=1)
+        
+        # Initialize recording state
+        self.is_recording = False
+        self.recording_dir = "recordings"
+        self.recorder = None
+        
+        # Add camera recorder
+        self.camera_recorder = None
+        
         # Set up callbacks
+        self.load_config_button.param.watch(self._load_config_callback, 'value')
+        self.connect_button.on_click(self._connect_callback)
+        self.start_button.on_click(self._start_callback)
+        self.stop_button.on_click(self._stop_callback)
+        self.record_button.on_click(self._record_callback)
+        self.exit_button.on_click(self._exit_callback)
+        self.modify_params_checkbox.param.watch(self._toggle_params_panel, 'value')
+        self.clutter_removal_checkbox.param.watch(self._clutter_removal_callback, 'value')
+        self.frame_period_slider.param.watch(self._frame_period_callback, 'value')
+        self.mob_enabled_checkbox.param.watch(self._mob_enabled_callback, 'value')
+        self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value')
+        self.clustering_checkbox.param.watch(self._clustering_callback, 'value')
+        self.tracking_checkbox.param.watch(self._tracking_callback, 'value')
+        self.camera_autofocus.param.watch(self._camera_autofocus_callback, 'value')
+        self.camera_focus.param.watch(self._camera_focus_callback, 'value')
+        self.camera_button.on_click(self.start_camera)
         self.config_button.on_click(self._show_config_modal)
         self.close_button.on_click(self._hide_config_modal)
         self.cancel_button.on_click(self._hide_config_modal)
         self.save_button.on_click(self._save_config)
+        
+        self.start_button.disabled = True
+        self.stop_button.disabled = True
+        self.record_button.disabled = True
+        
+        # Create plot
+        self.plot = self.create_plot()
         
         # Create layout
         self.layout = self.create_layout()
@@ -309,13 +312,24 @@ class RadarGUI:
         self.is_running = False
         
         # Set initial configuration text
-        self.config_text.value = "# Connect to sensor to load configuration"
+        self.config_text.value = "# Connect to sensor to load profile"
     
     def _load_config_callback(self, event):
-        """Handle loading of configuration file."""
+        """Handle loading of radar profile file."""
         if event.new:  # Check if a file was actually uploaded
-            self.config_file = event.new.decode('utf-8')
-            logger.info("Loaded configuration file")
+            try:
+                # Get the uploaded profile content
+                profile_str = event.new.decode('utf-8')
+                
+                # Write to the default profile location, overwriting if it exists
+                with open(self.config_file, 'w') as f:
+                    f.write(profile_str)
+                
+                logger.info(f"Loaded radar profile: {self.config_file}")
+                
+            except Exception as e:
+                logger.error(f"Error loading radar profile: {e}")
+                # Don't reset config_file on error since we want to keep the default
     
     def _clutter_removal_callback(self, event):
         """Handle clutter removal checkbox changes."""
@@ -334,9 +348,9 @@ class RadarGUI:
                 raise RadarConnectionError("No supported radar detected")
             
             logger.info(f"Creating {self.radar_type} radar instance")
-            self.radar = create_radar(self.radar_type)
+            self.radar = create_radar()
             
-            # Now connect with the appropriate configuration
+            # Now connect with the appropriate profile
             self.radar.connect(self.config_file)
             
             # Create RadarData instance for the connected radar
@@ -347,7 +361,7 @@ class RadarGUI:
                 formatted_info = '\n'.join(str(line) for line in self.radar.version_info)
                 self.version_info.value = formatted_info
                 
-            # Set the configuration text directly
+            # Set the profile text directly
             if self.config_file:
                 self.config_text.value = self.config_file
             
@@ -357,17 +371,22 @@ class RadarGUI:
                 self.clutter_removal_checkbox.disabled = False
                 self.frame_period_slider.disabled = False
                 self.mob_enabled_checkbox.disabled = False
-                # MOB threshold is only enabled if MOB is enabled
-                self.mob_threshold_slider.disabled = not self.mob_enabled_checkbox.value
                 
-                # Set initial values from radar if available
+                # Set initial values from radar
                 try:
+                    # Get clutter removal setting from radar
                     self.clutter_removal_checkbox.value = self.radar.clutterRemoval
+                    
+                    # Get frame period from radar
                     self.frame_period_slider.value = self.radar.frame_period
+                    
+                    # Get MOB settings from radar
                     self.mob_enabled_checkbox.value = self.radar.mob_enabled
                     self.mob_threshold_slider.value = self.radar.mob_threshold
+                    # MOB threshold is only enabled if MOB is enabled
+                    self.mob_threshold_slider.disabled = not self.radar.mob_enabled
                 except Exception as e:
-                    logger.warning(f"Could not initialize all parameter values: {e}")
+                    logger.warning(f"Could not initialize all parameter values from radar: {e}")
             
             self.connect_button.loading = False
             self.connect_button.name = "Connected"
@@ -476,7 +495,9 @@ class RadarGUI:
     
     def _start_callback(self, event):
         """Start periodic updates."""
+        print('1')
         if not self.is_running and self.radar.is_connected():
+            print('2')
             self.stop_button.disabled = False
             self.record_button.disabled = False
             self.radar.configure_and_start()
@@ -537,43 +558,34 @@ class RadarGUI:
         # Force exit the program
         os._exit(0)
     
-    def _load_initial_config(self):
-        """Load the initial configuration from file."""
-        try:
-            with open(self.config_file, 'r') as f:
-                self.config_text.value = f.read()
-        except Exception as e:
-            logger.error(f"Error loading configuration: {e}")
-            self.config_text.value = "# Error loading configuration file"
-
     def _show_config_modal(self, event):
-        """Show the configuration modal."""
+        """Show the sensor profile modal."""
         self.config_modal.visible = True
 
     def _hide_config_modal(self, event):
-        """Hide the configuration modal."""
+        """Hide the sensor profile modal."""
         self.config_modal.visible = False
 
     def _save_config(self, event):
-        """Save the configuration and hide modal."""
+        """Save the radar profile and hide modal."""
         try:
             # Save to file
             with open(self.config_file, 'w') as f:
                 f.write(self.config_text.value)
                 
-            # If connected, send configuration to sensor
+            # If connected, send profile to sensor
             if self.radar.is_connected():
-                responses = self.radar.send_config(self.config_text.value)
+                responses = self.radar.send_profile(self.config_text.value)
                 if responses:
                     logger.info("Sensor responses:")
                     for response in responses:
                         logger.info(f"  {response}")
                 
-            logger.info("Configuration saved successfully")
+            logger.info("Radar profile saved successfully")
             self._hide_config_modal(None)
             
         except Exception as e:
-            logger.error(f"Error saving configuration: {e}")
+            logger.error(f"Error saving radar profile: {e}")
 
     def create_plot(self):
         """Create the scatter plot."""
@@ -667,8 +679,8 @@ class RadarGUI:
                     x, y, z = point_cloud.to_cartesian()
                     
                     # Clip x and y values to plot range
-                    x = np.clip(x, -2.5, 2.5)
-                    y = np.clip(y, 0, 5)
+                    x = np.clip(x, self.config.display.x_range[0], self.config.display.x_range[1])
+                    y = np.clip(y, self.config.display.y_range[0], self.config.display.y_range[1])
                     
                     # Clip velocity to color mapper range
                     velocity = np.clip(point_cloud.velocity, -1, 1)
@@ -895,7 +907,7 @@ class RadarGUI:
         """Auto-detect which radar is connected."""
         # Check serial ports and identify device type
         radar_base = RadarConnection()
-        self.radar_type, self.config_file = radar_base.detect_radar_type()
+        self.radar_type = radar_base.detect_radar_type()
         return self.radar_type is not None
 
     def _toggle_params_panel(self, event):
@@ -1022,6 +1034,15 @@ class RadarGUI:
                 self.camera_button.name = 'Stop Camera'
                 self.camera_button.button_type = 'danger'
                 
+                # Initialize camera controls based on current settings
+                if self.camera._cap:
+                    # Set autofocus control state
+                    is_autofocus = bool(self.camera._cap.get(cv2.CAP_PROP_AUTOFOCUS))
+                    self.camera_autofocus.value = is_autofocus
+                    self.camera_focus.disabled = is_autofocus
+                    if not is_autofocus:
+                        self.camera_focus.value = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                
                 # Stop existing callback if any
                 if hasattr(self, 'camera_callback'):
                     self.camera_callback.stop()
@@ -1061,13 +1082,14 @@ class RadarGUI:
                     self.camera = None
             self.camera_button.name = 'Start Camera'
             self.camera_button.button_type = 'primary'
+            
             logger.info("Stopped camera")
 
     def update_camera(self):
         """Update the camera display."""
         if not self.camera_running or self.camera is None:
             return
-            
+        
         try:
             # Skip frames if we're falling behind
             while self.camera_running and self.camera._cap.get(cv2.CAP_PROP_POS_FRAMES) > 0:
@@ -1094,7 +1116,13 @@ class RadarGUI:
                             pass  # Frame is already being recorded by the camera_recorder thread
                         except Exception as e:
                             logger.error(f"Error recording camera frame: {e}")
-                    
+                
+                # Update camera control info if properties changed
+                if not self.camera_autofocus.value:
+                    current_focus = self.camera._cap.get(cv2.CAP_PROP_FOCUS)
+                    if abs(current_focus - self.camera_focus.value) > 0.1:
+                        self.camera_focus.value = int(current_focus)
+            
         except StopIteration:
             logger.warning("Camera stream ended")
             self.stop_camera()
