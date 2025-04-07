@@ -88,6 +88,13 @@ $ xwr68xxisk gui
 
 ![GUI](output.gif)
 
+
+Remote operation is possible like this:
+```bash
+BOKEH_ALLOW_WS_ORIGIN=radarhost:5006 xwr68xxisk gui --remote
+```
+
+
 ### Dora
 
 The [Dora](https://github.com/dora-rs/dora) node is work in progress.
