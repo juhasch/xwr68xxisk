@@ -46,6 +46,9 @@ import numpy as np
 import time
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BaseCamera(ABC):
@@ -750,9 +753,21 @@ class RaspberryPiCamera(BaseCamera):
         # Capture frame
         frame = self._picam2.capture_array()
         
-        # Convert BGR to RGBA
+        # Resize frame to a more manageable size
         import cv2
+        target_width = 640
+        target_height = 480
+        frame = cv2.resize(frame, (target_width, target_height))
+        
+        # Convert BGR to RGBA
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+        
+        # Debug logging
+        logger.debug(f"Frame shape after resize and conversion: {frame.shape}")
+        logger.debug(f"Frame dtype: {frame.dtype}")
+        logger.debug(f"Frame min/max: {frame.min()}/{frame.max()}")
+        
+        # Convert to uint32 view for Bokeh
         frame = frame.view(np.uint32).reshape(frame.shape[:-1])
         
         self._last_frame_time = time.time()
@@ -766,8 +781,8 @@ class RaspberryPiCamera(BaseCamera):
             'exposure': metadata.get('ExposureTime', -1),
             'gain': metadata.get('AnalogueGain', -1),
             'fps': self._config['fps'],
-            'width': frame.shape[1],
-            'height': frame.shape[0]
+            'width': target_width,
+            'height': target_height
         }
 
     def get_controls(self) -> Dict[str, Any]:
