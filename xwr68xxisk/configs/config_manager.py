@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from pydantic import Field, BaseModel
 import logging
+import shutil
+from datetime import datetime
 from .base_config import BaseConfig
 from .clustering_config import ClusteringConfig
 from .tracking_config import TrackingConfig
@@ -43,9 +45,21 @@ class ConfigManager:
             self.config_dir = Path(config_dir)
         else:
             # Use 'configs' directory in project root
-            self.config_dir = Path(__file__).parent.parent.parent / "configs"
+            self.config_dir = Path("configs")
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.current_config: Optional[MainConfig] = None
+    
+    def _create_backup(self, config_path: Path) -> None:
+        """Create a backup of the configuration file.
+        
+        Args:
+            config_path: Path to the configuration file
+        """
+        if config_path.exists():
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = config_path.parent / f"{config_path.stem}_{timestamp}{config_path.suffix}"
+            shutil.copy2(config_path, backup_path)
+            logger.info(f"Created backup of configuration at {backup_path}")
     
     def load_config(self, config_name: str = "default_config.yaml") -> MainConfig:
         """Load configuration from file.
@@ -85,6 +99,7 @@ class ConfigManager:
             raise RuntimeError("No configuration loaded")
             
         config_path = self.config_dir / config_name
+        self._create_backup(config_path)
         self.current_config.to_yaml(config_path)
         logger.info(f"Saved configuration to {config_path}")
     

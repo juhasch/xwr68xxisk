@@ -4,12 +4,6 @@ from enum import Enum
 from typing import Optional
 from pydantic import Field, BaseModel
 
-class CameraImplementation(str, Enum):
-    """Enum for supported camera implementations."""
-    OPENCV = "OpenCV"
-    REALSENSE = "RealSense"
-    DEPTHAI = "DepthAI"
-    PICAMERA = "Picamera"
 
 class Resolution(BaseModel):
     """Camera resolution settings."""
@@ -30,8 +24,8 @@ class CameraConfig(BaseModel):
     This class defines the configuration parameters for the camera system.
     It supports different camera implementations and their specific settings.
     """
-    implementation: CameraImplementation = Field(
-        default=CameraImplementation.PICAMERA,
+    implementation: str = Field(
+        default="OpenCV",
         description="Camera implementation to use"
     )
     enabled: bool = Field(
