@@ -42,7 +42,6 @@ Example usage:
     ```
 """
 
-import cv2
 import numpy as np
 import time
 from abc import ABC, abstractmethod
@@ -100,6 +99,9 @@ class OpenCVCamera(BaseCamera):
         Args:
             device_id: The device ID of the camera (default: 0)
         """
+        import cv2
+        self.cv2 = cv2  # Store cv2 as instance variable
+        
         super().__init__()
         self._device_id = device_id
         self._cap = None
@@ -118,38 +120,38 @@ class OpenCVCamera(BaseCamera):
         
     def start(self):
         """Start the camera capture."""
-        self._cap = cv2.VideoCapture(self._device_id)
+        self._cap = self.cv2.VideoCapture(self._device_id)
         if not self._cap.isOpened():
             raise RuntimeError(f"Failed to open camera with device ID {self._device_id}")
             
         # Set camera properties based on config
-        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._config['width'])
-        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._config['height'])
-        self._cap.set(cv2.CAP_PROP_FPS, self._config['fps'])
+        self._cap.set(self.cv2.CAP_PROP_FRAME_WIDTH, self._config['width'])
+        self._cap.set(self.cv2.CAP_PROP_FRAME_HEIGHT, self._config['height'])
+        self._cap.set(self.cv2.CAP_PROP_FPS, self._config['fps'])
         
         # Set minimal buffer size to reduce latency
-        self._cap.set(cv2.CAP_PROP_BUFFERSIZE, self._config['buffer_size'])
+        self._cap.set(self.cv2.CAP_PROP_BUFFERSIZE, self._config['buffer_size'])
         
         # Set backend-specific optimizations if available
         backend = self._cap.getBackendName()
         if backend == 'V4L2':
             # Linux-specific optimizations
-            self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+            self._cap.set(self.cv2.CAP_PROP_FOURCC, self.cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
         
         if self._config['exposure'] > 0:
-            self._cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0)  # Disable auto exposure
-            self._cap.set(cv2.CAP_PROP_EXPOSURE, self._config['exposure'])
+            self._cap.set(self.cv2.CAP_PROP_AUTO_EXPOSURE, 0)  # Disable auto exposure
+            self._cap.set(self.cv2.CAP_PROP_EXPOSURE, self._config['exposure'])
             
         if self._config['gain'] > 0:
-            self._cap.set(cv2.CAP_PROP_GAIN, self._config['gain'])
+            self._cap.set(self.cv2.CAP_PROP_GAIN, self._config['gain'])
 
         # Set focus control
         if not self._config['autofocus']:
-            self._cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # Disable autofocus
+            self._cap.set(self.cv2.CAP_PROP_AUTOFOCUS, 0)  # Disable autofocus
             if self._config['focus'] > 0:
-                self._cap.set(cv2.CAP_PROP_FOCUS, self._config['focus'])
+                self._cap.set(self.cv2.CAP_PROP_FOCUS, self._config['focus'])
         else:
-            self._cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)  # Enable autofocus
+            self._cap.set(self.cv2.CAP_PROP_AUTOFOCUS, 1)  # Enable autofocus
             
         # Clear the buffer
         for _ in range(5):
@@ -194,9 +196,9 @@ class OpenCVCamera(BaseCamera):
         self._last_frame_time = time.time()
         
         # Get current camera properties
-        current_fps = self._cap.get(cv2.CAP_PROP_FPS)
-        current_exposure = self._cap.get(cv2.CAP_PROP_EXPOSURE)
-        current_gain = self._cap.get(cv2.CAP_PROP_GAIN)
+        current_fps = self._cap.get(self.cv2.CAP_PROP_FPS)
+        current_exposure = self._cap.get(self.cv2.CAP_PROP_EXPOSURE)
+        current_gain = self._cap.get(self.cv2.CAP_PROP_GAIN)
         
         return {
             'image': frame,
@@ -206,8 +208,8 @@ class OpenCVCamera(BaseCamera):
             'fps': current_fps,
             'width': frame.shape[1],
             'height': frame.shape[0],
-            'focus': self._cap.get(cv2.CAP_PROP_FOCUS),
-            'autofocus': bool(self._cap.get(cv2.CAP_PROP_AUTOFOCUS))
+            'focus': self._cap.get(self.cv2.CAP_PROP_FOCUS),
+            'autofocus': bool(self._cap.get(self.cv2.CAP_PROP_AUTOFOCUS))
         }
 
 class RealSenseCamera(BaseCamera):
@@ -576,6 +578,102 @@ class DepthAICamera(BaseCamera):
         })
         
         return frame_data
+
+class RaspberryPiCamera(BaseCamera):
+    """Raspberry Pi Camera implementation using libcamera2."""
+    
+    def __init__(self):
+        """Initialize the Raspberry Pi camera."""
+        super().__init__()
+        import picamera2
+        self._picam2 = None
+        self._config = {
+            'fps': 30,
+            'width': 1920,
+            'height': 1080,
+            'exposure': -1,  # Auto exposure
+            'gain': -1,      # Auto gain
+            'buffer_size': 1,  # Minimize buffer size
+            'autofocus': True,  # Enable autofocus by default
+            'focus': -1,      # Focus value when autofocus is disabled
+        }
+        self._last_frame_time = 0
+        self._frame_interval = 1.0 / self._config['fps']
+        
+    def start(self):
+        """Start the Raspberry Pi camera."""
+        from picamera2 import Picamera2
+        
+        self._picam2 = Picamera2()
+        
+        # Configure camera for video streaming
+        config = self._picam2.create_video_configuration(
+            main={"size": (self._config['width'], self._config['height'])},
+            controls={
+                "FrameDurationLimits": (int(1e6 / self._config['fps']), int(1e6 / self._config['fps']))
+            }
+        )
+        
+        self._picam2.configure(config)
+        
+        # Set manual exposure and gain if specified
+        if self._config['exposure'] > 0:
+            self._picam2.set_controls({"ExposureTime": self._config['exposure']})
+        if self._config['gain'] > 0:
+            self._picam2.set_controls({"AnalogueGain": self._config['gain']})
+            
+        # Start the camera
+        self._picam2.start()
+        
+        # Wait for camera to stabilize
+        time.sleep(2)
+        
+        self._last_frame_time = time.time()
+        super().start()
+        
+    def stop(self):
+        """Stop the Raspberry Pi camera."""
+        if self._picam2 is not None:
+            try:
+                self._picam2.stop()
+                self._picam2.close()
+            finally:
+                self._picam2 = None
+        super().stop()
+        
+    def __next__(self) -> Dict[str, Any]:
+        """Get the next frame from the camera.
+        
+        Returns:
+            Dict containing the image and metadata
+        """
+        if not self._is_running or self._picam2 is None:
+            raise StopIteration
+            
+        current_time = time.time()
+        elapsed = current_time - self._last_frame_time
+        
+        # Maintain frame rate
+        if elapsed < self._frame_interval:
+            time.sleep(self._frame_interval - elapsed)
+            
+        # Capture frame
+        frame = self._picam2.capture_array()
+        
+        self._last_frame_time = time.time()
+        
+        # Get current camera metadata
+        metadata = self._picam2.capture_metadata()
+        
+        return {
+            'image': frame,
+            'timestamp': self._last_frame_time,
+            'exposure': metadata.get('ExposureTime', -1),
+            'gain': metadata.get('AnalogueGain', -1),
+            'fps': self._config['fps'],
+            'width': frame.shape[1],
+            'height': frame.shape[0]
+        }
 
     
 
