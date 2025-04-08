@@ -28,7 +28,7 @@ from xwr68xxisk.clustering import PointCloudClustering
 from xwr68xxisk.tracking import PointCloudTracker
 from xwr68xxisk.configs import ConfigManager
 from xwr68xxisk.record import PointCloudRecorder
-from xwr68xxisk.cameras import BaseCamera
+from xwr68xxisk.cameras import BaseCamera, OpenCVCamera, RaspberryPiCamera
 from xwr68xxisk.camera_recorder import CameraRecorder
 
 logger = logging.getLogger(__name__)
@@ -1226,14 +1226,16 @@ class RadarGUI:
                 self.camera_button.name = 'Stop Camera'
                 self.camera_button.button_type = 'danger'
                 
-                if self.camera._cap:
-                    is_autofocus = bool(self.camera._cap.get(self.camera.cv2.CAP_PROP_AUTOFOCUS))
-                    self.camera_autofocus.value = is_autofocus
-                    self.camera_focus.disabled = is_autofocus
-                    
-                    if not is_autofocus:
-                        focus_value = int(self.camera._cap.get(self.camera.cv2.CAP_PROP_FOCUS))
-                        self.camera_focus.value = focus_value
+                # Get camera controls and update UI
+                controls = self.camera.get_controls()
+                
+                # Update autofocus control
+                self.camera_autofocus.disabled = controls['autofocus']['disabled']
+                self.camera_autofocus.value = controls['autofocus']['value']
+                
+                # Update focus control
+                self.camera_focus.disabled = controls['focus']['disabled']
+                self.camera_focus.value = controls['focus']['value']
                 
                 if hasattr(self, 'camera_callback') and self.camera_callback is not None:
                     self.camera_callback.stop()
@@ -1319,19 +1321,13 @@ class RadarGUI:
             return
         
         try:
-            frames_behind = self.camera._cap.get(self.camera.cv2.CAP_PROP_POS_FRAMES)
-            if frames_behind > 0:
-                for _ in range(int(frames_behind) - 1):
-                    if self.camera_running:
-                        self.camera._cap.grab()
-                    else:
-                        return
-            
             frame_data = next(self.camera)
             if frame_data is None:
                 return
                 
-            frame = self.camera.cv2.cvtColor(frame_data['image'], self.camera.cv2.COLOR_BGR2RGBA).view(np.uint32).reshape(frame_data['image'].shape[:-1])
+            # Convert frame to RGBA format
+            frame = frame_data['image']
+            print(frame.shape)
             
             current_images = self.camera_source.data['image']
             if len(current_images) == 0 or not np.array_equal(current_images[0], frame):
@@ -1341,10 +1337,13 @@ class RadarGUI:
                     'dh': [frame_data['height']]
                 })
             
+            # Update focus control if available
             if not self.camera_autofocus.value:
-                current_focus = int(self.camera._cap.get(self.camera.cv2.CAP_PROP_FOCUS))
-                if abs(current_focus - self.camera_focus.value) > 0:
-                    self.camera_focus.value = current_focus
+                controls = self.camera.get_controls()
+                if not controls['focus']['disabled']:
+                    current_focus = controls['focus']['value']
+                    if abs(current_focus - self.camera_focus.value) > 0:
+                        self.camera_focus.value = current_focus
             
         except StopIteration:
             logger.warning("Camera stream ended")
@@ -1357,24 +1356,19 @@ class RadarGUI:
         """Handle camera autofocus checkbox changes."""
         if self.camera and self.camera_running:
             try:
-                if not event.new:  # Autofocus disabled
-                    self.camera._cap.set(self.camera.cv2.CAP_PROP_AUTOFOCUS, 0)
-                    self.camera_focus.disabled = False
-                    # Get current focus value
-                    current_focus = int(self.camera._cap.get(self.camera.cv2.CAP_PROP_FOCUS))
-                    self.camera_focus.value = current_focus
-                else:  # Autofocus enabled
-                    self.camera._cap.set(self.camera.cv2.CAP_PROP_AUTOFOCUS, 1)
-                    self.camera_focus.disabled = True
-                logger.info(f"Camera autofocus {'enabled' if event.new else 'disabled'}")
+                if self.camera.set_control('autofocus', event.new):
+                    # Get updated controls
+                    controls = self.camera.get_controls()
+                    self.camera_focus.disabled = controls['focus']['disabled']
+                    logger.info(f"Camera autofocus {'enabled' if event.new else 'disabled'}")
             except Exception as e:
                 logger.error(f"Error setting camera autofocus: {e}")
 
     def _camera_focus_callback(self, event):
         """Handle camera focus slider changes."""
-        if self.camera and self.camera_running and not self.camera_autofocus.value:
+        if self.camera and self.camera_running:
             try:
-                self.camera._cap.set(self.camera.cv2.CAP_PROP_FOCUS, event.new)
-                logger.info(f"Camera focus set to {event.new}")
+                if self.camera.set_control('focus', event.new):
+                    logger.info(f"Camera focus set to {event.new}")
             except Exception as e:
                 logger.error(f"Error setting camera focus: {e}")

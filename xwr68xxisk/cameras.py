@@ -103,6 +103,36 @@ class BaseCamera(ABC):
         if not self._is_running:
             raise StopIteration
             
+    def get_controls(self) -> Dict[str, Any]:
+        """Get camera-specific controls and their states.
+        
+        Returns:
+            Dict containing control names and their states
+        """
+        return {
+            'autofocus': {
+                'enabled': False,
+                'value': False,
+                'disabled': True
+            },
+            'focus': {
+                'enabled': False,
+                'value': 0,
+                'disabled': True
+            }
+        }
+        
+    def set_control(self, control: str, value: Any) -> bool:
+        """Set a camera control value.
+        
+        Args:
+            control: Name of the control to set
+            value: Value to set the control to
+            
+        Returns:
+            bool: True if the control was set successfully, False otherwise
+        """
+        return False
 
 class OpenCVCamera(BaseCamera):
     """OpenCV camera implementation."""
@@ -208,6 +238,10 @@ class OpenCVCamera(BaseCamera):
         if not ret:
             raise StopIteration
             
+        # Convert BGR to RGBA
+        frame = self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGBA)
+        frame = frame.view(np.uint32).reshape(frame.shape[:-1])
+            
         self._last_frame_time = time.time()
         
         # Get current camera properties
@@ -226,6 +260,44 @@ class OpenCVCamera(BaseCamera):
             'focus': self._cap.get(self.cv2.CAP_PROP_FOCUS),
             'autofocus': bool(self._cap.get(self.cv2.CAP_PROP_AUTOFOCUS))
         }
+
+    def get_controls(self) -> Dict[str, Any]:
+        """Get camera-specific controls and their states."""
+        if not self._cap:
+            return super().get_controls()
+            
+        is_autofocus = bool(self._cap.get(self.cv2.CAP_PROP_AUTOFOCUS))
+        focus_value = int(self._cap.get(self.cv2.CAP_PROP_FOCUS))
+        
+        return {
+            'autofocus': {
+                'enabled': True,
+                'value': is_autofocus,
+                'disabled': False
+            },
+            'focus': {
+                'enabled': True,
+                'value': focus_value,
+                'disabled': is_autofocus
+            }
+        }
+        
+    def set_control(self, control: str, value: Any) -> bool:
+        """Set a camera control value."""
+        if not self._cap:
+            return False
+            
+        try:
+            if control == 'autofocus':
+                self._cap.set(self.cv2.CAP_PROP_AUTOFOCUS, 1 if value else 0)
+                return True
+            elif control == 'focus':
+                self._cap.set(self.cv2.CAP_PROP_FOCUS, int(value))
+                return True
+        except Exception:
+            return False
+            
+        return False
 
 class RealSenseCamera(BaseCamera):
     """Intel RealSense camera implementation."""
@@ -678,6 +750,11 @@ class RaspberryPiCamera(BaseCamera):
         # Capture frame
         frame = self._picam2.capture_array()
         
+        # Convert BGR to RGBA
+        import cv2
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+        frame = frame.view(np.uint32).reshape(frame.shape[:-1])
+        
         self._last_frame_time = time.time()
         
         # Get current camera metadata
@@ -692,6 +769,11 @@ class RaspberryPiCamera(BaseCamera):
             'width': frame.shape[1],
             'height': frame.shape[0]
         }
+
+    def get_controls(self) -> Dict[str, Any]:
+        """Get camera-specific controls and their states."""
+        # Raspberry Pi camera doesn't support focus control through the same interface
+        return super().get_controls()
 
     
 
