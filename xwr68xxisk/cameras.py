@@ -241,9 +241,16 @@ class OpenCVCamera(BaseCamera):
         if not ret:
             raise StopIteration
             
+        logger.debug(f"OpenCV raw frame shape: {frame.shape}, dtype: {frame.dtype}")
+        
         # Convert BGR to RGBA
         frame = self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGBA)
+        logger.debug(f"After BGR2RGBA: {frame.shape}, dtype: {frame.dtype}")
+        
+        # Convert to uint32 view for Bokeh
         frame = frame.view(np.uint32).reshape(frame.shape[:-1])
+        logger.debug(f"After uint32 view: {frame.shape}, dtype: {frame.dtype}")
+        logger.debug(f"Frame min/max: {frame.min()}/{frame.max()}")
             
         self._last_frame_time = time.time()
         
@@ -752,6 +759,7 @@ class RaspberryPiCamera(BaseCamera):
             
         # Capture frame
         frame = self._picam2.capture_array()
+        logger.debug(f"Picamera raw frame: shape={frame.shape}, dtype={frame.dtype}, min={frame.min()}, max={frame.max()}")
         
         # Resize frame to a more manageable size
         import cv2
@@ -761,14 +769,11 @@ class RaspberryPiCamera(BaseCamera):
         
         # Convert BGR to RGBA
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-        
-        # Debug logging
-        logger.debug(f"Frame shape after resize and conversion: {frame.shape}")
-        logger.debug(f"Frame dtype: {frame.dtype}")
-        logger.debug(f"Frame min/max: {frame.min()}/{frame.max()}")
+        logger.debug(f"After BGR2RGBA: shape={frame.shape}, dtype={frame.dtype}, min={frame.min()}, max={frame.max()}")
         
         # Convert to uint32 view for Bokeh
         frame = frame.view(np.uint32).reshape(frame.shape[:-1])
+        logger.debug(f"Final frame: shape={frame.shape}, dtype={frame.dtype}, min={frame.min()}, max={frame.max()}")
         
         self._last_frame_time = time.time()
         
