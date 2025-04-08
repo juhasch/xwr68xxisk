@@ -51,6 +51,20 @@ from typing import Dict, Any, Optional
 class BaseCamera(ABC):
     """Base class for all cameras."""
     
+    @staticmethod
+    def create_camera(implementation: str, device_id: Optional[str] = None):
+        """Create a camera instance based on the implementation."""
+        if implementation == "OpenCV":
+            return OpenCVCamera(device_id)
+        elif implementation == "RealSense":
+            return RealSenseCamera(device_id)
+        elif implementation == "DepthAI":
+            return DepthAICamera(device_id)
+        elif implementation == "Picamera":
+            return RaspberryPiCamera()
+        else:
+            raise ValueError(f"Unsupported camera implementation: {implementation}")
+
     def __init__(self):
         self._is_running = False
         self._config = {}
@@ -92,7 +106,8 @@ class BaseCamera(ABC):
 
 class OpenCVCamera(BaseCamera):
     """OpenCV camera implementation."""
-    
+    name = "OpenCV"
+
     def __init__(self, device_id: int = 0):
         """Initialize the OpenCV camera.
         
@@ -214,6 +229,7 @@ class OpenCVCamera(BaseCamera):
 
 class RealSenseCamera(BaseCamera):
     """Intel RealSense camera implementation."""
+    name = "RealSense"
     
     def __init__(self, device_id: Optional[str] = None):
         """Initialize the RealSense camera.
@@ -384,6 +400,7 @@ class RealSenseCamera(BaseCamera):
 
 class DepthAICamera(BaseCamera):
     """Luxonis DepthAI camera implementation."""
+    name = "DepthAI"
     
     def __init__(self, device_id: Optional[str] = None):
         """Initialize the DepthAI camera.
@@ -581,6 +598,7 @@ class DepthAICamera(BaseCamera):
 
 class RaspberryPiCamera(BaseCamera):
     """Raspberry Pi Camera implementation using libcamera2."""
+    name = "Picamera"
     
     def __init__(self):
         """Initialize the Raspberry Pi camera."""
