@@ -9,3 +9,4 @@ In this project
 - Use configuration files in yaml format
 - Commit every major change in git, add a useful comment
 - Prefer roll back and retry when you make changes that don't work, to fixing the errors that a change created.
+
