@@ -766,7 +766,10 @@ class RaspberryPiCamera(BaseCamera):
         target_width = 640
         target_height = 480
         frame = cv2.resize(frame, (target_width, target_height))
-        logger.debug(f"After resize: shape={frame.shape}, dtype={frame.dtype}, min={frame.min()}, max={frame.max()}")
+        
+        # Convert XBGR to RGBA
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGBA)
+        logger.debug(f"After BGRA2RGBA: shape={frame.shape}, dtype={frame.dtype}, min={frame.min()}, max={frame.max()}")
         
         # Convert to uint32 view for Bokeh
         frame = frame.view(np.uint32).reshape(frame.shape[:-1])
