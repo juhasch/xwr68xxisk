@@ -17,7 +17,6 @@ import numpy as np
 import panel as pn
 import holoviews as hv
 import colorcet as cc
-import cv2
 from bokeh.plotting import figure
 from bokeh.models import ColorBar, LinearColorMapper, ColumnDataSource, LabelSet
 from panel.widgets import TextAreaInput, Button
@@ -326,9 +325,9 @@ class RadarGUI:
         self.exit_button.on_click(self._exit_callback)
         self.modify_params_checkbox.param.watch(self._toggle_params_panel, 'value')
         self.clutter_removal_checkbox.param.watch(self._clutter_removal_callback, 'value')
-        self.frame_period_slider.param.watch(self._frame_period_callback, 'value')
+        self.frame_period_slider.param.watch(self._frame_period_callback, 'value_throttled')
         self.mob_enabled_checkbox.param.watch(self._mob_enabled_callback, 'value')
-        self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value')
+        self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value_throttled')
         self.clustering_checkbox.param.watch(self._clustering_callback, 'value')
         self.tracking_checkbox.param.watch(self._tracking_callback, 'value')
         self.camera_autofocus.param.watch(self._camera_autofocus_callback, 'value')
@@ -1228,12 +1227,12 @@ class RadarGUI:
                 self.camera_button.button_type = 'danger'
                 
                 if self.camera._cap:
-                    is_autofocus = bool(self.camera._cap.get(cv2.CAP_PROP_AUTOFOCUS))
+                    is_autofocus = bool(self.camera._cap.get(self.camera.cv2.CAP_PROP_AUTOFOCUS))
                     self.camera_autofocus.value = is_autofocus
                     self.camera_focus.disabled = is_autofocus
                     
                     if not is_autofocus:
-                        focus_value = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                        focus_value = int(self.camera._cap.get(self.camera.cv2.CAP_PROP_FOCUS))
                         self.camera_focus.value = focus_value
                 
                 if hasattr(self, 'camera_callback') and self.camera_callback is not None:
@@ -1320,7 +1319,7 @@ class RadarGUI:
             return
         
         try:
-            frames_behind = self.camera._cap.get(cv2.CAP_PROP_POS_FRAMES)
+            frames_behind = self.camera._cap.get(self.camera.cv2.CAP_PROP_POS_FRAMES)
             if frames_behind > 0:
                 for _ in range(int(frames_behind) - 1):
                     if self.camera_running:
@@ -1332,7 +1331,7 @@ class RadarGUI:
             if frame_data is None:
                 return
                 
-            frame = cv2.cvtColor(frame_data['image'], cv2.COLOR_BGR2RGBA).view(np.uint32).reshape(frame_data['image'].shape[:-1])
+            frame = self.camera.cv2.cvtColor(frame_data['image'], self.camera.cv2.COLOR_BGR2RGBA).view(np.uint32).reshape(frame_data['image'].shape[:-1])
             
             current_images = self.camera_source.data['image']
             if len(current_images) == 0 or not np.array_equal(current_images[0], frame):
@@ -1343,7 +1342,7 @@ class RadarGUI:
                 })
             
             if not self.camera_autofocus.value:
-                current_focus = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                current_focus = int(self.camera._cap.get(self.camera.cv2.CAP_PROP_FOCUS))
                 if abs(current_focus - self.camera_focus.value) > 0:
                     self.camera_focus.value = current_focus
             
@@ -1359,13 +1358,13 @@ class RadarGUI:
         if self.camera and self.camera_running:
             try:
                 if not event.new:  # Autofocus disabled
-                    self.camera._cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+                    self.camera._cap.set(self.camera.cv2.CAP_PROP_AUTOFOCUS, 0)
                     self.camera_focus.disabled = False
                     # Get current focus value
-                    current_focus = int(self.camera._cap.get(cv2.CAP_PROP_FOCUS))
+                    current_focus = int(self.camera._cap.get(self.camera.cv2.CAP_PROP_FOCUS))
                     self.camera_focus.value = current_focus
                 else:  # Autofocus enabled
-                    self.camera._cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+                    self.camera._cap.set(self.camera.cv2.CAP_PROP_AUTOFOCUS, 1)
                     self.camera_focus.disabled = True
                 logger.info(f"Camera autofocus {'enabled' if event.new else 'disabled'}")
             except Exception as e:
@@ -1375,7 +1374,7 @@ class RadarGUI:
         """Handle camera focus slider changes."""
         if self.camera and self.camera_running and not self.camera_autofocus.value:
             try:
-                self.camera._cap.set(cv2.CAP_PROP_FOCUS, event.new)
+                self.camera._cap.set(self.camera.cv2.CAP_PROP_FOCUS, event.new)
                 logger.info(f"Camera focus set to {event.new}")
             except Exception as e:
                 logger.error(f"Error setting camera focus: {e}")
