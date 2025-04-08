@@ -24,12 +24,11 @@ from panel.widgets import TextAreaInput, Button
 # Local imports
 from xwr68xxisk.radar import RadarConnection, create_radar, RadarConnectionError
 from xwr68xxisk.parse import RadarData
-from xwr68xxisk.point_cloud import RadarPointCloud
 from xwr68xxisk.clustering import PointCloudClustering
 from xwr68xxisk.tracking import PointCloudTracker
 from xwr68xxisk.configs import ConfigManager
 from xwr68xxisk.record import PointCloudRecorder
-from xwr68xxisk.cameras import OpenCVCamera
+from xwr68xxisk.cameras import BaseCamera
 from xwr68xxisk.camera_recorder import CameraRecorder
 
 logger = logging.getLogger(__name__)
@@ -56,7 +55,7 @@ class RadarGUI:
         Manager for handling radar configuration
     radar : RadarConnection
         Connection to the radar sensor
-    camera : OpenCVCamera, optional
+    camera : BaseCamera, optional
         Connection to the camera, if enabled
     is_running : bool
         Whether the radar is currently running
@@ -1218,8 +1217,9 @@ class RadarGUI:
         if not self.camera_running:
             try:
                 device_id = int(self.camera_select.value)
-                
-                self.camera = OpenCVCamera(device_id=device_id)
+                # get camera name from config
+                camera_name = self.config.get('camera', {}).get('implementation', 'Picamera')
+                self.camera = BaseCamera.create_camera(camera_name, device_id=device_id)
                 self.camera.start()
                 self.camera_running = True
                 

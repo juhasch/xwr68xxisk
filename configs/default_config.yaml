@@ -40,3 +40,10 @@ tracking:
   max_misses: 5
   min_hits: 3
 version: '1.0'
+camera:
+  implementation: "Picamera"  # Options: "OpenCV", "RealSense", "DepthAI", "Picamera"
+  enabled: true
+  resolution:
+    width: 640
+    height: 480
+  fps: 30
