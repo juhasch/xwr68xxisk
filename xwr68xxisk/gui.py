@@ -1218,7 +1218,7 @@ class RadarGUI:
             try:
                 device_id = int(self.camera_select.value)
                 # get camera name from config
-                camera_name = self.config.get('camera', {}).get('implementation', 'Picamera')
+                camera_name = self.config.camera.implementation
                 self.camera = BaseCamera.create_camera(camera_name, device_id=device_id)
                 self.camera.start()
                 self.camera_running = True

@@ -9,6 +9,7 @@ from .clustering_config import ClusteringConfig
 from .tracking_config import TrackingConfig
 from .gui_config import DisplayConfig, ProcessingConfig
 from .recording_config import RecordingConfig
+from .camera_config import CameraConfig
 from ..config import RadarConfig, ProfileConfig, FrameConfig
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class MainConfig(BaseConfig):
     display: DisplayConfig = Field(default_factory=DisplayConfig)
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
     recording: RecordingConfig = Field(default_factory=RecordingConfig)
+    camera: CameraConfig = Field(default_factory=CameraConfig)
 
 class ConfigManager:
     """Manages loading, saving, and updating configurations."""
@@ -127,5 +129,6 @@ class ConfigManager:
             tracking=TrackingConfig(),
             display=DisplayConfig(),
             processing=ProcessingConfig(),
-            recording=RecordingConfig()
+            recording=RecordingConfig(),
+            camera=CameraConfig()
         ) 

@@ -55,4 +55,4 @@ docs/_build/
 docs/_static/
 
 .idea
-configs/
+/configs/
