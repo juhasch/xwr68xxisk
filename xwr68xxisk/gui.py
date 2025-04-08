@@ -28,7 +28,7 @@ from xwr68xxisk.clustering import PointCloudClustering
 from xwr68xxisk.tracking import PointCloudTracker
 from xwr68xxisk.configs import ConfigManager
 from xwr68xxisk.record import PointCloudRecorder
-from xwr68xxisk.cameras import BaseCamera, OpenCVCamera, RaspberryPiCamera
+from xwr68xxisk.cameras import BaseCamera
 from xwr68xxisk.camera_recorder import CameraRecorder
 
 logger = logging.getLogger(__name__)
@@ -1327,7 +1327,6 @@ class RadarGUI:
                 
             # Convert frame to RGBA format
             frame = frame_data['image']
-            print(frame.shape)
             
             current_images = self.camera_source.data['image']
             if len(current_images) == 0 or not np.array_equal(current_images[0], frame):
