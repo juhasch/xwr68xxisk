@@ -117,10 +117,10 @@ class RadarConnection:
                 
                 # Handle different naming conventions based on OS
                 if "SLAB_USBtoUART" in device_path:  # macOS
-                    if "UART3" in device_path:  # CLI port on macOS
-                        cli_port_path = device_path
-                    else:  # Data port on macOS
+                    if device_path.endswith('UART'):
                         data_port_path = device_path
+                    else:
+                        cli_port_path = device_path
                     self.serial_number = port.serial_number
                 elif "Enhanced" in port.description:  # Windows/Linux
                     cli_port_path = device_path
