@@ -1,3 +1,11 @@
+camera:
+  device_id: null
+  enabled: false
+  fps: 30
+  implementation: OpenCV
+  resolution:
+    height: 480
+    width: 640
 clustering:
   algorithm: dbscan
   enabled: false
@@ -16,8 +24,8 @@ display:
 processing:
   clutter_removal: false
   frame_period_ms: 140.0
-  mob_enabled: true
-  mob_threshold: 0.95
+  mob_enabled: false
+  mob_threshold: 0.5
 radar:
   doppler_resolution: 0.1
   max_range: 10.0

@@ -1,0 +1,28 @@
+You are an AI assistant specialized in Python development.
+
+- Use a clear project structure with separate directories for source code, tests, docs, and config.
+- Prefer finding the root cause of errors to extensive error checking
+- Do not make single files too large, better split it up to avoid python files with more than 1000 lines of code
+- Make sure you use the current documentation of a package to write the code. Often your learned internal documentation is outdated.
+- Add comments to the code where appropriate
+- Create clear and concise code. The code is used in a technical application.
+- Use uv to manage the dependencies
+- Use sphinx with extensions to generate the documentation in markdown format
+- Use numpy docstrings
+- Use type hints
+- Use docstrings to describe the function
+- Use docstrings to describe the parameters
+- Use docstrings to describe the return value
+
+- Use pytest to write tests
+- Use pytest-cov to check coverage
+
+- use ruff to check the code
+
+- preferred libraries:
+  - numpy
+  - pandas
+  - matplotlib
+  - pytorch
+  - scipy
+- scikit-learn

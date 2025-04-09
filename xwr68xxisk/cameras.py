@@ -46,11 +46,28 @@ import numpy as np
 import time
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BaseCamera(ABC):
     """Base class for all cameras."""
     
+    @staticmethod
+    def create_camera(implementation: str, device_id: Optional[str] = None):
+        """Create a camera instance based on the implementation."""
+        if implementation == "OpenCV":
+            return OpenCVCamera(device_id)
+        elif implementation == "RealSense":
+            return RealSenseCamera(device_id)
+        elif implementation == "DepthAI":
+            return DepthAICamera(device_id)
+        elif implementation == "Picamera":
+            return RaspberryPiCamera()
+        else:
+            raise ValueError(f"Unsupported camera implementation: {implementation}")
+
     def __init__(self):
         self._is_running = False
         self._config = {}
@@ -89,10 +106,41 @@ class BaseCamera(ABC):
         if not self._is_running:
             raise StopIteration
             
+    def get_controls(self) -> Dict[str, Any]:
+        """Get camera-specific controls and their states.
+        
+        Returns:
+            Dict containing control names and their states
+        """
+        return {
+            'autofocus': {
+                'enabled': False,
+                'value': False,
+                'disabled': True
+            },
+            'focus': {
+                'enabled': False,
+                'value': 0,
+                'disabled': True
+            }
+        }
+        
+    def set_control(self, control: str, value: Any) -> bool:
+        """Set a camera control value.
+        
+        Args:
+            control: Name of the control to set
+            value: Value to set the control to
+            
+        Returns:
+            bool: True if the control was set successfully, False otherwise
+        """
+        return False
 
 class OpenCVCamera(BaseCamera):
     """OpenCV camera implementation."""
-    
+    name = "OpenCV"
+
     def __init__(self, device_id: int = 0):
         """Initialize the OpenCV camera.
         
@@ -193,6 +241,17 @@ class OpenCVCamera(BaseCamera):
         if not ret:
             raise StopIteration
             
+        logger.debug(f"OpenCV raw frame shape: {frame.shape}, dtype: {frame.dtype}")
+        
+        # Convert BGR to RGBA
+        frame = self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGBA)
+        logger.debug(f"After BGR2RGBA: {frame.shape}, dtype: {frame.dtype}")
+        
+        # Convert to uint32 view for Bokeh
+        frame = frame.view(np.uint32).reshape(frame.shape[:-1])
+        logger.debug(f"After uint32 view: {frame.shape}, dtype: {frame.dtype}")
+        logger.debug(f"Frame min/max: {frame.min()}/{frame.max()}")
+            
         self._last_frame_time = time.time()
         
         # Get current camera properties
@@ -212,8 +271,47 @@ class OpenCVCamera(BaseCamera):
             'autofocus': bool(self._cap.get(self.cv2.CAP_PROP_AUTOFOCUS))
         }
 
+    def get_controls(self) -> Dict[str, Any]:
+        """Get camera-specific controls and their states."""
+        if not self._cap:
+            return super().get_controls()
+            
+        is_autofocus = bool(self._cap.get(self.cv2.CAP_PROP_AUTOFOCUS))
+        focus_value = int(self._cap.get(self.cv2.CAP_PROP_FOCUS))
+        
+        return {
+            'autofocus': {
+                'enabled': True,
+                'value': is_autofocus,
+                'disabled': False
+            },
+            'focus': {
+                'enabled': True,
+                'value': focus_value,
+                'disabled': is_autofocus
+            }
+        }
+        
+    def set_control(self, control: str, value: Any) -> bool:
+        """Set a camera control value."""
+        if not self._cap:
+            return False
+            
+        try:
+            if control == 'autofocus':
+                self._cap.set(self.cv2.CAP_PROP_AUTOFOCUS, 1 if value else 0)
+                return True
+            elif control == 'focus':
+                self._cap.set(self.cv2.CAP_PROP_FOCUS, int(value))
+                return True
+        except Exception:
+            return False
+            
+        return False
+
 class RealSenseCamera(BaseCamera):
     """Intel RealSense camera implementation."""
+    name = "RealSense"
     
     def __init__(self, device_id: Optional[str] = None):
         """Initialize the RealSense camera.
@@ -384,6 +482,7 @@ class RealSenseCamera(BaseCamera):
 
 class DepthAICamera(BaseCamera):
     """Luxonis DepthAI camera implementation."""
+    name = "DepthAI"
     
     def __init__(self, device_id: Optional[str] = None):
         """Initialize the DepthAI camera.
@@ -581,6 +680,7 @@ class DepthAICamera(BaseCamera):
 
 class RaspberryPiCamera(BaseCamera):
     """Raspberry Pi Camera implementation using libcamera2."""
+    name = "Picamera"
     
     def __init__(self):
         """Initialize the Raspberry Pi camera."""
@@ -659,6 +759,21 @@ class RaspberryPiCamera(BaseCamera):
             
         # Capture frame
         frame = self._picam2.capture_array()
+        logger.debug(f"Picamera raw frame: shape={frame.shape}, dtype={frame.dtype}, min={frame.min()}, max={frame.max()}")
+        
+        # Resize frame to a more manageable size
+        import cv2
+        target_width = 640
+        target_height = 480
+        frame = cv2.resize(frame, (target_width, target_height))
+        
+        # Convert XBGR to RGBA
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGBA)
+        logger.debug(f"After BGRA2RGBA: shape={frame.shape}, dtype={frame.dtype}, min={frame.min()}, max={frame.max()}")
+        
+        # Convert to uint32 view for Bokeh
+        frame = frame.view(np.uint32).reshape(frame.shape[:-1])
+        logger.debug(f"Final frame: shape={frame.shape}, dtype={frame.dtype}, min={frame.min()}, max={frame.max()}")
         
         self._last_frame_time = time.time()
         
@@ -671,9 +786,14 @@ class RaspberryPiCamera(BaseCamera):
             'exposure': metadata.get('ExposureTime', -1),
             'gain': metadata.get('AnalogueGain', -1),
             'fps': self._config['fps'],
-            'width': frame.shape[1],
-            'height': frame.shape[0]
+            'width': target_width,
+            'height': target_height
         }
+
+    def get_controls(self) -> Dict[str, Any]:
+        """Get camera-specific controls and their states."""
+        # Raspberry Pi camera doesn't support focus control through the same interface
+        return super().get_controls()
 
     
 
