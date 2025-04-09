@@ -913,7 +913,7 @@ class RadarGUI:
             pn.Row(
                 self.camera_select,
                 self.camera_button
-            ),
+            ) if self.config.camera.enabled else None,
             pn.layout.Divider(),
             self.start_button,
             self.stop_button,
@@ -934,7 +934,7 @@ class RadarGUI:
             pn.pane.Markdown('## Real-time Data'),
             pn.Row(
                 self.plot,
-                self.create_camera_plot(),
+                self.create_camera_plot() if self.config.camera.enabled else None,
             ),
             self.config_modal,  # Add the modal to main layout
             self.params_panel,  # Add the parameters panel to main layout
