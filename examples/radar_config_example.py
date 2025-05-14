@@ -1,11 +1,10 @@
-#!/usr/bin/env python3
 """
 Example script to demonstrate usage of the RadarConfig class
 """
 
 import os
-from radar_config import (
-    RadarConfig, create_awr2544_config, create_xwr68xx_config,
+from xwr68xxisk.radar_config import (
+    RadarConfig, create_xwr68xx_config,
     DfeDataOutputModeCommand, ChannelConfigCommand, ProfileConfigCommand
 )
 
@@ -213,7 +212,7 @@ def example_clone_config():
 
 if __name__ == "__main__":
     # Import RadarCommand for custom config example
-    from radar_config import RadarCommand
+    from xwr68xxisk.radar_config import RadarCommand
     
     print("=== Radar Configuration Examples ===\n")
     
@@ -225,4 +224,3 @@ if __name__ == "__main__":
     
     # Demonstrate cloning and specialized configuration
     example_clone_config() 
-    
