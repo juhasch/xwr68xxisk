@@ -112,14 +112,14 @@ class RadarConnection:
                 device_path = port.device
                 
                 # Convert cu. to tty. on macOS for more reliable access
-                if device_path.startswith('/dev/cu.'):
-                    device_path = device_path.replace('/dev/cu.', '/dev/tty.')
+                if device_path.startswith('/dev/cu.usbserial'):
+                    device_path = device_path.replace('/dev/cu.usbserial', '/dev/tty.usbserial')
                 
                 # Handle different naming conventions based on OS
-                if "SLAB_USBtoUART" in device_path:  # macOS
-                    if "UART3" in device_path:  # CLI port on macOS
+                if "usbserial" in device_path:  # macOS
+                    if device_path.endswith("0"):  # CLI port on macOS
                         cli_port_path = device_path
-                    else:  # Data port on macOS
+                    elif device_path.endswith("1"):  # Data port on macOS
                         data_port_path = device_path
                     self.serial_number = port.serial_number
                 elif "Enhanced" in port.description:  # Windows/Linux
