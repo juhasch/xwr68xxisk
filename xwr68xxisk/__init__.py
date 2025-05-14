@@ -9,3 +9,5 @@ try:
         __doc__ = f.read()
 except FileNotFoundError:
     __doc__ = "README file not found."
+
+# This file makes Python treat the xwr68xxisk directory as a package.
