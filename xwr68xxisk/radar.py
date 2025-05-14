@@ -210,18 +210,23 @@ class RadarConnection:
         """Get version information from the sensor."""
         if not self.is_connected():
             logger.error("Radar not connected")
-            return
+            return None
             
         try:
             self.cli_port.flushInput()
             self.cli_port.write(b'version\n')
             time.sleep(0.05)
-            response = self._read_cli_response()
-            if response and len(response) >= 2:
-                return response[1:-2]
-            return response
+            response_lines = self._read_cli_response()
+            
+            # Return raw response lines, excluding prompt if present
+            if response_lines:
+                if response_lines[-1] == "mmwDemo:/>":
+                    return response_lines[:-1] # Exclude prompt
+                return response_lines
+            return None # Return None if no response
         except Exception as e:
-            return [f"Error getting version: {e}"]
+            logger.error(f"Error getting version: {e}")
+            return None # Return None on error
 
     def connect(self, config: str, serial_number: Optional[str] = None) -> None:
         """Connect to the radar sensor.
@@ -241,15 +246,31 @@ class RadarConnection:
             else:
                 logger.info("Using supplied configuration")
                 self.profile = config
+            
+            # Parse the configuration to populate radar_params
+            if self.profile:
+                profile_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
+                self.radar_params = self.parse_configuration(profile_lines)
+                logger.info("Parsed radar parameters from loaded profile during connect.")
+            else:
+                logger.warning("No profile content to parse radar parameters from during connect.")
+                # Initialize radar_params with defaults if profile is empty or missing
+                self.radar_params = self.parse_configuration([])
+                logger.info("Initialized radar_params with defaults during connect.")
+
             self.version_info = self.get_version()
             
-            if not self.version_info:
-                raise RadarConnectionError("No response from sensor - check connections")
+            if self.version_info is None:
+                logger.warning("No version information received from sensor, but proceeding.")
+                # Not raising an error here to allow connection even if version command fails
+                # The GUI will show "Unknown" or "N/A" for version details.
                 
         except serial.SerialException as e:
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
             
         except Exception as e:
+            # Log the full traceback for unexpected errors
+            logger.exception(f"Unexpected error during radar connection process:")
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
 
     def set_frame_period(self, period_ms: float) -> None:
