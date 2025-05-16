@@ -180,6 +180,64 @@ class SceneProfileConfig(BaseModel):
         description="Desired radial velocity resolution in m/s. May be auto-calculated or selected."
     )
 
+    # Detailed Profile Parameters (populated with defaults from config_generator.py)
+    profile_start_freq_ghz: float = Field(
+        60.25, description="Profile: Start Frequency in GHz."
+    )
+    profile_idle_time_us: float = Field(
+        7.0, description="Profile: Idle Time in microseconds."
+    )
+    profile_adc_start_time_us: float = Field(
+        6.0, description="Profile: ADC Start Time in microseconds."
+    )
+    profile_ramp_end_time_us: float = Field(
+        60.0, description="Profile: Ramp End Time in microseconds."
+    )
+    profile_tx_out_power_db: int = Field(
+        0, description="Profile: TX Output Power back-off in dB (0 for max power)."
+    )
+    profile_tx_phase_shifter_deg: int = Field(
+        0, description="Profile: TX Phase Shifter in degrees."
+    )
+    profile_freq_slope_mhz_us: float = Field(
+        20.0, description="Profile: Frequency Slope in MHz/microsecond."
+    )
+    profile_tx_start_time_us: float = Field(
+        1.0, description="Profile: TX Start Time in microseconds."
+    )
+    profile_num_adc_samples: int = Field(
+        256, description="Profile: Number of ADC Samples."
+    )
+    profile_dig_out_sample_rate_ksps: int = Field(
+        5000, description="Profile: Digital Output Sample Rate in kSPS."
+    )
+    profile_hpf_corner_freq1: int = Field(
+        0, description="Profile: HPF1 Corner Frequency (0: 175KHz, 1: 235KHz, 2: 350KHz, 3: 700KHz)."
+    )
+    profile_hpf_corner_freq2: int = Field(
+        0, description="Profile: HPF2 Corner Frequency (0: 350KHz, 1: 700KHz, 2: 1.4MHz, 3: 2.8MHz)."
+    )
+    profile_rx_gain_db: int = Field(
+        30, description="Profile: RX Gain in dB."
+    )
+
+    # Frame Config Parameters
+    frame_num_loops: int = Field(
+        64, description="Frame: Number of loops (Doppler Bins)."
+    )
+    frame_num_frames: int = Field(
+        0, description="Frame: Number of frames to transmit (0 for infinite)."
+    )
+    frame_trigger_select: int = Field(
+        1, description="Frame: Trigger select (1 for software trigger, 2 for hardware trigger)."
+    )
+    frame_trigger_delay_ms: int = Field(
+        0, description="Frame: Trigger delay in milliseconds."
+    )
+    frame_chirp_start_idx: int = Field(
+        0, description="Frame: Chirp Start Index."
+    )
+
     # Plot Selection checkboxes
     plot_scatter: bool = Field(True, description="Enable Scatter Plot.")
     plot_range_profile: bool = Field(True, description="Enable Range Profile plot.")
@@ -199,6 +257,17 @@ class SceneProfileConfig(BaseModel):
                 # If the string doesn't match any enum value, return the default
                 return AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV
         return v
+
+    @field_validator('profile_num_adc_samples')
+    @classmethod
+    def round_adc_samples_to_power_of_2(cls, v: int) -> int:
+        """Ensure num_adc_samples is a power of 2, rounding up if necessary."""
+        if v <= 0: # Or raise ValueError for non-positive
+            return 1 # Smallest power of 2
+        power_of_2 = 1
+        while power_of_2 < v:
+            power_of_2 *= 2
+        return power_of_2
 
 # Example usage (optional, can be removed or kept for testing)
 if __name__ == "__main__":
