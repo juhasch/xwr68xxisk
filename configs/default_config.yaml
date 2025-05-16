@@ -35,7 +35,7 @@ radar:
   range_idx_to_meters: 0.1
   range_resolution: 0.1
 recording:
-  buffer_in_memory: false
+  buffer_size: 1000
   directory: recordings
   enabled: true
   formats:
