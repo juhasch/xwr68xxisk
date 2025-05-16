@@ -248,28 +248,10 @@ class RadarGUI:
         )
         
         # --- Updated Configuration Modal ---
-        # Instantiate the Pydantic model for the new scene config GUI
-        self.scene_profile_for_modal = SceneProfileConfig()
-        # Instantiate the new ProfileConfigView panel, passing the config instance
-        self.profile_config_view_panel = ProfileConfigView(config_instance=self.scene_profile_for_modal)
-
-        # Define config_modal content components
-        config_modal_header = pn.Row(
-            pn.pane.Markdown('## Sensor Profile'),
-            pn.layout.HSpacer(),
-            pn.widgets.Button(name='✕', width=30, align='end'), # This will be self.close_button
-            sizing_mode='stretch_width'
-        )
-        config_modal_buttons = pn.Row(
-            Button(name="Save", button_type="primary", width=100), # This will be self.save_button
-            Button(name="Cancel", width=100), # This will be self.cancel_button
-        )
-        
-        # Temporarily reinstate original version info display for stability
         self.original_version_info_display = TextAreaInput(
-            name="**Sensor Information**",
+            name="**Sensor Information**\n",
             value="Connect to sensor to see version information",
-            height=120, # Adjusted height a bit
+            height=400,
             disabled=True,
             styles={
                 'font-family': 'monospace',
@@ -286,41 +268,47 @@ class RadarGUI:
             }
         )
 
+        # Define config_modal content components
+        config_modal_header = pn.Row(
+            pn.pane.Markdown('## Sensor Profile'),
+            pn.layout.HSpacer(),
+            pn.widgets.Button(name='✕', width=30, align='end'), # This will be self.close_button
+            sizing_mode='stretch_width'
+        )
+        config_modal_buttons = pn.Row(
+            Button(name="Save", button_type="primary", width=100), # This will be self.save_button
+            Button(name="Cancel", width=100), # This will be self.cancel_button
+        )
+
+        # Instantiate the Pydantic model for the new scene config GUI
+        self.scene_profile_for_modal = SceneProfileConfig()
+        # Instantiate the new ProfileConfigView panel, passing the config instance
+        self.profile_config_view_panel = ProfileConfigView(config_instance=self.scene_profile_for_modal)
+
         self.config_modal = pn.Column(
             config_modal_header,
             self.profile_config_view_panel.view,
             config_modal_buttons,
-            # self.original_version_info_display, # Removed from here
             visible=False, 
             width=850, 
-            height=750, # Increased height back to 750px
+            height=750,
             css_classes=['modal', 'modal-content'] 
         )
 
-        # Store the original sensor info text parts (still used for the new modal, but not populated by connect yet)
-        self.sensor_info_platform_text = "xWR68xx" # Default, updated on connect
-        self.sensor_info_sdk_text = "Unknown"
-        self.sensor_info_device_text = "Unknown"
-        self.sensor_info_fw_text = "Unknown"
-
-        self.device_info_text_pane = pn.pane.Markdown(
-            self._get_formatted_sensor_info(),
-            width=350, height=150, styles={'font-family': 'monospace', 'white-space': 'pre'}
-        )
-        
         self.device_info_modal_close_button = pn.widgets.Button(name="Close", width=80)
         self.device_info_modal_close_button.on_click(self._hide_device_info_modal)
         self.device_info_modal = pn.Column( 
             pn.Column(
-                self.original_version_info_display, # Added TextAreaInput here
-                pn.Row(pn.layout.HSpacer(), self.device_info_modal_close_button, pn.layout.HSpacer())
+                self.original_version_info_display,
+                pn.Row(pn.layout.HSpacer(), 
+                self.device_info_modal_close_button, pn.layout.HSpacer())
             ),
-            width=500, # Increased width
+            width=500,
             visible=False,
             css_classes=['modal', 'modal-content'],
-            height=280 # Increased height
+            height=500
         )
-        
+
         # Get references to modal buttons (adjust indices based on new direct structure)
         self.close_button = self.config_modal[0][2] # Header row, 3rd element
         self.save_button = self.config_modal[2][0]  # Buttons row, 1st element
@@ -368,9 +356,9 @@ class RadarGUI:
         self.camera_focus.param.watch(self._camera_focus_callback, 'value')
         self.camera_button.on_click(self.start_camera)
         self.config_button.on_click(self._show_config_modal)
-        self.close_button.on_click(self._hide_config_modal) # Uncommented
-        self.cancel_button.on_click(self._hide_config_modal) # Uncommented
-        self.save_button.on_click(self._save_config) # Uncommented
+        self.close_button.on_click(self._hide_config_modal)
+        self.cancel_button.on_click(self._hide_config_modal)
+        self.save_button.on_click(self._save_config)
         self.device_info_button.on_click(self._show_device_info_modal)
         
         self.start_button.disabled = True
@@ -438,16 +426,15 @@ class RadarGUI:
                 self.mob_threshold_slider.disabled = False
                 self.device_info_button.disabled = False
 
-                # Update ORIGINAL sensor information display
+                # Update sensor information display
                 if self.radar.version_info: # Expected to be a list of strings or None
-                    formatted_info = '\n'.join(self.radar.version_info)
+                    # Filter out first and last lines
+                    filtered_info = self.radar.version_info[1:-1] if len(self.radar.version_info) > 2 else self.radar.version_info
+                    formatted_info = '\n' + '\n'.join(filtered_info)  # Added newline before content
                     self.original_version_info_display.value = formatted_info
                 else:
                     self.original_version_info_display.value = "Failed to retrieve version information."
                 
-                # Comment out update to new device_info_text_pane for now
-                # self.device_info_text_pane.object = self._get_formatted_sensor_info() 
-
                 # Update parameters from radar if available
                 if self.radar.clutterRemoval:
                     self.clutter_removal_checkbox.value = True
@@ -489,13 +476,7 @@ class RadarGUI:
             self.mob_enabled_checkbox.disabled = True
             self.mob_threshold_slider.disabled = True
             self.original_version_info_display.value = "Connect to sensor to see version information" # Reset original display
-            # Reset sensor info for the new modal (though not actively populated by connect yet)
-            self.sensor_info_platform_text = "xWR68xx"
-            self.sensor_info_sdk_text = "N/A"
-            self.sensor_info_device_text = "N/A"
-            self.sensor_info_fw_text = "N/A"
-            self.device_info_text_pane.object = self._get_formatted_sensor_info()
-    
+
     def _record_callback(self, event):
         """Toggle recording state."""
         if not self.is_recording:
@@ -662,8 +643,7 @@ class RadarGUI:
     
     def _show_config_modal(self, event):
         """Show the sensor profile modal."""
-        self.config_modal.visible = True # Reverted to .visible
-        # self.config_modal.show() # Commented out .show()
+        self.config_modal.visible = True
 
     def _hide_config_modal(self, event):
         """Hide the sensor profile modal."""
@@ -671,8 +651,7 @@ class RadarGUI:
 
     def _show_device_info_modal(self, event):
         """Show the device information modal."""
-        self.device_info_modal.visible = True # Reverted to .visible
-        # self.device_info_modal.show() # Commented out .show()
+        self.device_info_modal.visible = True
 
     def _hide_device_info_modal(self, event):
         """Hide the device information modal."""
@@ -1018,8 +997,8 @@ class RadarGUI:
                 self.plot,
                 self.create_camera_plot() if self.config.camera.enabled else None,
             ),
-            self.config_modal,  # Added back to main layout
-            self.device_info_modal, # Added back to main layout for now (was template.modal)
+            self.config_modal,
+            self.device_info_modal,
             self.params_panel, 
             styles={'padding': '10px'},
             max_width=2000  
@@ -1458,13 +1437,6 @@ class RadarGUI:
                     logger.info(f"Camera focus set to {event.new}")
             except Exception as e:
                 logger.error(f"Error setting camera focus: {e}")
-
-    def _get_formatted_sensor_info(self):
-        return f"""**Sensor Information**
-Platform         : {self.sensor_info_platform_text}
-mmWave SDK Version : {self.sensor_info_sdk_text}
-Device Info      : {self.sensor_info_device_text}
-RF F/W Version   : {self.sensor_info_fw_text}"""
 
     def _generate_cfg_from_scene_profile(self, scene_config: SceneProfileConfig) -> str:
         """
