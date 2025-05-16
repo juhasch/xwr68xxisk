@@ -591,7 +591,11 @@ class RadarConnection:
 
     def configure_and_start(self) -> None:
         """Configure the radar and start streaming data."""
-        self.send_profile()
+        logger.info(f"CONFIGURE_AND_START: Current self.profile is:\\n--BEGIN STORED PROFILE--\\n{self.profile}\\n--END STORED PROFILE--") # Log current profile
+        if not self.is_connected(): 
+            raise RadarConnectionError("Radar not connected")
+            
+        self.send_profile(ignore_response=False)
         self.send_command('sensorStart')
         self.is_running = True
         logger.info("Radar configured and started")
