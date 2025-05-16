@@ -26,11 +26,9 @@ class RadarConnectionError(Exception):
 class RadarConnection:
     """Base class for TI XWR68xx radar sensors."""
     
-    # Silicon Labs CP2105
     CP2105_VENDOR_ID = 0x10C4
     CP2105_PRODUCT_ID = 0xEA70
     
-    # Constants
     MAX_BUFFER_SIZE = 2**15
     MAGIC_WORD = b'\x02\x01\x04\x03\x06\x05\x08\x07'
     MAGIC_WORD_LENGTH = 8
@@ -42,22 +40,20 @@ class RadarConnection:
         self.profile = ""
         self.version_info = None
         self.serial_number = None
-        self.device_type = 'CP2105'  # Only CP2105 is supported
+        self.device_type = 'CP2105'
         self.is_running = False
-        self._clutter_removal = False  # Default value for clutter removal
+        self._clutter_removal = False
 
-        self.mob_enabled = False  # Default value for moving object detection
-        self.mob_threshold = 0.5  # Default value for moving object detection threshold
+        self.mob_enabled = False
+        self.mob_threshold = 0.5
         
-        # Store detected ports
         self._detected_cli_port = None
         self._detected_data_port = None
         
-        # Buffer and statistics
         self.byte_buffer = np.zeros(self.MAX_BUFFER_SIZE, dtype='uint8')
         self.byte_buffer_length = 0
         self.current_index = 0
-        self.radar_params = None  # Work in progress
+        self.radar_params = None
         self.debug_dir = "debug_data"
         os.makedirs(self.debug_dir, exist_ok=True)
         self.reader = None
@@ -111,20 +107,18 @@ class RadarConnection:
                 logger.debug(f"Found CP2105 port: {port.description}")
                 device_path = port.device
                 
-                # Convert cu. to tty. on macOS for more reliable access
                 if device_path.startswith('/dev/cu.usbserial'):
                     device_path = device_path.replace('/dev/cu.usbserial', '/dev/tty.usbserial')
                 
-                # Handle different naming conventions based on OS
-                if "usbserial" in device_path:  # macOS
-                    if device_path.endswith("0"):  # CLI port on macOS
+                if "usbserial" in device_path:
+                    if device_path.endswith("0"):
                         cli_port_path = device_path
-                    elif device_path.endswith("1"):  # Data port on macOS
+                    elif device_path.endswith("1"):
                         data_port_path = device_path
                     self.serial_number = port.serial_number
-                elif "Enhanced" in port.description:  # Windows/Linux
+                elif "Enhanced" in port.description:
                     cli_port_path = device_path
-                elif "Standard" in port.description:  # Windows/Linux
+                elif "Standard" in port.description:
                     data_port_path = device_path
                     self.serial_number = port.serial_number
                     
@@ -218,15 +212,14 @@ class RadarConnection:
             time.sleep(0.05)
             response_lines = self._read_cli_response()
             
-            # Return raw response lines, excluding prompt if present
             if response_lines:
                 if response_lines[-1] == "mmwDemo:/>":
-                    return response_lines[:-1] # Exclude prompt
+                    return response_lines[:-1]
                 return response_lines
-            return None # Return None if no response
+            return None
         except Exception as e:
             logger.error(f"Error getting version: {e}")
-            return None # Return None on error
+            return None
 
     def connect(self, config: str, serial_number: Optional[str] = None) -> None:
         """Connect to the radar sensor.
@@ -238,7 +231,6 @@ class RadarConnection:
         try:
             self._connect_device(serial_number)
             
-            # If config is a file path, read it
             if config and os.path.isfile(config):
                 logger.info(f"Reading configuration from file: {config}")
                 with open(config, 'r') as f:
@@ -247,14 +239,12 @@ class RadarConnection:
                 logger.info("Using supplied configuration")
                 self.profile = config
             
-            # Parse the configuration to populate radar_params
             if self.profile:
                 profile_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
                 self.radar_params = self.parse_configuration(profile_lines)
                 logger.info("Parsed radar parameters from loaded profile during connect.")
             else:
                 logger.warning("No profile content to parse radar parameters from during connect.")
-                # Initialize radar_params with defaults if profile is empty or missing
                 self.radar_params = self.parse_configuration([])
                 logger.info("Initialized radar_params with defaults during connect.")
 
@@ -262,14 +252,11 @@ class RadarConnection:
             
             if self.version_info is None:
                 logger.warning("No version information received from sensor, but proceeding.")
-                # Not raising an error here to allow connection even if version command fails
-                # The GUI will show "Unknown" or "N/A" for version details.
                 
         except serial.SerialException as e:
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
             
         except Exception as e:
-            # Log the full traceback for unexpected errors
             logger.exception(f"Unexpected error during radar connection process:")
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
 
@@ -299,13 +286,11 @@ class RadarConnection:
         """Parse configuration lines and extract radar parameters."""
         config_params = {}
         
-        # First load default values from YAML if available
         yaml_config_path = 'configs/default_config.yaml'
         if os.path.exists(yaml_config_path):
             try:
                 with open(yaml_config_path, 'r') as f:
                     yaml_config = yaml.safe_load(f)
-                    # Pre-populate with YAML settings
                     config_params['clutterRemoval'] = yaml_config['processing']['clutter_removal']
                     config_params['framePeriod'] = yaml_config['processing']['frame_period_ms']
                     config_params['mobEnabled'] = yaml_config['processing']['mob_enabled']
@@ -336,13 +321,11 @@ class RadarConnection:
                     
                 elif cmd == 'frameCfg':
                     config_params['chirpsPerFrame'] = (int(args[1]) - int(args[0]) + 1) * int(args[2])
-                    # Only override framePeriod if not set from YAML
                     if 'framePeriod' not in config_params:
                         config_params['framePeriod'] = float(args[4])
                     
                 elif cmd == 'multiObjBeamForming':
                     if len(args) >= 3:
-                        # Only override if not set from YAML
                         if 'mobEnabled' not in config_params:
                             self.mob_enabled = int(args[1]) == 1
                             self.mob_threshold = float(args[2])
@@ -351,7 +334,6 @@ class RadarConnection:
                         
                 elif cmd == 'clutterRemoval':
                     if len(args) >= 2:
-                        # Only override if not set from YAML
                         if 'clutterRemoval' not in config_params:
                             self._clutter_removal = int(args[1]) == 1
                             config_params['clutterRemoval'] = self._clutter_removal
@@ -359,25 +341,20 @@ class RadarConnection:
                 logger.warning(f"Error parsing configuration line '{line}': {e}")
                 continue
         
-        # Calculate derived parameters
         if 'samples' in config_params:
             rangeBins2x = 2 ** (len(bin(config_params['samples'])) - 2)
             config_params['rangeBins'] = int(rangeBins2x/2)
         
-        # Calculate range resolution
         if all(k in config_params for k in ['sampleRate', 'slope', 'rangeBins']):
             config_params['rangeStep'] = (3e8 * config_params['sampleRate'] * 1e3) / (2 * config_params['slope'] * 1e12 * config_params['rangeBins'] * 2)
             config_params['maxRange'] = config_params['rangeStep'] * config_params['rangeBins']
             
-        # Apply the parsed configuration to instance variables
         if 'clutterRemoval' in config_params:
             self._clutter_removal = config_params['clutterRemoval']
         if 'mobEnabled' in config_params:
             self.mob_enabled = config_params['mobEnabled']
         if 'mobThreshold' in config_params:
             self.mob_threshold = config_params['mobThreshold']
-#        if 'framePeriod' in config_params:
-#            self.frame_period = config_params['framePeriod']
             
         return config_params
 
@@ -410,10 +387,8 @@ class RadarConnection:
             
         profile_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
 
-        # Work in progress, parsing leads to nothing right now
         if self.radar_params is None:
             self.radar_params = self.parse_configuration(profile_lines)
-        #logger.info(f"Parsed radar parameters:{self._format_radar_params(self.radar_params)}")
     
         init_commands = [
             'sensorStop',
@@ -432,20 +407,16 @@ class RadarConnection:
             if not line or line.startswith('%') or line.startswith('sensorStart'):
                 continue
 
-            # Temporary fix for clutterRemoval
             if line.startswith('clutterRemoval'):
                 line = 'clutterRemoval -1 ' + ('1' if self.radar_params['clutterRemoval'] else '0') + '\n'
                 self._clutter_removal = self.radar_params['clutterRemoval']
 
-            # Temporary fix for frame period
-            # replace 5th argument with framePeriod
             if line.startswith('frameCfg'):
                 self.frame_period = self.radar_params['framePeriod']
                 parts = line.split()
                 parts[5] = str(int(self.frame_period))
                 line = ' '.join(parts)
 
-            # Temporary fix for multiObjBeamForming
             if line.startswith('multiObjBeamForming'):
                 line = 'multiObjBeamForming -1 ' + ('1' if self.radar_params['mobEnabled'] else '0') + ' ' + str(self.radar_params['mobThreshold']) + '\n'
                 self.mob_enabled = self.radar_params['mobEnabled']
@@ -478,9 +449,9 @@ class RadarConnection:
                             raise RadarConnectionError(f"Configuration error: {response}")
                         logger.debug(f"Response: {response}")
         
-        if self._detected_cli_port.startswith('/dev/tty.'):  # macOS
+        if self._detected_cli_port.startswith('/dev/tty.'):
             self.baudrate = 460800
-        else:  # Windows/Linux
+        else:
             self.baudrate = 921600
         
         logger.debug(f"Configuring data port with baudrate: {self.baudrate}")
@@ -574,8 +545,6 @@ class RadarConnection:
                         self.invalid_packets += 1
                 
                 self.last_frame = frame
-                logger.debug(f"Frame {frame}: {header['num_detected_obj']} objects, "
-                           f"{header['total_packet_len']} bytes")
                 
                 payload = np.frombuffer(packet[32:], dtype=np.uint8)
                 
@@ -591,7 +560,6 @@ class RadarConnection:
 
     def configure_and_start(self) -> None:
         """Configure the radar and start streaming data."""
-        logger.info(f"CONFIGURE_AND_START: Current self.profile is:\\n--BEGIN STORED PROFILE--\\n{self.profile}\\n--END STORED PROFILE--") # Log current profile
         if not self.is_connected(): 
             raise RadarConnectionError("Radar not connected")
             
