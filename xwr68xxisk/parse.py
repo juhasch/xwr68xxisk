@@ -113,8 +113,10 @@ class RadarData:
                 break
                 
             if tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS:
+                print(f"Parsing point cloud data with length {tlv_length}")
                 idx = self._parse_point_cloud(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_PROFILE:
+                print(f"Parsing range profile data with length {tlv_length}")
                 idx = self._parse_range_profile(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO:
                 idx = self._parse_side_info(data_bytes, idx, tlv_length)
@@ -161,7 +163,9 @@ class RadarData:
         """Parse range profile data from TLV."""
         # Ensure tlv_length is a multiple of 2 (size of uint16)
         usable_length = tlv_length - (tlv_length % 2)
+        print(f"usable_length: {usable_length}")
         if usable_length > 0:
+            print("Starting to parse range profile data")
             self.adc = np.frombuffer(data[idx:idx+usable_length], dtype=np.uint16)
         else:
             logging.warning("Range profile data length is not a multiple of uint16 size")
@@ -399,12 +403,12 @@ class RadarDataIterator:
         """Return self as iterator."""
         return self
         
-    def __next__(self) -> RadarPointCloud:
+    def __next__(self) -> 'RadarData':
         """
-        Get the next radar frame as a RadarPointCloud.
+        Get the next radar frame as a RadarData object.
         
         Returns:
-            RadarPointCloud: Point cloud data from the next radar frame
+            RadarData: Radar data object for the next frame
             
         Raises:
             StopIteration: If the radar connection is closed or not running
@@ -416,11 +420,19 @@ class RadarDataIterator:
             
         try:
             # Create a new RadarData object with the next frame
-            radar_data = self.__class__.__qualname__.replace('Iterator', '')
-            radar_data_obj = globals()[radar_data](self.radar_connection)
+            base_class_name = self.__class__.__qualname__.replace('Iterator', '')
+            radar_data_class = globals().get(base_class_name)
+
+            if radar_data_class is None:
+                logging.error(f"Could not find RadarData class: {base_class_name}")
+                raise StopIteration("Internal error: RadarData class not found.")
+
+            radar_data_obj = radar_data_class(
+                self.radar_connection,
+                config_params=self.radar_connection.radar_params
+            )
             
-            # Convert to point cloud and return
-            return radar_data_obj.to_point_cloud()
+            return radar_data_obj
         except Exception as e:
             logging.error(f"Error reading next radar frame: {e}")
             raise StopIteration
@@ -433,17 +445,18 @@ class AWR2544Data(RadarData):
     which use a different data structure than the XWR68xx series.
     """
     
-    def __init__(self, radar_connection=None):
+    def __init__(self, radar_connection=None, config_params: Dict[str, Any] = None):
         """
         Initialize and parse AWR2544 radar data packet.
 
         Args:
             radar_connection: RadarConnection instance to read data from
+            config_params: Optional dictionary containing radar configuration parameters
 
         Raises:
             ValueError: If packet format is invalid or magic number doesn't match
         """
-        super().__init__(radar_connection)
+        super().__init__(radar_connection, config_params=config_params)
         
         # AWR2544 specific data containers
         self.compressed_data: List[int] = []
@@ -668,12 +681,12 @@ class AWR2544DataIterator(RadarDataIterator):
     This class extends RadarDataIterator to handle the specific format of AWR2544 data.
     """
     
-    def __next__(self) -> RadarPointCloud:
+    def __next__(self) -> 'AWR2544Data':
         """
-        Get the next AWR2544 radar frame as a RadarPointCloud.
+        Get the next AWR2544 radar frame as an AWR2544Data object.
         
         Returns:
-            RadarPointCloud: Point cloud data from the next radar frame
+            AWR2544Data: Radar data object for the next radar frame
             
         Raises:
             StopIteration: If the radar connection is closed or not running
@@ -685,10 +698,11 @@ class AWR2544DataIterator(RadarDataIterator):
             
         try:
             # Create a new AWR2544Data object with the next frame
-            radar_data = AWR2544Data(self.radar_connection)
-            
-            # Convert to point cloud and return
-            return radar_data.to_point_cloud()
+            radar_data_obj = AWR2544Data(
+                self.radar_connection,
+                config_params=self.radar_connection.radar_params
+            )
+            return radar_data_obj
         except Exception as e:
-            logging.error(f"Error reading next AWR2544 radar frame: {e}")
+            logging.error(f"Error reading next AWR2544 frame: {e}")
             raise StopIteration

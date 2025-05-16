@@ -13,6 +13,10 @@ from .gui_config import DisplayConfig, ProcessingConfig
 from .recording_config import RecordingConfig
 from .camera_config import CameraConfig
 from ..config import RadarConfig, ProfileConfig, FrameConfig
+from ..radar_config_models import (
+    SceneProfileConfig,
+    DisplayConfig
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +103,7 @@ class ConfigManager:
             raise RuntimeError("No configuration loaded")
             
         config_path = self.config_dir / config_name
-        self._create_backup(config_path)
+        # self._create_backup(config_path) # Commented out to prevent backup creation
         self.current_config.to_yaml(config_path)
         logger.info(f"Saved configuration to {config_path}")
     

@@ -269,6 +269,25 @@ class SceneProfileConfig(BaseModel):
             power_of_2 *= 2
         return power_of_2
 
+class DisplayConfig(BaseModel):
+    """Configuration for display settings.
+    
+    Attributes
+    ----------
+    plot_width : int
+        Width of the plot in pixels
+    plot_height : int
+        Height of the plot in pixels
+    x_range : tuple[float, float]
+        Range of x-axis in meters
+    y_range : tuple[float, float]
+        Range of y-axis in meters
+    """
+    plot_width: int = 800
+    plot_height: int = 600
+    x_range: tuple[float, float] = (-5.0, 5.0)
+    y_range: tuple[float, float] = (0.0, 10.0)
+
 # Example usage (optional, can be removed or kept for testing)
 if __name__ == "__main__":
     default_scene_config = SceneProfileConfig()

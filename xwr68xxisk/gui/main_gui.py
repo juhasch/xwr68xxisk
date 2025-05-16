@@ -23,7 +23,7 @@ from panel.widgets import TextAreaInput, Button
 
 # Local imports
 from xwr68xxisk.radar import RadarConnection, create_radar, RadarConnectionError
-from xwr68xxisk.parse import RadarData
+from xwr68xxisk.parse import RadarData, RadarDataIterator
 from xwr68xxisk.clustering import PointCloudClustering
 from xwr68xxisk.tracking import PointCloudTracker
 from xwr68xxisk.configs import ConfigManager
@@ -34,6 +34,7 @@ from xwr68xxisk.config_generator import generate_cfg_from_scene_profile
 
 # New imports for Profile Configuration GUI
 from .profile_config_view import ProfileConfigView
+from .plot_manager import PlotManager
 from ..radar_config_models import SceneProfileConfig, AntennaConfigEnum
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ class RadarGUI:
         # Initialize radar connection
         self.radar = None
         self.radar_type = None
-        self.radar_data = None
+        # self.radar_data = None # Will be initialized as an iterator in _start_callback
         
         # Add track history storage
         self.track_history = {}  # Dictionary to store track histories
@@ -376,7 +377,9 @@ class RadarGUI:
         self.record_button.disabled = True
         
         # Create plot
-        self.plot = self.create_plot()
+        self.plot = self.create_plot() # Main scatter plot
+        self.plots_display_area = pn.Column(self.plot, styles={'width': '100%'}) # Container for plots
+        self.plot_manager = None # Initialize plot_manager to None
         
         # Create layout
         self.layout = self.create_layout()
@@ -471,21 +474,38 @@ class RadarGUI:
                 self.connect_button.name = 'Error During Update'
         else:
             logger.info("Disconnecting from radar sensor...")
-            if self.is_running:
-                self._stop_callback(None)  # Stop radar if running
-            if self.radar: # Check if radar object exists before calling disconnect
-                self.radar.close()
-            logger.info("Radar sensor disconnected")
-            self.connect_button.name = 'Connect to Sensor'
-            self.connect_button.button_type = 'primary'
-            self.start_button.disabled = True
-            self.stop_button.disabled = True
-            self.record_button.disabled = True
-            self.clutter_removal_checkbox.disabled = True
-            self.frame_period_slider.disabled = True
-            self.mob_enabled_checkbox.disabled = True
-            self.mob_threshold_slider.disabled = True
-            self.original_version_info_display.value = "Connect to sensor to see version information" # Reset original display
+            try:
+                # First stop any running operations
+                if self.is_running:
+                    self._stop_callback(None)  # Stop radar if running
+                
+                # Then close the radar connection
+                if self.radar and self.radar.is_connected():
+                    self.radar.close()
+                
+                logger.info("Radar sensor disconnected")
+                self.connect_button.name = 'Connect to Sensor'
+                self.connect_button.button_type = 'primary'
+                self.start_button.disabled = True
+                self.stop_button.disabled = True
+                self.record_button.disabled = True
+                self.clutter_removal_checkbox.disabled = True
+                self.frame_period_slider.disabled = True
+                self.mob_enabled_checkbox.disabled = True
+                self.mob_threshold_slider.disabled = True
+                self.original_version_info_display.value = "Connect to sensor to see version information" # Reset original display
+            except Exception as e:
+                logger.error(f"Error during disconnection: {e}")
+                # Reset UI state even if there was an error
+                self.connect_button.name = 'Connect to Sensor'
+                self.connect_button.button_type = 'primary'
+                self.start_button.disabled = True
+                self.stop_button.disabled = True
+                self.record_button.disabled = True
+                self.clutter_removal_checkbox.disabled = True
+                self.frame_period_slider.disabled = True
+                self.mob_enabled_checkbox.disabled = True
+                self.mob_threshold_slider.disabled = True
 
     def _record_callback(self, event):
         """Toggle recording state."""
@@ -598,9 +618,17 @@ class RadarGUI:
                 self.mob_enabled_checkbox.value = True
                 self.mob_threshold_slider.value = self.radar.mob_threshold
             
-            # Create a new RadarData instance for the running radar
-            self.radar_data = RadarData(self.radar)
+            # Create a new RadarDataIterator instance for the running radar
+            # RadarDataIterator uses self.radar.radar_params internally via its __next__ method
+            self.radar_data = RadarDataIterator(self.radar)
             
+            # Initialize plot manager with current config and plot
+            self.plot_manager = PlotManager(self.scene_profile_for_modal, self.config.display, self.plot)
+            
+            # Update the plots_display_area to show the PlotManager's tabbed view
+            self.plots_display_area.clear()
+            self.plots_display_area.append(self.plot_manager.view)
+
             if self.clustering_checkbox.value:
                 self.enable_clustering = True
                 self.clusterer = PointCloudClustering(
@@ -641,6 +669,13 @@ class RadarGUI:
             if self.is_recording:
                 self._record_callback(None)
             self.record_button.disabled = True
+
+            # Revert plots display area to the single scatter plot and clear plot_manager
+            if hasattr(self, 'plots_display_area') and hasattr(self, 'plot'):
+                 self.plots_display_area.clear()
+                 self.plots_display_area.append(self.plot)
+            self.plot_manager = None
+            self.radar_data = None # Clear the iterator
     
     def _exit_callback(self, event):
         """Handle exit button click - cleanup and quit."""
@@ -826,7 +861,14 @@ class RadarGUI:
             return
             
         try:
-            point_cloud = next(iter(self.radar_data))
+            radar_data_obj = next(iter(self.radar_data))
+            
+            if radar_data_obj is None:
+                if self.is_running:
+                    pn.state.add_periodic_callback(self.update_plot, period=10, count=1)
+                return
+            
+            point_cloud = radar_data_obj.to_point_cloud()
             
             empty_data = {'x': [], 'y': [], 'velocity': [], 'size': []}
             empty_cluster_data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
@@ -852,10 +894,10 @@ class RadarGUI:
                 # Log velocity statistics before clipping
                 velocity = point_cloud.velocity * 0.2  # FIXME: This is a hack to make the velocity values more reasonable
 
-                logger.info(f"Velocity before clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
+                #logger.info(f"Velocity before clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
                 velocity = np.clip(velocity, -1, 1)
                 # Log velocity statistic after clipping
-                logger.info(f"Velocity after clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
+                #logger.info(f"Velocity after clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
                 
                 if hasattr(point_cloud, 'snr') and point_cloud.snr is not None and len(point_cloud.snr) > 0:
                     snr_values = point_cloud.snr
@@ -875,6 +917,10 @@ class RadarGUI:
                 }
                 
                 self._process_clustering_tracking(point_cloud)
+                
+                # Update plot manager if it exists
+                if hasattr(self, 'plot_manager') and self.plot_manager is not None:
+                    self.plot_manager.update(radar_data_obj)
                 
                 if self.is_recording and self.recorder:
                     try:
@@ -1060,7 +1106,10 @@ class RadarGUI:
         main = pn.Column(
             pn.pane.Markdown('## Real-time Data'),
             pn.Row(
-                self.plot,
+                pn.Column(
+                    self.plots_display_area, # Use the dedicated container here
+                    styles={'width': '100%'}
+                ),
                 self.create_camera_plot() if self.config.camera.enabled else None,
             ),
             self.config_modal,
@@ -1097,6 +1146,13 @@ class RadarGUI:
             min-width: 300px !important;
             max-width: 300px !important;
         }
+        .bk-root .bk-tabs {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .bk-root .bk-tab {
+            padding: 10px !important;
+        }
         """])
         
         # Combine everything into a template
@@ -1107,10 +1163,6 @@ class RadarGUI:
             header=header,
             sidebar_width=300  # Reverted back to 300 pixels for better usability
         )
-        
-        # Add modals to the template's modal area
-        # template.modal.append(self.config_modal) # Removed from template.modal
-        # template.modal.append(self.device_info_modal) # Removed from template.modal
         
         return template
     

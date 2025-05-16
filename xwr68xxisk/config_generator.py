@@ -156,8 +156,9 @@ def generate_cfg_from_scene_profile(scene_config: SceneProfileConfig) -> str:
     range_azimuth_heat_map = 1 if scene_config.plot_range_azimuth_heat_map else 0
     range_doppler_heat_map = 1 if scene_config.plot_range_doppler_heat_map else 0
     stats_info = 1 if scene_config.plot_statistics else 0
+    print(f"guiMonitor: {detected_objects} {log_mag_range} {noise_profile} {range_azimuth_heat_map} {range_doppler_heat_map} {stats_info}")
     cfg_lines.append(
-        f"guiMonitor {detected_objects} {log_mag_range} {noise_profile} "
+        f"guiMonitor -1 {detected_objects} {log_mag_range} {noise_profile} "
         f"{range_azimuth_heat_map} {range_doppler_heat_map} {stats_info}"
     )
     

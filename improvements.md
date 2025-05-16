@@ -86,16 +86,6 @@ This document outlines a plan for enhancing the radar application, focusing on G
                 - *Store these user plot customizations as part of the program/view configuration to persist them.*
         - **Git Commit:** "feat: Add new 2D plot types (Range Profile, Noise Profile, Range-Azimuth, Range-Doppler)."
 
-### 6. Export Plot Snapshot to PNG
-    - **Goal:** Allow users to save the current view of any plot as a PNG image.
-    - **Tasks:**
-        - Research and implement a method to export Bokeh/Panel plots to PNG (e.g., using `bokeh.io.export_png` or Panel's wrappers).
-            - *Note: `export_png` typically requires `selenium` and a webdriver (e.g., `geckodriver` or `chromedriver`). Document this dependency.*
-        - Add a button or context menu option to trigger the export for each plot.
-        - Allow users to specify a filename or use a default naming convention.
-        - *Provide clear installation instructions for optional PNG export dependencies in `README.md` or project documentation.*
-        - **Git Commit:** "feat: Implement export plot to PNG functionality."
-
 ## Phase 3: 3D Visualization and Testing Infrastructure
 
 ### 7. Implement 3D Point Cloud Visualization

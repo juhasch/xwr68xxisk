@@ -440,6 +440,7 @@ class RadarConnection:
         for group in ['init', 'dfe', 'channel', 'adc', 'other']:
             for command in ordered_commands[group]:
                 logger.debug(f"Sending command: {command}")
+                print(f"Sending command: {command}")
                 self.cli_port.write(f"{command}\n".encode())
                 if not ignore_response:
                     response = self._read_cli_response()
