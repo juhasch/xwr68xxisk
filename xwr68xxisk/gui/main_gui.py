@@ -465,7 +465,7 @@ class RadarGUI:
             if self.is_running:
                 self._stop_callback(None)  # Stop radar if running
             if self.radar: # Check if radar object exists before calling disconnect
-                self.radar.disconnect()
+                self.radar.close()
             logger.info("Radar sensor disconnected")
             self.connect_button.name = 'Connect to Sensor'
             self.connect_button.button_type = 'primary'
@@ -829,7 +829,11 @@ class RadarGUI:
                 x = np.clip(x, x_range[0], x_range[1])
                 y = np.clip(y, y_range[0], y_range[1])
                 
+                # Log velocity statistics before clipping
+                logger.info(f"Velocity before clipping - min: {np.min(point_cloud.velocity):.3f}, max: {np.max(point_cloud.velocity):.3f}, mean: {np.mean(point_cloud.velocity):.3f}")
                 velocity = np.clip(point_cloud.velocity, -1, 1)
+                # Log velocity statistics after clipping
+                logger.info(f"Velocity after clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
                 
                 if hasattr(point_cloud, 'snr') and point_cloud.snr is not None and len(point_cloud.snr) > 0:
                     snr_values = point_cloud.snr
