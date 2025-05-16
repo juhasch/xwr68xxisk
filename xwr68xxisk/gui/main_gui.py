@@ -86,6 +86,10 @@ class RadarGUI:
         self.radar_type = None
         self.radar_data = None
         
+        # Add track history storage
+        self.track_history = {}  # Dictionary to store track histories
+        self.track_history_timeout = 1.0  # 1 second timeout for track history
+        
         # Set default profile path
         self.config_file = os.path.join('configs', 'user_profile.cfg')
         # Create configs directory if it doesn't exist
@@ -328,7 +332,7 @@ class RadarGUI:
         # Initialize plot data
         self.scatter_source = None
         self.cluster_source = ColumnDataSource({'x': [], 'y': [], 'size': [], 'cluster_id': []})
-        self.track_source = ColumnDataSource({'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []})
+        self.track_source = ColumnDataSource({'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': [], 'history_x': [], 'history_y': []})
         self.color_mapper = LinearColorMapper(palette=cc.rainbow, low=-1, high=1)
         
         # Initialize recording state
@@ -748,6 +752,17 @@ class RadarGUI:
             name='clusters'
         )
         
+        # Add track history visualization
+        p.multi_line(
+            xs='history_x',
+            ys='history_y',
+            line_color='blue',
+            line_width=2,
+            line_alpha=0.3,
+            source=self.track_source,
+            name='track_history'
+        )
+        
         # Add track IDs visualization
         labels = LabelSet(
             x='x',
@@ -815,7 +830,7 @@ class RadarGUI:
             
             empty_data = {'x': [], 'y': [], 'velocity': [], 'size': []}
             empty_cluster_data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
-            empty_track_data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            empty_track_data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': [], 'history_x': [], 'history_y': []}
             
             if point_cloud.num_points == 0:
                 self.data_source.data = empty_data
@@ -883,7 +898,7 @@ class RadarGUI:
             logger.error(f"Error updating plot: {e}")
             self.data_source.data = {'x': [], 'y': [], 'velocity': [], 'size': []}
             self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
-            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': [], 'history_x': [], 'history_y': []}
             self._stop_callback(None)
     
     def _process_clustering_tracking(self, point_cloud):
@@ -904,14 +919,14 @@ class RadarGUI:
         """
         if not (self.enable_clustering and self.clusterer is not None):
             self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
-            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': [], 'history_x': [], 'history_y': []}
             return
             
         clusters = self.clusterer.cluster(point_cloud)
         
         if not clusters:
             self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
-            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': [], 'history_x': [], 'history_y': []}
             return
             
         cluster_x = []
@@ -933,13 +948,13 @@ class RadarGUI:
         }
         
         if not (self.enable_tracking and self.tracker is not None):
-            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': [], 'history_x': [], 'history_y': []}
             return
             
         tracks = self.tracker.update(clusters)
         
         if not tracks:
-            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': []}
+            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': [], 'history_x': [], 'history_y': []}
             return
             
         track_x = []
@@ -947,25 +962,64 @@ class RadarGUI:
         track_ids = []
         track_vx = []
         track_vy = []
+        track_history_x = []
+        track_history_y = []
         
-        vel_scale = 0.5
+        current_time = time.time()
         
+        # Update track histories
         for track in tracks:
+            track_id = track.track_id
+            
+            # Initialize or update track history
+            if track_id not in self.track_history:
+                self.track_history[track_id] = []
+            
+            # Add current position to history
+            self.track_history[track_id].append({
+                'time': current_time,
+                'x': track.state[0],
+                'y': track.state[1]
+            })
+            
+            # Remove old history entries
+            self.track_history[track_id] = [
+                h for h in self.track_history[track_id]
+                if current_time - h['time'] <= self.track_history_timeout
+            ]
+            
+            # Add track data
             track_x.append(track.state[0])
             track_y.append(track.state[1])
-            track_ids.append(str(track.track_id))
+            track_ids.append(str(track_id))
             
+            vel_scale = 0.5
             vx = track.state[0] + track.state[3] * vel_scale
             vy = track.state[1] + track.state[4] * vel_scale
             track_vx.append(vx)
             track_vy.append(vy)
+            
+            # Add history points
+            history_x = [h['x'] for h in self.track_history[track_id]]
+            history_y = [h['y'] for h in self.track_history[track_id]]
+            track_history_x.append(history_x)
+            track_history_y.append(history_y)
+        
+        # Clean up old tracks
+        current_track_ids = {track.track_id for track in tracks}
+        self.track_history = {
+            track_id: history for track_id, history in self.track_history.items()
+            if track_id in current_track_ids or current_time - history[-1]['time'] <= self.track_history_timeout
+        }
         
         self.track_source.data = {
             'x': track_x,
             'y': track_y,
             'track_id': track_ids,
             'vx': track_vx,
-            'vy': track_vy
+            'vy': track_vy,
+            'history_x': track_history_x,
+            'history_y': track_history_y
         }
 
     def create_layout(self):
