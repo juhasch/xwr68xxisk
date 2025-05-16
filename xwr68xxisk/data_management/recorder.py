@@ -1,5 +1,5 @@
 import numpy as np
-import datetime
+from datetime import datetime, UTC
 import os
 import uuid
 from typing import Dict, Any, List, Optional, Tuple
@@ -26,7 +26,7 @@ class DataRecorder:
         self.initial_session_metadata = initial_session_metadata if initial_session_metadata else {}
 
         self.current_session_id: Optional[str] = None
-        self.session_start_time_utc: Optional[datetime.datetime] = None
+        self.session_start_time_utc: Optional[datetime] = None
         self.frames_buffer: List[np.ndarray] = []
         self.session_metadata: Dict[str, Any] = {}
         self.is_recording: bool = False
@@ -50,7 +50,7 @@ class DataRecorder:
             self.frames_buffer = [] # Clear buffer for the new session
 
         self.current_session_id = str(uuid.uuid4())
-        self.session_start_time_utc = datetime.datetime.utcnow()
+        self.session_start_time_utc = datetime.now(UTC)
         self.frames_buffer = []
         self.session_metadata = {
             **self.initial_session_metadata, # Start with recorder-level initial metadata
@@ -123,7 +123,7 @@ class DataRecorder:
         
         final_meta['frame_count'] = len(self.frames_buffer)
         if self.session_start_time_utc:
-            session_duration = datetime.datetime.utcnow() - self.session_start_time_utc
+            session_duration = datetime.now(UTC) - self.session_start_time_utc
             final_meta['session_duration_seconds'] = session_duration.total_seconds()
 
         # Generate filename
@@ -144,6 +144,10 @@ class DataRecorder:
         self.session_start_time_utc = None
 
         return filepath
+
+    def get_session_duration(self):
+        session_duration = datetime.now(UTC) - self.session_start_time_utc
+        return session_duration
 
 if __name__ == '__main__':
     print("Running example usage of DataRecorder...")

@@ -1,7 +1,7 @@
 """GUI configuration for radar visualization."""
 
-from typing import Tuple
-from pydantic import Field, validator
+from typing import Tuple, Optional
+from pydantic import Field, field_validator
 from .base_config import BaseConfig
 
 class DisplayConfig(BaseConfig):
@@ -33,11 +33,12 @@ class DisplayConfig(BaseConfig):
         description="Plot update period in milliseconds"
     )
     
-    @validator('x_range', 'y_range')
-    def validate_range(cls, v):
-        """Validate that ranges are properly ordered."""
+    @field_validator('x_range', 'y_range')
+    @classmethod
+    def validate_range(cls, v: Tuple[float, float]) -> Tuple[float, float]:
+        """Validate that range values are in ascending order."""
         if v[0] >= v[1]:
-            raise ValueError("Range min must be less than max")
+            raise ValueError("Range values must be in ascending order")
         return v
 
 class ProcessingConfig(BaseConfig):

@@ -1,6 +1,6 @@
 from enum import IntEnum, Enum
-from typing import List, Optional
-from pydantic import BaseModel, Field, conint, confloat
+from typing import List, Optional, Any
+from pydantic import BaseModel, Field, conint, confloat, field_validator, ConfigDict
 
 class ModeType(IntEnum):
     FRAME_BASED_CHIRPS = 1
@@ -136,6 +136,8 @@ class SceneProfileConfig(BaseModel):
     """
     Configuration model representing the state of the Scene Selection GUI.
     """
+    model_config = ConfigDict(use_enum_values=True)
+
     # Top selections
     antenna_config: AntennaConfigEnum = Field(
         AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV, 
@@ -186,9 +188,17 @@ class SceneProfileConfig(BaseModel):
     plot_range_doppler_heat_map: bool = Field(False, description="Enable Range Doppler Heat Map.")
     plot_statistics: bool = Field(True, description="Enable Statistics display.")
 
-    class Config:
-        use_enum_values = True # Important for Pydantic to store enum values as strings
-        validate_assignment = True
+    @field_validator('antenna_config', mode='before')
+    @classmethod
+    def validate_antenna_config(cls, v: Any) -> AntennaConfigEnum:
+        """Validate antenna configuration."""
+        if isinstance(v, str):
+            try:
+                return AntennaConfigEnum(v)
+            except ValueError:
+                # If the string doesn't match any enum value, return the default
+                return AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV
+        return v
 
 # Example usage (optional, can be removed or kept for testing)
 if __name__ == "__main__":
