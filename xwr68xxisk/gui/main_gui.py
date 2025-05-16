@@ -353,6 +353,11 @@ class RadarGUI:
         self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value_throttled')
         self.clustering_checkbox.param.watch(self._clustering_callback, 'value')
         self.tracking_checkbox.param.watch(self._tracking_callback, 'value')
+        self.cluster_eps_slider.param.watch(self._cluster_eps_callback, 'value_throttled')
+        self.cluster_min_samples_slider.param.watch(self._cluster_min_samples_callback, 'value_throttled')
+        self.track_max_distance_slider.param.watch(self._track_max_distance_callback, 'value_throttled')
+        self.track_min_hits_slider.param.watch(self._track_min_hits_callback, 'value_throttled')
+        self.track_max_misses_slider.param.watch(self._track_max_misses_callback, 'value_throttled')
         self.camera_autofocus.param.watch(self._camera_autofocus_callback, 'value')
         self.camera_focus.param.watch(self._camera_focus_callback, 'value')
         self.camera_button.on_click(self.start_camera)
@@ -830,9 +835,11 @@ class RadarGUI:
                 y = np.clip(y, y_range[0], y_range[1])
                 
                 # Log velocity statistics before clipping
-                logger.info(f"Velocity before clipping - min: {np.min(point_cloud.velocity):.3f}, max: {np.max(point_cloud.velocity):.3f}, mean: {np.mean(point_cloud.velocity):.3f}")
-                velocity = np.clip(point_cloud.velocity, -1, 1)
-                # Log velocity statistics after clipping
+                velocity = point_cloud.velocity * 0.2  # FIXME: This is a hack to make the velocity values more reasonable
+
+                logger.info(f"Velocity before clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
+                velocity = np.clip(velocity, -1, 1)
+                # Log velocity statistic after clipping
                 logger.info(f"Velocity after clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
                 
                 if hasattr(point_cloud, 'snr') and point_cloud.snr is not None and len(point_cloud.snr) > 0:
@@ -1176,6 +1183,16 @@ class RadarGUI:
         if self.radar and self.radar.is_connected():
             self.enable_clustering = event.new
             logger.info(f"Clustering {'enabled' if event.new else 'disabled'}")
+            
+            # Recreate clusterer with new parameters if enabled
+            if self.enable_clustering:
+                self.clusterer = PointCloudClustering(
+                    eps=self.cluster_eps_slider.value,
+                    min_samples=self.cluster_min_samples_slider.value
+                )
+            else:
+                self.clusterer = None
+                
             # Update configuration
             self._save_current_config()
             # Enable/disable related controls
@@ -1188,6 +1205,18 @@ class RadarGUI:
         if self.radar and self.radar.is_connected():
             self.enable_tracking = event.new
             logger.info(f"Tracking {'enabled' if event.new else 'disabled'}")
+            
+            # Recreate tracker with new parameters if enabled
+            if self.enable_tracking:
+                self.tracker = PointCloudTracker(
+                    dt=self.frame_period_slider.value / 1000.0,  # Convert ms to seconds
+                    max_distance=self.track_max_distance_slider.value,
+                    min_hits=self.track_min_hits_slider.value,
+                    max_misses=self.track_max_misses_slider.value
+                )
+            else:
+                self.tracker = None
+                
             # Update configuration
             self._save_current_config()
             # Enable/disable related controls
@@ -1442,3 +1471,69 @@ class RadarGUI:
                     logger.info(f"Camera focus set to {event.new}")
             except Exception as e:
                 logger.error(f"Error setting camera focus: {e}")
+
+    def _cluster_eps_callback(self, event):
+        """Handle cluster size (eps) slider changes."""
+        if self.radar and self.radar.is_connected() and self.enable_clustering:
+            # Recreate clusterer with new eps value
+            self.clusterer = PointCloudClustering(
+                eps=event.new,
+                min_samples=self.cluster_min_samples_slider.value
+            )
+            # Update configuration
+            self._save_current_config()
+            logger.info(f"Cluster size (eps) set to {event.new}")
+
+    def _cluster_min_samples_callback(self, event):
+        """Handle minimum samples per cluster slider changes."""
+        if self.radar and self.radar.is_connected() and self.enable_clustering:
+            # Recreate clusterer with new min_samples value
+            self.clusterer = PointCloudClustering(
+                eps=self.cluster_eps_slider.value,
+                min_samples=event.new
+            )
+            # Update configuration
+            self._save_current_config()
+            logger.info(f"Minimum samples per cluster set to {event.new}")
+
+    def _track_max_distance_callback(self, event):
+        """Handle maximum track distance slider changes."""
+        if self.radar and self.radar.is_connected() and self.enable_tracking:
+            # Recreate tracker with new max_distance value
+            self.tracker = PointCloudTracker(
+                dt=self.frame_period_slider.value / 1000.0,
+                max_distance=event.new,
+                min_hits=self.track_min_hits_slider.value,
+                max_misses=self.track_max_misses_slider.value
+            )
+            # Update configuration
+            self._save_current_config()
+            logger.info(f"Maximum track distance set to {event.new}")
+
+    def _track_min_hits_callback(self, event):
+        """Handle minimum track hits slider changes."""
+        if self.radar and self.radar.is_connected() and self.enable_tracking:
+            # Recreate tracker with new min_hits value
+            self.tracker = PointCloudTracker(
+                dt=self.frame_period_slider.value / 1000.0,
+                max_distance=self.track_max_distance_slider.value,
+                min_hits=event.new,
+                max_misses=self.track_max_misses_slider.value
+            )
+            # Update configuration
+            self._save_current_config()
+            logger.info(f"Minimum track hits set to {event.new}")
+
+    def _track_max_misses_callback(self, event):
+        """Handle maximum track misses slider changes."""
+        if self.radar and self.radar.is_connected() and self.enable_tracking:
+            # Recreate tracker with new max_misses value
+            self.tracker = PointCloudTracker(
+                dt=self.frame_period_slider.value / 1000.0,
+                max_distance=self.track_max_distance_slider.value,
+                min_hits=self.track_min_hits_slider.value,
+                max_misses=event.new
+            )
+            # Update configuration
+            self._save_current_config()
+            logger.info(f"Maximum track misses set to {event.new}")
