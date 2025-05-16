@@ -30,6 +30,7 @@ from xwr68xxisk.configs import ConfigManager
 from xwr68xxisk.record import PointCloudRecorder
 from xwr68xxisk.cameras import BaseCamera
 from xwr68xxisk.camera_recorder import CameraRecorder
+from xwr68xxisk.config_generator import generate_cfg_from_scene_profile
 
 # New imports for Profile Configuration GUI
 from .profile_config_view import ProfileConfigView
@@ -249,7 +250,7 @@ class RadarGUI:
         
         # --- Updated Configuration Modal ---
         self.original_version_info_display = TextAreaInput(
-            name="**Sensor Information**\n",
+            name="**Sensor Information**",
             value="Connect to sensor to see version information",
             height=400,
             disabled=True,
@@ -661,9 +662,9 @@ class RadarGUI:
         """Save the radar profile and hide modal."""
         try:
             # Generate the CFG string from the SceneProfileConfig model
-            config_text_to_save = self._generate_cfg_from_scene_profile(self.scene_profile_for_modal)
+            config_text_to_save = generate_cfg_from_scene_profile(self.scene_profile_for_modal)
             
-            logger.info(f"Generated CFG from GUI to save and send to sensor:\\n{config_text_to_save}")
+            logger.info(f"Generated CFG from GUI to save and send to sensor:\n{config_text_to_save}")
 
             with open(self.config_file, 'w') as f:
                 f.write(config_text_to_save)
@@ -1437,119 +1438,3 @@ class RadarGUI:
                     logger.info(f"Camera focus set to {event.new}")
             except Exception as e:
                 logger.error(f"Error setting camera focus: {e}")
-
-    def _generate_cfg_from_scene_profile(self, scene_config: SceneProfileConfig) -> str:
-        """
-        Generates a radar configuration string (.cfg format) from a SceneProfileConfig object.
-
-        This is a complex mapping and currently includes placeholders and direct mappings.
-        Proper calculation of all parameters (especially for profileCfg) is a TODO.
-        """
-        cfg_lines = ["% Profile generated from GUI"]
-
-        # DFE Data Output Mode (Always 1 for this application typically)
-        cfg_lines.append("dfeDataOutputMode 1")
-
-        # Channel Config - Basic mapping from antenna_config
-        # TODO: Get precise masks for AntennaConfigEnum members
-        if scene_config.antenna_config == AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV:
-            rx_mask = 15  # 4 RX antennas (binary 1111)
-            tx_mask = 7   # Assuming TX1, TX2, TX3 (binary 0111) - specific to hardware
-            cfg_lines.append(f"channelCfg {rx_mask} {tx_mask} 0")
-        else:
-            cfg_lines.append("% channelCfg: Antenna configuration not fully mapped yet")
-
-
-        # ADC Config (Typical defaults)
-        # adcBits (0 for 12, 1 for 14, 2 for 16) -> 16 bit
-        # adcOutputFmt (0 for real, 1 for complex 1x, 2 for complex 2x) -> complex 1x
-        cfg_lines.append("adcCfg 2 1") # 16-bit ADC, Complex 1X (from SDK examples)
-
-        # ADC Buffer Config (Typical defaults for subframe -1 legacy mode)
-        # subframe_idx (-1 for legacy)
-        # adcOutputFmt (0 for complex, 1 for real)
-        # sampleSwap (0 for I/Q, 1 for Q/I)
-        # chanInterleave (0 for interleaved, 1 for non-interleaved)
-        # chirpThreshold (0-8, typically 1)
-        cfg_lines.append("adcbufCfg -1 0 1 1 1")
-
-        # Profile Config - VERY COMPLEX - Highly dependent on desired scene parameters
-        # This requires detailed calculations based on:
-        # scene_config.range_resolution_m
-        # scene_config.max_unambiguous_range_m
-        # scene_config.max_radial_velocity_ms
-        # scene_config.radial_velocity_resolution_ms (derived)
-        # TODO: Implement full calculations for profileCfg
-        # Placeholder values - these will NOT create a sensible profile matching the GUI yet.
-        profile_id = 0
-        start_freq_ghz = 60.25 # Typical for IWR6843
-        idle_time_us = 7.0
-        adc_start_time_us = 6.0
-        ramp_end_time_us = 60.0 # Example
-        tx_out_power_db = 0 # Max power
-        tx_phase_shifter_deg = 0
-        # Freq Slope (MHz/us) - Critical calculation: (Bandwidth) / (Ramp End Time - ADC Start Time)
-        # Bandwidth = c / (2 * range_resolution)
-        # For now, a placeholder based on typical values for short range
-        # c = 3e8
-        # bandwidth_ghz = (c / (2 * scene_config.range_resolution_m)) / 1e9
-        # approx_ramp_time_us = ramp_end_time_us - adc_start_time_us
-        # freq_slope_mhz_us = (bandwidth_ghz * 1000) / approx_ramp_time_us if approx_ramp_time_us > 0 else 50
-        freq_slope_mhz_us = 20.0 # Placeholder, this needs calculation based on range_res & max_range
-        tx_start_time_us = 1.0
-        # numAdcSamples = adcSamplingRate * (rampEndTime - adcStartTime - guardTime)
-        # digOutSampleRate (ksps)
-        # These need to be calculated carefully.
-        num_adc_samples = 256 # Placeholder
-        dig_out_sample_rate_ksps = 5000 # Placeholder
-        hpf_corner_freq1 = 0 # 0: 175 KHz, 1: 235 KHz, 2: 350 KHz, 3: 700 KHz
-        hpf_corner_freq2 = 0 # 0: 350 KHz, 1: 700 KHz, 2: 1.4 MHz, 3: 2.8 MHz
-        rx_gain_db = 30 # Typical
-
-        cfg_lines.append(f"profileCfg {profile_id} {start_freq_ghz:.2f} {idle_time_us:.1f} {adc_start_time_us:.1f} {ramp_end_time_us:.1f} {tx_out_power_db} {tx_phase_shifter_deg} {freq_slope_mhz_us:.3f} {tx_start_time_us:.1f} {num_adc_samples} {dig_out_sample_rate_ksps} {hpf_corner_freq1} {hpf_corner_freq2} {rx_gain_db}")
-        
-        # Chirp Config - Depends on Profile ID and Antenna Config
-        # Assuming profile_id 0 from above
-        # TODO: Map scene_config.antenna_config to specific chirp configurations (which TXs are active)
-        if scene_config.antenna_config == AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV:
-            # Example for 3 TX: Chirp for TX1, Chirp for TX2, Chirp for TX3 (or TDM MIMO scheme)
-            # chirpCfg <startIdx> <endIdx> <profileId> <startFreqVar> <freqSlopeVar> <idleTimeVar> <adcStartTimeVar> <txAntMask>
-            cfg_lines.append("chirpCfg 0 0 0 0 0 0 0 1") # TX1
-            cfg_lines.append("chirpCfg 1 1 0 0 0 0 0 2") # TX2
-            cfg_lines.append("chirpCfg 2 2 0 0 0 0 0 4") # TX3 (assuming TX3 is mask 4)
-        else:
-            cfg_lines.append("% chirpCfg: Antenna configuration not fully mapped yet")
-
-
-        # Frame Config
-        # chirpStartIdx, chirpEndIdx (from chirpCfg), numLoops (numDopplerBins), numFrames (0 for inf), framePeriodicity (ms), triggerSelect (1 for SW), triggerDelay (ms)
-        chirp_start_idx = 0
-        chirp_end_idx = 2 # Assuming 3 chirps (0, 1, 2) for 3TX example
-        num_loops = 64 # Number of doppler bins, related to velocity resolution
-        num_frames = 0 # Infinite frames
-        frame_periodicity_ms = 1000.0 / scene_config.frame_rate_fps if scene_config.frame_rate_fps > 0 else 100.0
-        trigger_select = 1 # Software trigger
-        trigger_delay_ms = 0
-        cfg_lines.append(f"frameCfg {chirp_start_idx} {chirp_end_idx} {num_loops} {num_frames} {frame_periodicity_ms:.2f} {trigger_select} {trigger_delay_ms}")
-
-        # GUI Monitor - based on plot selections
-        detected_objects = 1 if scene_config.plot_scatter or scene_config.plot_statistics else 0 # 1 for objects + side info
-        log_mag_range = 1 if scene_config.plot_range_profile else 0
-        noise_profile = 1 if scene_config.plot_noise_profile else 0
-        range_azimuth_heat_map = 1 if scene_config.plot_range_azimuth_heat_map else 0
-        range_doppler_heat_map = 1 if scene_config.plot_range_doppler_heat_map else 0
-        stats_info = 1 if scene_config.plot_statistics else 0
-        cfg_lines.append(f"guiMonitor {detected_objects} {log_mag_range} {noise_profile} {range_azimuth_heat_map} {range_doppler_heat_map} {stats_info}")
-        
-        # Clutter Removal (can be enabled/disabled by user elsewhere, this could be a default)
-        # Assuming it's generally desired, enable it by default. Could also come from SceneProfileConfig if added.
-        cfg_lines.append("clutterRemoval 0 1") # subframe -1 (or 0 for single subframe), enabled
-
-        # Other common commands (placeholders or typical defaults)
-        # cfarCfg, multiObjBeamForming etc. would go here if configurable via SceneProfileConfig
-        # For now, just adding a sensorStop as it's usually the last command before a new profile is fully loaded.
-        # The actual sensorStop is usually sent by the radar class when stopping.
-        # This is more about defining the profile.
-        # cfg_lines.append("sensorStop") # Not strictly part of profile definition, but often seen at end of example cfgs.
-
-        return "\\n".join(cfg_lines)
