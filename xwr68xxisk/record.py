@@ -5,9 +5,11 @@ import time
 import logging
 import numpy as np
 from typing import Tuple, List, Optional, Dict, Any, Literal
-from datetime import datetime
+from datetime import datetime, timezone
 import pypcd
 from dataclasses import dataclass, field
+import yaml
+import shutil
 
 from xwr68xxisk.radar import RadarConnection, create_radar, RadarConnectionError
 from xwr68xxisk.parse import RadarData
@@ -41,7 +43,8 @@ class PointCloudRecorder:
                  enable_clustering: bool = False,
                  enable_tracking: bool = False,
                  clustering_params: Optional[Dict] = None,
-                 tracking_params: Optional[Dict] = None):
+                 tracking_params: Optional[Dict] = None,
+                 radar_config: Optional[Dict] = None):
         """
         Initialize the recorder.
         
@@ -53,6 +56,7 @@ class PointCloudRecorder:
             enable_tracking: Whether to perform tracking on clusters
             clustering_params: Parameters for clustering algorithm
             tracking_params: Parameters for tracking algorithm
+            radar_config: Radar configuration dictionary
         """
         if format_type not in ['csv', 'pcd']:
             raise TypeError(f"Unsupported format type: {format_type}. Must be one of: csv, pcd")
@@ -60,6 +64,7 @@ class PointCloudRecorder:
         self.base_filename = base_filename
         self.format_type = format_type
         self.buffer_in_memory = buffer_in_memory or format_type == 'pcd'
+        self.radar_config = radar_config
         
         # Initialize clustering and tracking if enabled
         self.enable_clustering = enable_clustering
@@ -101,15 +106,31 @@ class PointCloudRecorder:
     
     def _write_csv_header(self):
         """Write the CSV header."""
-        self.csv_file.write("timestamp_ns,frame,x,y,z,velocity,range,azimuth,elevation,snr,rcs\n")
+        self.csv_file.write("timestamp,frame,x,y,z,velocity,range,azimuth,elevation,snr,rcs\n")
         
     def _write_clusters_header(self):
         """Write the clusters CSV header."""
-        self.clusters_file.write("timestamp_ns,frame,cluster_id,x,y,z,velocity,size_x,size_y,size_z,num_points\n")
+        self.clusters_file.write("timestamp,frame,cluster_id,x,y,z,velocity,size_x,size_y,size_z,num_points\n")
         
     def _write_tracks_header(self):
         """Write the tracks CSV header."""
-        self.tracks_file.write("timestamp_ns,frame,track_id,x,y,z,vx,vy,vz,age,hits\n")
+        self.tracks_file.write("timestamp,frame,track_id,x,y,z,vx,vy,vz,age,hits\n")
+
+    def _timestamp_to_rfc3339(self, timestamp_ns: int) -> str:
+        """Convert nanosecond timestamp to RFC 3339 format.
+        
+        Args:
+            timestamp_ns: Timestamp in nanoseconds
+            
+        Returns:
+            str: RFC 3339 formatted timestamp
+        """
+        # Convert nanoseconds to seconds
+        timestamp_s = timestamp_ns / 1e9
+        # Create datetime object in UTC
+        dt = datetime.fromtimestamp(timestamp_s, tz=timezone.utc)
+        # Format as RFC 3339
+        return dt.isoformat()
 
     def add_frame(self, point_cloud: RadarPointCloud, frame_number: int) -> None:
         """
@@ -193,9 +214,12 @@ class PointCloudRecorder:
                 len(frame.points.rcs)
             )
             
+            # Convert timestamp to RFC 3339 format
+            timestamp = self._timestamp_to_rfc3339(frame.timestamp_ns)
+            
             for i in range(min_length):
                 self.csv_file.write(
-                    f"{frame.timestamp_ns},{frame.frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
+                    f"{timestamp},{frame.frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
                     f"{frame.points.velocity[i]:.3f},{frame.points.range[i]:.3f},"
                     f"{frame.points.azimuth[i]:.3f},{frame.points.elevation[i]:.3f},"
                     f"{frame.points.snr[i]:.3f},{frame.points.rcs[i]:.3f}\n"
@@ -211,10 +235,13 @@ class PointCloudRecorder:
             if not clusters:
                 return
                 
+            # Convert timestamp to RFC 3339 format
+            timestamp = self._timestamp_to_rfc3339(timestamp_ns)
+                
             for i, cluster in enumerate(clusters):
                 try:
                     self.clusters_file.write(
-                        f"{timestamp_ns},{frame_number},{i},"
+                        f"{timestamp},{frame_number},{i},"
                         f"{cluster.centroid[0]:.3f},{cluster.centroid[1]:.3f},{cluster.centroid[2]:.3f},"
                         f"{cluster.velocity:.3f},"
                         f"{cluster.size[0]:.3f},{cluster.size[1]:.3f},{cluster.size[2]:.3f},"
@@ -233,10 +260,13 @@ class PointCloudRecorder:
             if not tracks:
                 return
                 
+            # Convert timestamp to RFC 3339 format
+            timestamp = self._timestamp_to_rfc3339(timestamp_ns)
+                
             for track in tracks:
                 try:
                     self.tracks_file.write(
-                        f"{timestamp_ns},{frame_number},{track.track_id},"
+                        f"{timestamp},{frame_number},{track.track_id},"
                         f"{track.state[0]:.3f},{track.state[1]:.3f},{track.state[2]:.3f},"
                         f"{track.state[3]:.3f},{track.state[4]:.3f},{track.state[5]:.3f},"
                         f"{track.age},{track.hits}\n"
@@ -273,7 +303,7 @@ class PointCloudRecorder:
                 ('elevation', np.float32),
                 ('snr', np.float32),
                 ('rcs', np.float32),
-                ('timestamp_ns', np.int64),
+                ('timestamp', np.float64),  # Store as float64 for PCD compatibility
                 ('frame', np.int32)
             ])
             
@@ -317,6 +347,9 @@ class PointCloudRecorder:
                     if min_length == 0:
                         continue
                     
+                    # Convert timestamp to seconds (float)
+                    timestamp = frame.timestamp_ns / 1e9
+                    
                     # Fill in the data for this frame
                     data['x'][current_idx:current_idx + min_length] = x[:min_length]
                     data['y'][current_idx:current_idx + min_length] = y[:min_length]
@@ -327,7 +360,7 @@ class PointCloudRecorder:
                     data['elevation'][current_idx:current_idx + min_length] = frame.points.elevation[:min_length]
                     data['snr'][current_idx:current_idx + min_length] = frame.points.snr[:min_length]
                     data['rcs'][current_idx:current_idx + min_length] = frame.points.rcs[:min_length]
-                    data['timestamp_ns'][current_idx:current_idx + min_length] = frame.timestamp_ns
+                    data['timestamp'][current_idx:current_idx + min_length] = timestamp
                     data['frame'][current_idx:current_idx + min_length] = frame.frame_number
                     
                     current_idx += min_length
@@ -351,6 +384,66 @@ class PointCloudRecorder:
             logger.error(f"Error saving to PCD file: {e}")
             # Continue without crashing
     
+    def _save_metadata(self) -> None:
+        """Save metadata and configuration to YAML file."""
+        try:
+            metadata = {
+                'recording': {
+                    'timestamp': self._timestamp_to_rfc3339(time.time_ns()),
+                    'base_filename': os.path.basename(self.base_filename),
+                    'format_type': self.format_type,
+                    'total_frames': self.frame_count,
+                    'total_points': self.total_points,
+                    'enable_clustering': self.enable_clustering,
+                    'enable_tracking': self.enable_tracking,
+                    'files': {
+                        'point_cloud': f"{os.path.basename(self.base_filename)}.{self.format_type}",
+                    }
+                }
+            }
+
+            # Add clustering and tracking files if enabled
+            if self.enable_clustering:
+                metadata['recording']['files']['clusters'] = f"{os.path.basename(self.base_filename)}_clusters.csv"
+            if self.enable_tracking:
+                metadata['recording']['files']['tracks'] = f"{os.path.basename(self.base_filename)}_tracks.csv"
+
+            # Add radar configuration if available
+            if self.radar_config:
+                if isinstance(self.radar_config, str) and os.path.isfile(self.radar_config):
+                    # If it's a file path, copy it to the recording directory
+                    config_filename = os.path.basename(self.radar_config)
+                    target_config = os.path.join(os.path.dirname(self.base_filename), config_filename)
+                    if self.radar_config != target_config:  # Only copy if source and target are different
+                        shutil.copy2(self.radar_config, target_config)
+                    metadata['radar_config_file'] = config_filename
+                else:
+                    # If it's a dictionary, store it directly
+                    metadata['radar_config'] = self.radar_config
+
+            # Add clustering and tracking parameters if enabled
+            if self.enable_clustering:
+                metadata['clustering_params'] = {
+                    'eps': self.clusterer.eps,
+                    'min_samples': self.clusterer.min_samples
+                }
+            if self.enable_tracking:
+                metadata['tracking_params'] = {
+                    'dt': self.tracker.dt,
+                    'max_distance': self.tracker.max_distance,
+                    'min_hits': self.tracker.min_hits,
+                    'max_misses': self.tracker.max_misses
+                }
+
+            # Save metadata to YAML file
+            metadata_file = f"{self.base_filename}_metadata.yaml"
+            with open(metadata_file, 'w') as f:
+                yaml.dump(metadata, f, default_flow_style=False, sort_keys=False)
+            logger.info(f"Saved metadata to {metadata_file}")
+
+        except Exception as e:
+            logger.error(f"Error saving metadata: {e}")
+
     def save(self) -> None:
         """Save the recorded data to file(s)."""
         if not self.buffer_in_memory:
@@ -362,7 +455,7 @@ class PointCloudRecorder:
             if self.format_type == 'csv':
                 try:
                     with open(f"{self.base_filename}.csv", 'w') as f:
-                        f.write("timestamp_ns,frame,x,y,z,velocity,range,azimuth,elevation,snr,rcs\n")
+                        f.write("timestamp,frame,x,y,z,velocity,range,azimuth,elevation,snr,rcs\n")
                         for frame in self.frames:
                             if frame.points.num_points == 0:
                                 continue
@@ -396,9 +489,12 @@ class PointCloudRecorder:
                                     len(frame.points.rcs)
                                 )
                                 
+                                # Convert timestamp to RFC 3339 format
+                                timestamp = self._timestamp_to_rfc3339(frame.timestamp_ns)
+                                
                                 for i in range(min_length):
                                     f.write(
-                                        f"{frame.timestamp_ns},{frame.frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
+                                        f"{timestamp},{frame.frame_number},{x[i]:.3f},{y[i]:.3f},{z[i]:.3f},"
                                         f"{frame.points.velocity[i]:.3f},{frame.points.range[i]:.3f},"
                                         f"{frame.points.azimuth[i]:.3f},{frame.points.elevation[i]:.3f},"
                                         f"{frame.points.snr[i]:.3f},{frame.points.rcs[i]:.3f}\n"
@@ -416,7 +512,7 @@ class PointCloudRecorder:
             if self.enable_clustering:
                 try:
                     with open(f"{self.base_filename}_clusters.csv", 'w') as f:
-                        f.write("timestamp_ns,frame,cluster_id,x,y,z,velocity,size_x,size_y,size_z,num_points\n")
+                        f.write("timestamp,frame,cluster_id,x,y,z,velocity,size_x,size_y,size_z,num_points\n")
                         for frame in self.frames:
                             if 'clusters' in frame.metadata and frame.metadata['clusters']:
                                 try:
@@ -430,7 +526,7 @@ class PointCloudRecorder:
             if self.enable_tracking:
                 try:
                     with open(f"{self.base_filename}_tracks.csv", 'w') as f:
-                        f.write("timestamp_ns,frame,track_id,x,y,z,vx,vy,vz,age,hits\n")
+                        f.write("timestamp,frame,track_id,x,y,z,vx,vy,vz,age,hits\n")
                         for frame in self.frames:
                             if 'tracks' in frame.metadata and frame.metadata['tracks']:
                                 try:
@@ -440,6 +536,10 @@ class PointCloudRecorder:
                     logger.info(f"Saved tracks to {self.base_filename}_tracks.csv")
                 except Exception as e:
                     logger.error(f"Error saving tracks file: {e}")
+
+            # Save metadata and configuration
+            self._save_metadata()
+
         except Exception as e:
             logger.error(f"Error in save method: {e}")
     
@@ -530,7 +630,8 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
             enable_clustering=clustering_enabled,
             enable_tracking=tracking_enabled,
             clustering_params=clustering_params,
-            tracking_params=tracking_params
+            tracking_params=tracking_params,
+            radar_config=profile  # Pass the radar profile path
         )
         recorders.append(recorder)
     
