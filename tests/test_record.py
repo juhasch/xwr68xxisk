@@ -252,14 +252,9 @@ def test_metadata_saving(temp_dir, sample_point_cloud, sample_radar_config):
 
     # Add some frames
     for i in range(3):
-        frame = PointCloudFrame(
-            timestamp_ns=int(datetime.now(timezone.utc).timestamp() * 1e9),
-            frame_number=i,
-            points=sample_point_cloud
-        )
         recorder.add_frame(sample_point_cloud, i)
 
-    # Save the recording
+    # Save the recording and metadata
     recorder.save()
     recorder.close()
 
@@ -305,14 +300,9 @@ def test_metadata_with_clustering_and_tracking(temp_dir, sample_point_cloud, sam
 
     # Add some frames
     for i in range(3):
-        frame = PointCloudFrame(
-            timestamp_ns=int(datetime.now(timezone.utc).timestamp() * 1e9),
-            frame_number=i,
-            points=sample_point_cloud
-        )
         recorder.add_frame(sample_point_cloud, i)
 
-    # Save the recording
+    # Save the recording and metadata
     recorder.save()
     recorder.close()
 
@@ -357,7 +347,7 @@ def test_metadata_with_config_file(temp_dir, sample_point_cloud):
     # Add a frame
     recorder.add_frame(sample_point_cloud, 0)
 
-    # Save the recording
+    # Save the recording and metadata
     recorder.save()
     recorder.close()
 

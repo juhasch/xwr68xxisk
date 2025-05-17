@@ -111,6 +111,7 @@ class RadarGUI:
         self.start_button = pn.widgets.Button(name='Start', button_type='primary')
         self.stop_button = pn.widgets.Button(name='Stop', button_type='danger')
         self.record_button = pn.widgets.Button(name='Start Recording', button_type='primary')
+        self.recording_indicator = pn.pane.Markdown('', styles={'color': 'red', 'font-weight': 'bold'})
         self.exit_button = pn.widgets.Button(name='Exit', button_type='danger')
         self.config_button = Button(name="Configure Profile", button_type="primary", disabled=False)
         self.device_info_button = pn.widgets.Button(name="Device Info", disabled=True)
@@ -509,6 +510,13 @@ class RadarGUI:
             }
             
             try:
+                # Get radar configuration if available
+                radar_config = None
+                if self.radar and self.radar.is_connected():
+                    radar_config = self.config_file  # Pass the radar profile path
+                    print(f"DEBUG: Using radar config file: {radar_config}")
+                
+                print(f"DEBUG: Creating recorder with base filename: {base_filename}")
                 self.recorder = PointCloudRecorder(
                     base_filename,
                     format_type,
@@ -516,7 +524,8 @@ class RadarGUI:
                     enable_clustering=self.enable_clustering,
                     enable_tracking=self.enable_tracking,
                     clustering_params=clustering_params,
-                    tracking_params=tracking_params
+                    tracking_params=tracking_params,
+                    radar_config=radar_config  # Pass the radar configuration
                 )
                 
                 if self.camera_running and self.camera is not None:
@@ -525,12 +534,9 @@ class RadarGUI:
                     self.camera_recorder.start()
                 
                 self.is_recording = True
-                self.record_button.param.update(
-                    name='Stop Recording',
-                    button_type='danger'
-                )
-                self.record_button.param.trigger('name')
-                self.record_button.param.trigger('button_type')
+                self.record_button.name = 'Stop Recording'
+                self.record_button.button_type = 'danger'
+                self.recording_indicator.object = '● Recording...'
                 
                 logger.info(f"Started recording to {base_filename}.{format_type}")
             except Exception as e:
@@ -546,6 +552,9 @@ class RadarGUI:
             # Stop recording
             if self.recorder:
                 try:
+                    print("DEBUG: Saving recorder metadata before closing")
+                    self.recorder.save()  # Ensure metadata is saved
+                    print("DEBUG: Closing recorder")
                     self.recorder.close()
                 except Exception as e:
                     logger.error(f"Error closing radar recorder: {e}")
@@ -561,12 +570,9 @@ class RadarGUI:
                     self.camera_recorder = None
                     
             self.is_recording = False
-            self.record_button.param.update(
-                name='Start Recording',
-                button_type='primary'
-            )
-            self.record_button.param.trigger('name')
-            self.record_button.param.trigger('button_type')
+            self.record_button.name = 'Start Recording'
+            self.record_button.button_type = 'primary'
+            self.recording_indicator.object = ''
             
             logger.info("Stopped recording")
     
@@ -852,10 +858,10 @@ class RadarGUI:
                 # Log velocity statistics before clipping
                 velocity = point_cloud.velocity * 0.2  # FIXME: This is a hack to make the velocity values more reasonable
 
-                logger.info(f"Velocity before clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
+                #logger.info(f"Velocity before clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
                 velocity = np.clip(velocity, -1, 1)
                 # Log velocity statistic after clipping
-                logger.info(f"Velocity after clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
+                #logger.info(f"Velocity after clipping - min: {np.min(velocity):.3f}, max: {np.max(velocity):.3f}, mean: {np.mean(velocity):.3f}")
                 
                 if hasattr(point_cloud, 'snr') and point_cloud.snr is not None and len(point_cloud.snr) > 0:
                     snr_values = point_cloud.snr
@@ -1047,7 +1053,7 @@ class RadarGUI:
             pn.layout.Divider(),
             pn.pane.Markdown('## Recording'),
             self.record_format_select,
-            self.record_button,
+            pn.Row(self.record_button, self.recording_indicator),
             pn.layout.Divider(),
             self.exit_button,     # Moved exit button up
             pn.layout.Divider(),

@@ -411,12 +411,25 @@ class PointCloudRecorder:
             # Add radar configuration if available
             if self.radar_config:
                 if isinstance(self.radar_config, str) and os.path.isfile(self.radar_config):
-                    # If it's a file path, copy it to the recording directory
-                    config_filename = os.path.basename(self.radar_config)
-                    target_config = os.path.join(os.path.dirname(self.base_filename), config_filename)
-                    if self.radar_config != target_config:  # Only copy if source and target are different
-                        shutil.copy2(self.radar_config, target_config)
-                    metadata['radar_config_file'] = config_filename
+                    # Read and include the actual configuration content
+                    try:
+                        with open(self.radar_config, 'r') as f:
+                            config_content = f.read()
+                        metadata['radar_config'] = {
+                            'source_file': os.path.basename(self.radar_config),
+                            'content': config_content
+                        }
+                        # Still copy the file for reference
+                        config_filename = os.path.basename(self.radar_config)
+                        target_config = os.path.join(os.path.dirname(self.base_filename), config_filename)
+                        if self.radar_config != target_config:  # Only copy if source and target are different
+                            shutil.copy2(self.radar_config, target_config)
+                    except Exception as e:
+                        logger.error(f"Error reading radar config file: {e}")
+                        metadata['radar_config'] = {
+                            'source_file': os.path.basename(self.radar_config),
+                            'error': f"Failed to read config file: {str(e)}"
+                        }
                 else:
                     # If it's a dictionary, store it directly
                     metadata['radar_config'] = self.radar_config
@@ -558,6 +571,8 @@ class PointCloudRecorder:
                 if hasattr(self, 'tracks_file') and self.tracks_file is not None:
                     self.tracks_file.close()
                     self.tracks_file = None
+                # Always save metadata even when not buffering in memory
+                self._save_metadata()
             logger.info(f"Recorder closed. Recorded {self.frame_count} frames with {self.total_points} points.")
         except Exception as e:
             logger.error(f"Error closing recorder: {e}")
