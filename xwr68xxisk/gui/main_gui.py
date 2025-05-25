@@ -12,6 +12,9 @@ import logging
 import time
 from datetime import datetime
 
+# Global configuration
+update_period = 40  # milliseconds between plot updates
+
 # Third-party imports
 import numpy as np
 import panel as pn
@@ -514,9 +517,7 @@ class RadarGUI:
                 radar_config = None
                 if self.radar and self.radar.is_connected():
                     radar_config = self.config_file  # Pass the radar profile path
-                    print(f"DEBUG: Using radar config file: {radar_config}")
                 
-                print(f"DEBUG: Creating recorder with base filename: {base_filename}")
                 self.recorder = PointCloudRecorder(
                     base_filename,
                     format_type,
@@ -552,9 +553,7 @@ class RadarGUI:
             # Stop recording
             if self.recorder:
                 try:
-                    print("DEBUG: Saving recorder metadata before closing")
                     self.recorder.save()  # Ensure metadata is saved
-                    print("DEBUG: Closing recorder")
                     self.recorder.close()
                 except Exception as e:
                     logger.error(f"Error closing radar recorder: {e}")
@@ -844,7 +843,7 @@ class RadarGUI:
                 self.track_source.data = empty_track_data
                 
                 if self.is_running:
-                    pn.state.add_periodic_callback(self.update_plot, period=10, count=1)
+                    pn.state.add_periodic_callback(self.update_plot, period=update_period, count=1)
                 return
                 
             try:
@@ -895,7 +894,7 @@ class RadarGUI:
                 self.track_source.data = empty_track_data
 
             if self.is_running:
-                pn.state.add_periodic_callback(self.update_plot, period=10, count=1)
+                pn.state.add_periodic_callback(self.update_plot, period=update_period, count=1)
 
         except StopIteration:
             logger.warning("No more radar data available")
@@ -1308,7 +1307,7 @@ class RadarGUI:
         }
         try:
             self.config = self.config_manager.update_config(updates)
-            self.config_manager.save_config()
+            self.config_manager.save_config(create_backup=False)  # Don't create backups on every save
             logger.info("Configuration saved successfully")
         except Exception as e:
             logger.error(f"Error saving configuration: {e}")
@@ -1400,10 +1399,12 @@ class RadarGUI:
                 if hasattr(self, 'camera_callback') and self.camera_callback is not None:
                     self.camera_callback.stop()
                     
-                self.camera_callback = pn.state.add_periodic_callback(
-                    self.update_camera,
-                    period=33  # ~30 FPS
-                )
+                # Disabled camera callback for testing
+                # self.camera_callback = pn.state.add_periodic_callback(
+                #     self.update_camera,
+                #     period=33  # ~30 FPS
+                # )
+                self.camera_callback = None
                 logger.info(f"Started camera {device_id}")
                 
             except Exception as e:

@@ -86,11 +86,12 @@ class ConfigManager:
             self.save_config(config_name)
             return self.current_config
     
-    def save_config(self, config_name: str = "default_config.yaml") -> None:
+    def save_config(self, config_name: str = "default_config.yaml", create_backup: bool = False) -> None:
         """Save current configuration to file.
         
         Args:
             config_name: Name of the configuration file
+            create_backup: Whether to create a backup of the existing config file
             
         Raises:
             RuntimeError: If no configuration is loaded
@@ -99,7 +100,8 @@ class ConfigManager:
             raise RuntimeError("No configuration loaded")
             
         config_path = self.config_dir / config_name
-        self._create_backup(config_path)
+        if create_backup:
+            self._create_backup(config_path)
         self.current_config.to_yaml(config_path)
         logger.info(f"Saved configuration to {config_path}")
     
