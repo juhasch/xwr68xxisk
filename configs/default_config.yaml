@@ -22,10 +22,10 @@ display:
   - 0.0
   - 8.0
 processing:
-  clutter_removal: false
+  clutter_removal: true
   frame_period_ms: 140.0
   mob_enabled: true
-  mob_threshold: 0.83
+  mob_threshold: 0.9
 radar:
   doppler_resolution: 0.1
   max_range: 10.0
