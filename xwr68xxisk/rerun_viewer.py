@@ -59,7 +59,8 @@ def velocity_to_color(velocity: np.ndarray) -> np.ndarray:
 @click.option('--spawn/--no-spawn', default=True, help='Spawn rerun viewer window (default: True)')
 @click.option('--play/--no-play', default=False, help='Play the CSV as a time sequence (default: False)')
 @click.option('--speed', type=float, default=1.0, show_default=True, help='Playback speed multiplier for --play (1.0 = real time)')
-def main(csv_file: str, frame: int, spawn: bool, play: bool, speed: float):
+@click.option('--fps', type=float, default=None, help='Override frame rate for playback (frames per second), ignores actual timing')
+def main(csv_file: str, frame: int, spawn: bool, play: bool, speed: float, fps: float):
     """
     Visualize radar point cloud CSV_FILE as a 3D point cloud in rerun.
     """
@@ -80,6 +81,11 @@ def main(csv_file: str, frame: int, spawn: bool, play: bool, speed: float):
         if len(timestamps) < 2:
             click.echo("Not enough timestamps for playback.")
             return
+        
+        # Get the first timestamp as reference point
+        start_time = timestamps[0]
+        click.echo(f"Starting playback from {start_time}")
+        
         for i, ts in enumerate(timestamps):
             frame_df = df[df['timestamp'] == ts]
             positions = frame_df[['x', 'y', 'z']].to_numpy(dtype=np.float32)
@@ -87,26 +93,51 @@ def main(csv_file: str, frame: int, spawn: bool, play: bool, speed: float):
             rcs = frame_df['rcs'].to_numpy(dtype=np.float32)
             radii = scale_rcs_to_radius(rcs)
             colors = velocity_to_color(velocity)
-            # Set absolute time in rerun (use pandas Timestamp directly)
-            #rr.set_time(timeline="radar/points", timestamp=ts)
-            rr.set_time(timeline="radar/points", timestamp=pd.Timestamp.now())
+            
+            # Set time relative to start for proper temporal playback
+            elapsed_seconds = (ts - start_time).total_seconds()
+            rr.set_time(timestamp=elapsed_seconds)
+            
             rr.log("radar/points", rr.Points3D(positions, colors=colors, radii=radii))
-            click.echo(f"Frame {i+1}/{len(timestamps)}: {len(positions)} points at {ts}")
+            click.echo(f"Frame {i+1}/{len(timestamps)}: {len(positions)} points at {ts} (t={elapsed_seconds:.3f}s)")
+            
             # Sleep to simulate real time (unless last frame)
             if i < len(timestamps) - 1:
-                next_ts = timestamps[i+1]
-                dt = (next_ts - ts).total_seconds() / speed
+                if fps is not None:
+                    # Use fixed frame rate
+                    dt = 1.0 / fps
+                else:
+                    # Use actual timing from data
+                    next_ts = timestamps[i+1]
+                    dt = (next_ts - ts).total_seconds() / speed
                 if dt > 0:
                     time.sleep(dt)
     else:
         # Single frame or all points
-        positions = df[['x', 'y', 'z']].to_numpy(dtype=np.float32)
-        velocity = df['velocity'].to_numpy(dtype=np.float32)
-        rcs = df['rcs'].to_numpy(dtype=np.float32)
-        radii = scale_rcs_to_radius(rcs)
-        colors = velocity_to_color(velocity)
-        rr.log("radar/points", rr.Points3D(positions, colors=colors, radii=radii))
-        click.echo(f"Sent {len(positions)} points to rerun viewer.")
+        if frame is not None:
+            # Single frame mode
+            positions = df[['x', 'y', 'z']].to_numpy(dtype=np.float32)
+            velocity = df['velocity'].to_numpy(dtype=np.float32)
+            rcs = df['rcs'].to_numpy(dtype=np.float32)
+            radii = scale_rcs_to_radius(rcs)
+            colors = velocity_to_color(velocity)
+            rr.set_time_sequence("frame", frame)
+            rr.log("radar/points", rr.Points3D(positions, colors=colors, radii=radii))
+            click.echo(f"Sent {len(positions)} points from frame {frame} to rerun viewer.")
+        else:
+            # All frames mode - show each frame as a separate timeline entry
+            frames = df['frame'].unique()
+            click.echo(f"Visualizing {len(frames)} frames with {len(df)} total points")
+            for frame_id in sorted(frames):
+                frame_df = df[df['frame'] == frame_id]
+                positions = frame_df[['x', 'y', 'z']].to_numpy(dtype=np.float32)
+                velocity = frame_df['velocity'].to_numpy(dtype=np.float32)
+                rcs = frame_df['rcs'].to_numpy(dtype=np.float32)
+                radii = scale_rcs_to_radius(rcs)
+                colors = velocity_to_color(velocity)
+                rr.set_time_sequence("frame", frame_id)
+                rr.log("radar/points", rr.Points3D(positions, colors=colors, radii=radii))
+            click.echo(f"Sent {len(df)} points across {len(frames)} frames to rerun viewer.")
 
 if __name__ == "__main__":
     main() 
