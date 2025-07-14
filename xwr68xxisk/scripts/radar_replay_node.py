@@ -230,19 +230,19 @@ class RadarReplayNode(Node):
         # Sensor information
         msg.sensor_model = "AWR6843ISK"
         msg.firmware_version = "unknown"
-        msg.configuration_name = self.base_filename
+        msg.config_file_path = self.base_filename
         
         # Field of view
-        msg.horizontal_fov_min = -1.57  # -90 degrees
-        msg.horizontal_fov_max = 1.57   # +90 degrees
-        msg.vertical_fov_min = -1.57    # -90 degrees (if available)
-        msg.vertical_fov_max = 1.57     # +90 degrees (if available)
+        msg.azimuth_fov_min = -1.57  # -90 degrees
+        msg.azimuth_fov_max = 1.57   # +90 degrees
+        msg.elevation_fov_min = -1.57    # -90 degrees (if available)
+        msg.elevation_fov_max = 1.57     # +90 degrees (if available)
         
         # Resolution and range limits
         msg.range_resolution = self.radar_config.get('range_resolution', 0.044)
         msg.velocity_resolution = self.radar_config.get('velocity_resolution', 1.26)
-        msg.angular_resolution_azimuth = 0.1  # Approximate
-        msg.angular_resolution_elevation = 0.1  # Approximate
+        msg.azimuth_resolution = 0.1  # Approximate
+        msg.elevation_resolution = 0.1  # Approximate
         
         msg.min_range = 0.1
         msg.max_range = self.radar_config.get('max_range', 9.04)
