@@ -33,9 +33,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
     geometry_msgs
 )
 
-# Install Python modules
-ament_python_install_package(${PROJECT_NAME})
-
 # Install Python executables
 install(PROGRAMS
   scripts/radar_publisher_node.py
