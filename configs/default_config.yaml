@@ -22,7 +22,7 @@ display:
   - 0.0
   - 8.0
 processing:
-  clutter_removal: true
+  clutter_removal: false
   frame_period_ms: 140.0
   mob_enabled: true
   mob_threshold: 0.9

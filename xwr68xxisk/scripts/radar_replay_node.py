@@ -249,20 +249,21 @@ class RadarReplayNode(Node):
         msg.min_velocity = -self.radar_config.get('max_velocity', 20.16)
         msg.max_velocity = self.radar_config.get('max_velocity', 20.16)
         
-        # Processing settings
-        msg.range_fft_size = 256
-        msg.doppler_fft_size = 32
-        msg.angle_fft_size = 64
+        # Processing configuration 
+        msg.range_fft_size = self.radar_config.get('rangeBins', 256)
+        msg.doppler_fft_size = self.radar_config.get('chirpsPerFrame', 64)
+        msg.clutter_removal_enabled = True
+        msg.multi_object_beamforming = False
+        msg.cfar_threshold = 6.0
         
-        # Sensor status
-        msg.temperature = 25.0  # Placeholder
-        msg.supply_voltage = 3.3  # Placeholder
-        msg.error_flags = 0
-        
-        # Recording metadata
-        if self.metadata:
-            recording_info = self.metadata.get('recording', {})
-            msg.configuration_name = recording_info.get('base_filename', self.base_filename)
+        # Additional radar configuration
+        msg.carrier_frequency_ghz = 60.25
+        msg.bandwidth_mhz = 1200.0
+        msg.frame_period_ms = self.radar_config.get('framePeriod', 100.0)
+        msg.num_tx_antennas = 3
+        msg.num_rx_antennas = 4
+        msg.num_adc_samples = self.radar_config.get('samples', 256)
+        msg.adc_sampling_rate_msps = 5.0
             
         return msg
         

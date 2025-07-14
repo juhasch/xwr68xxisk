@@ -19,6 +19,11 @@ find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
+# Set Python path to help CMake find the correct Python installation
+set(Python3_EXECUTABLE "/Users/juhasch/miniforge3/envs/ros2_kilted/bin/python3")
+set(Python3_INCLUDE_DIR "/Users/juhasch/miniforge3/envs/ros2_kilted/include/python3.12")
+set(Python3_NumPy_INCLUDE_DIRS "/Users/juhasch/miniforge3/envs/ros2_kilted/lib/python3.12/site-packages/numpy/core/include")
+
 # Generate custom messages
 set(MSG_FILES
   "msg/RadarPointCloud.msg"
