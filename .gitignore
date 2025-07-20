@@ -57,18 +57,15 @@ docs/_build/
 docs/_static/
 
 .idea
-/configs/
 video/
 recordings/
 *.mp4
 *.MP4
 *.csv
 *.SRT
-info/swra553a.pdf
 video/
 recordings/
 *.mp4
 *.MP4
 *.csv
 *.SRT
-info/swra553a.pdf

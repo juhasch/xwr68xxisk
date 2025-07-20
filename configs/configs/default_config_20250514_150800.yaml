@@ -1,0 +1,50 @@
+camera:
+  device_id: null
+  enabled: true
+  fps: 30
+  implementation: OpenCV
+  resolution:
+    height: 480
+    width: 640
+clustering:
+  algorithm: dbscan
+  enabled: false
+  eps: 0.5
+  min_samples: 5
+display:
+  plot_height: 600
+  plot_width: 1100
+  update_period_ms: 10
+  x_range:
+  - -2.5
+  - 2.5
+  y_range:
+  - 0
+  - 5
+processing:
+  clutter_removal: false
+  frame_period_ms: 100
+  mob_enabled: false
+  mob_threshold: 0.5
+radar:
+  doppler_resolution: 0.1
+  max_range: 10.0
+  max_velocity: 5.0
+  num_doppler_bins: 16.0
+  num_range_bins: 256
+  range_idx_to_meters: 0.1
+  range_resolution: 0.1
+recording:
+  buffer_in_memory: false
+  directory: recordings
+  enabled: true
+  formats:
+  - csv
+  prefix: radar_data
+tracking:
+  dt: 0.1
+  enabled: false
+  max_distance: 2.0
+  max_misses: 5
+  min_hits: 3
+version: '1.0'
