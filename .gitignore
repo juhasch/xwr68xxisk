@@ -19,6 +19,7 @@ parts/
 sdist/
 var/
 recordings/
+video/
 *.egg-info/
 .installed.cfg
 *.egg
