@@ -171,38 +171,38 @@ class RadarPublisherNode(Node):
         radar_params = getattr(self.radar, 'radar_params', {})
         
         # Radar configuration parameters (with defaults if not available)
-        msg.carrier_frequency_ghz = 60.0  # Example value
-        msg.bandwidth_mhz = 3999.68      # Example value
-        msg.frame_period_ms = radar_params.get('framePeriod', 100.0)
-        msg.num_tx_antennas = radar_params.get('txAnt', 3)
-        msg.num_rx_antennas = radar_params.get('rxAnt', 4)
-        msg.num_adc_samples = radar_params.get('samples', 256)
-        msg.adc_sampling_rate_msps = radar_params.get('sampleRate', 12.5)
+        msg.carrier_frequency_ghz = float(60.0)  # Example value
+        msg.bandwidth_mhz = float(3999.68)      # Example value
+        msg.frame_period_ms = float(radar_params.get('framePeriod', 100.0))
+        msg.num_tx_antennas = int(radar_params.get('txAnt', 3))
+        msg.num_rx_antennas = int(radar_params.get('rxAnt', 4))
+        msg.num_adc_samples = int(radar_params.get('samples', 256))
+        msg.adc_sampling_rate_msps = float(radar_params.get('sampleRate', 12.5))
         
         # Measurement capabilities (example values - would need calculation from config)
-        msg.range_resolution = 0.044      # meters
-        msg.velocity_resolution = 1.26    # m/s
-        msg.azimuth_resolution = 0.017    # radians (~1 degree)
-        msg.elevation_resolution = 0.017  # radians (~1 degree)
+        msg.range_resolution = float(0.044)      # meters
+        msg.velocity_resolution = float(1.26)    # m/s
+        msg.azimuth_resolution = float(0.017)    # radians (~1 degree)
+        msg.elevation_resolution = float(0.017)  # radians (~1 degree)
         
         # Maximum ranges (example values)
-        msg.max_range = 9.04             # meters
-        msg.max_velocity = 20.16         # m/s
-        msg.min_range = 0.1              # meters
-        msg.min_velocity = 0.1           # m/s
+        msg.max_range = float(9.04)             # meters
+        msg.max_velocity = float(20.16)         # m/s
+        msg.min_range = float(0.1)              # meters
+        msg.min_velocity = float(0.1)           # m/s
         
         # Field of view (example values)
-        msg.azimuth_fov_min = -1.57      # -90 degrees
-        msg.azimuth_fov_max = 1.57       # +90 degrees
-        msg.elevation_fov_min = -0.79    # -45 degrees
-        msg.elevation_fov_max = 0.79     # +45 degrees
+        msg.azimuth_fov_min = float(-1.57)      # -90 degrees
+        msg.azimuth_fov_max = float(1.57)       # +90 degrees
+        msg.elevation_fov_min = float(-0.79)    # -45 degrees
+        msg.elevation_fov_max = float(0.79)     # +45 degrees
         
         # Signal processing configuration
-        msg.clutter_removal_enabled = getattr(self.radar, '_clutter_removal', False)
-        msg.multi_object_beamforming = getattr(self.radar, 'mob_enabled', False)
-        msg.cfar_threshold = 15.0        # Example value
-        msg.range_fft_size = 256         # Example value
-        msg.doppler_fft_size = 32        # Example value
+        msg.clutter_removal_enabled = bool(getattr(self.radar, '_clutter_removal', False))
+        msg.multi_object_beamforming = bool(getattr(self.radar, 'mob_enabled', False))
+        msg.cfar_threshold = float(15.0)        # Example value
+        msg.range_fft_size = int(256)         # Example value
+        msg.doppler_fft_size = int(32)        # Example value
         
         # Configuration source
         msg.config_file_path = self.radar_profile if self.radar_profile else "default"

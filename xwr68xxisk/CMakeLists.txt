@@ -42,6 +42,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 install(PROGRAMS
   scripts/radar_publisher_node.py
   scripts/radar_replay_node.py
+  scripts/radar_transform_node.py
+  scripts/pointcloud2_converter.py
+  scripts/check_transforms.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
