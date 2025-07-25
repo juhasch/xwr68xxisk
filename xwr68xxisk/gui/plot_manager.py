@@ -15,7 +15,7 @@ from bokeh.models import ColumnDataSource, ColorBar, LinearColorMapper
 from bokeh.layouts import column
 from bokeh.palettes import Viridis256
 from bokeh.transform import linear_cmap
-from ..radar_config_models import SceneProfileConfig, DisplayConfig
+from ..radar_config_models import RadarConfig
 from ..parse import RadarData
 
 # Initialize logger
@@ -29,7 +29,7 @@ pn.extension(design="material", sizing_mode="stretch_width")
 class BasePlot(param.Parameterized):
     """Base class for all plot types."""
     
-    def __init__(self, scene_config: SceneProfileConfig, display_config: DisplayConfig):
+    def __init__(self, scene_config: RadarConfig, display_config: 'DisplayConfig'):
         """Initialize the base plot.
         
         Args:
@@ -281,7 +281,7 @@ class RangeDopplerPlot(BasePlot):
 class PlotManager:
     """Manager for handling multiple visualization tabs in the radar GUI."""
     
-    def __init__(self, scene_config: SceneProfileConfig, display_config: DisplayConfig, main_plot: pn.pane.Bokeh):
+    def __init__(self, scene_config: RadarConfig, display_config: 'DisplayConfig', main_plot: pn.pane.Bokeh):
         """
         Initialize the plot manager.
         

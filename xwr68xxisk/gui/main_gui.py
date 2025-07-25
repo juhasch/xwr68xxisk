@@ -35,7 +35,7 @@ from xwr68xxisk.config_generator import generate_cfg_from_scene_profile
 # New imports for Profile Configuration GUI
 from .profile_config_view import ProfileConfigView
 from .plot_manager import PlotManager
-from ..radar_config_models import SceneProfileConfig, AntennaConfigEnum
+from ..radar_config_models import RadarConfig
 
 logger = logging.getLogger(__name__)
 
@@ -282,14 +282,14 @@ class RadarGUI:
             sizing_mode='stretch_width'
         )
         config_modal_buttons = pn.Row(
+            pn.layout.HSpacer(),
             Button(name="Save", button_type="primary", width=100), # This will be self.save_button
             Button(name="Cancel", width=100), # This will be self.cancel_button
+            margin=(20, 0, 0, 0),
         )
 
         # Instantiate the Pydantic model for the new scene config GUI
-        self.scene_profile_for_modal = SceneProfileConfig()
-        # Instantiate the new ProfileConfigView panel, passing the config instance
-        self.profile_config_view_panel = ProfileConfigView(config_instance=self.scene_profile_for_modal)
+        self.profile_config_view_panel = ProfileConfigView(config_instance=self.config.radar)
 
         self.config_modal = pn.Column(
             config_modal_header,
@@ -297,8 +297,9 @@ class RadarGUI:
             config_modal_buttons,
             visible=False, 
             width=850, 
-            height=750,
-            css_classes=['modal', 'modal-content'] 
+            height=900,
+            css_classes=['modal', 'modal-content'],
+
         )
 
         self.device_info_modal_close_button = pn.widgets.Button(name="Close", width=80)
@@ -317,8 +318,8 @@ class RadarGUI:
 
         # Get references to modal buttons (adjust indices based on new direct structure)
         self.close_button = self.config_modal[0][2] # Header row, 3rd element
-        self.save_button = self.config_modal[2][0]  # Buttons row, 1st element
-        self.cancel_button = self.config_modal[2][1] # Buttons row, 2nd element
+        self.save_button = self.config_modal[2][1]  # Buttons row, 1st element
+        self.cancel_button = self.config_modal[2][2] # Buttons row, 2nd element
         # self.original_version_info_display is now explicitly referenced
 
         # Initialize clustering and tracking
@@ -623,7 +624,7 @@ class RadarGUI:
             self.radar_data = RadarDataIterator(self.radar)
             
             # Initialize plot manager with current config and plot
-            self.plot_manager = PlotManager(self.scene_profile_for_modal, self.config.display, self.plot)
+            self.plot_manager = PlotManager(self.config.display, self.plot)
             
             # Update the plots_display_area to show the PlotManager's tabbed view
             self.plots_display_area.clear()
@@ -706,13 +707,10 @@ class RadarGUI:
         """Save the radar profile and hide modal."""
         try:
             # Generate the CFG string from the SceneProfileConfig model
-            config_text_to_save = generate_cfg_from_scene_profile(self.scene_profile_for_modal)
-            
+            config_text_to_save = generate_cfg_from_scene_profile(self.config.radar)
             logger.info(f"Generated CFG from GUI to save and send to sensor:\n{config_text_to_save}")
-
             with open(self.config_file, 'w') as f:
                 f.write(config_text_to_save)
-                
             if self.radar and self.radar.is_connected(): # Check if radar is not None and connected
                 logger.info("Sending new profile to sensor.")
                 responses = self.radar.send_profile(config_text_to_save) 
@@ -720,12 +718,14 @@ class RadarGUI:
                     logger.info("Sensor responses:")
                     for response in responses:
                         logger.info(f"  {response}")
-                
             logger.info("Radar profile saved successfully")
             self._hide_config_modal(None)
-            
         except Exception as e:
-            logger.error(f"Error saving radar profile: {e}")
+            import traceback
+            logger.error(f"Error saving radar profile: {e} (type: {type(e)})\nTraceback:\n{traceback.format_exc()}")
+            # If the error is TypeError or ValueError, print the type and value of the object
+            if isinstance(e, (TypeError, ValueError)):
+                logger.error(f"TypeError/ValueError details: {repr(e)}")
 
     def create_plot(self):
         """

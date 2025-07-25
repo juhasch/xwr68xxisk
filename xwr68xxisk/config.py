@@ -28,8 +28,8 @@ class FrameConfig(BaseModel):
     def num_chirps_per_frame(self) -> int:
         return (self.chirp_end_idx - self.chirp_start_idx + 1) * self.num_loops
 
-class RadarConfig(BaseModel):
-    """Model representing the calculated radar parameters"""
+class LegacyRadarConfig(BaseModel):
+    """Model representing the calculated radar parameters (legacy, do not use for config)"""
     num_doppler_bins: float
     num_range_bins: int
     range_resolution: float
@@ -48,7 +48,7 @@ class RadarConfigParser:
     SPEED_OF_LIGHT = 3e8  # m/s
 
     @classmethod
-    def parse_config_file(cls, config_path: str | Path) -> RadarConfig:
+    def parse_config_file(cls, config_path: str | Path) -> LegacyRadarConfig:
         """
         Parse a radar configuration file and extract key parameters.
         
@@ -101,9 +101,9 @@ class RadarConfigParser:
         return cls._calculate_radar_parameters(profile, frame)
 
     @classmethod
-    def _calculate_radar_parameters(cls, profile: ProfileConfig, frame: FrameConfig) -> RadarConfig:
+    def _calculate_radar_parameters(cls, profile: ProfileConfig, frame: FrameConfig) -> LegacyRadarConfig:
         """Calculate radar parameters from profile and frame configurations"""
-        return RadarConfig(
+        return LegacyRadarConfig(
             num_doppler_bins=frame.num_chirps_per_frame / cls.NUM_TX_ANT,
             num_range_bins=profile.num_adc_samples,
             range_resolution=(

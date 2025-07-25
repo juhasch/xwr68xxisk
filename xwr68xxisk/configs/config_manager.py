@@ -6,17 +6,13 @@ from pydantic import Field, BaseModel
 import logging
 import shutil
 from datetime import datetime
-from .base_config import BaseConfig
+from .base_config import BaseConfig, enum_to_value
 from .clustering_config import ClusteringConfig
 from .tracking_config import TrackingConfig
 from .gui_config import DisplayConfig, ProcessingConfig
 from .recording_config import RecordingConfig
 from .camera_config import CameraConfig
-from ..config import RadarConfig, ProfileConfig, FrameConfig
-from ..radar_config_models import (
-    SceneProfileConfig,
-    DisplayConfig
-)
+from ..radar_config_models import RadarConfig
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +100,12 @@ class ConfigManager:
             
         config_path = self.config_dir / config_name
         # self._create_backup(config_path) # Commented out to prevent backup creation
-        self.current_config.to_yaml(config_path)
+        # Patch: ensure enums are converted to values before YAML serialization
+        import yaml
+        data = self.current_config.model_dump()
+        data = enum_to_value(data)
+        with open(config_path, 'w') as f:
+            yaml.safe_dump(data, f, default_flow_style=False)
         logger.info(f"Saved configuration to {config_path}")
     
     def update_config(self, updates: Dict[str, Any]) -> MainConfig:
@@ -133,17 +134,32 @@ class ConfigManager:
     
     def _create_default_config(self) -> MainConfig:
         """Create default configuration."""
+        from ..radar_config_models import (
+            RadarConfig, DfeDataOutputModeConfig, ModeType, ChannelConfig, AdcConfig, AdcBits, AdcOutputFormat,
+            AdcBufConfig, ProfileConfig, CalibDcRangeSigConfig, ClutterRemovalConfig, AoaFovConfig, CfarConfig,
+            MultiObjBeamFormingConfig, GuiMonitorConfig, AnalogMonitorConfig, LvdsStreamConfig
+        )
         return MainConfig(
             version="1.0",
             radar=RadarConfig(
-                num_doppler_bins=16,
-                num_range_bins=256,
-                range_resolution=0.1,
-                range_idx_to_meters=0.1,
-                doppler_resolution=0.1,
-                max_range=10.0,
-                max_velocity=5.0
-            ),
+                dfe_data_output_mode=DfeDataOutputModeConfig(mode_type=ModeType.FRAME_BASED_CHIRPS),
+                channel_cfg=ChannelConfig(rx_channel_en=15, tx_channel_en=7, cascading=0),
+                adc_cfg=AdcConfig(num_adc_bits=AdcBits.BITS_16, adc_output_fmt=AdcOutputFormat.COMPLEX_FILTERED),
+                adc_buf_cfg=AdcBufConfig(subframe_idx=-1, adc_output_fmt=0, sample_swap=1, chan_interleave=1, chirp_threshold=4),
+                profile_cfg=ProfileConfig(
+                    profile_id=0, start_freq=60.0, idle_time=7.0, adc_start_time=3.0, ramp_end_time=24.0,
+                    tx_out_power=0, tx_phase_shifter=0, freq_slope_const=166.0, tx_start_time=1.0,
+                    num_adc_samples=256, dig_out_sample_rate=12500, hpf_corner_freq1=0, hpf_corner_freq2=0, rx_gain=30.0
+                ),
+                calib_dc_range_sig=CalibDcRangeSigConfig(subframe_idx=-1, enabled=False, negative_bin_idx=-5, positive_bin_idx=8, num_avg_frames=256),
+                clutter_removal=ClutterRemovalConfig(subframe_idx=-1, enabled=False),
+                aoa_fov_cfg=AoaFovConfig(subframe_idx=-1, min_azimuth_deg=-90.0, max_azimuth_deg=90.0, min_elevation_deg=-90.0, max_elevation_deg=90.0),
+                cfar_cfg=CfarConfig(subframe_idx=-1, proc_direction=0, average_mode=2, win_len=8, guard_len=4, noise_div=3, cyclic_mode=0, threshold_scale=15.0, peak_grouping_en=False),
+                multi_obj_beam_forming=MultiObjBeamFormingConfig(subframe_idx=-1, enabled=False, threshold=0.5),
+                gui_monitor=GuiMonitorConfig(detected_objects=1, log_mag_range=True, noise_profile=False, range_azimuth_heat_map=False, range_doppler_heat_map=False, stats_info=True),
+                analog_monitor=AnalogMonitorConfig(rx_saturation=False, sig_img_band=False),
+                lvds_stream_cfg=LvdsStreamConfig(subframe_idx=-1, enable_header=False, data_fmt=0, enable_sw=False)
+            ).model_dump(),
             clustering=ClusteringConfig(),
             tracking=TrackingConfig(),
             display=DisplayConfig(),
