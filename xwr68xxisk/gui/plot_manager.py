@@ -14,6 +14,7 @@ from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource, ColorBar, LinearColorMapper
 from bokeh.layouts import column
 from bokeh.palettes import Viridis256
+from bokeh.transform import linear_cmap
 from ..radar_config_models import SceneProfileConfig, DisplayConfig
 from ..parse import RadarData
 
@@ -230,6 +231,53 @@ class RangeProfilePlot(BasePlot):
             self.data_source.data = {'range': [], 'magnitude': []}
 
 
+class RangeDopplerPlot(BasePlot):
+    """Range-Doppler heatmap plot."""
+    def _setup_plot(self) -> pn.pane.Bokeh:
+        p = figure(
+            title='Range-Doppler Heatmap',
+            width=self.display_config.plot_width,
+            height=self.display_config.plot_height,
+            x_axis_label='Doppler (m/s)',
+            y_axis_label='Range (m)',
+            tools='pan,wheel_zoom,box_zoom,reset,save',
+            toolbar_location='above',
+            match_aspect=True,
+        )
+        self.data_source = ColumnDataSource({'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]})
+        self.color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=1)
+        self.heatmap = p.image(
+            image='image', x='x', y='y', dw='dw', dh='dh', source=self.data_source, color_mapper=self.color_mapper
+        )
+        color_bar = ColorBar(color_mapper=self.color_mapper, label_standoff=12, location=(0, 0), title='dB')
+        p.add_layout(color_bar, 'right')
+        return pn.pane.Bokeh(p)
+
+    def update(self, radar_data: 'RadarData') -> None:
+        if not hasattr(radar_data, 'get_range_doppler_heatmap'):
+            return
+        heatmap_db, range_axis, velocity_axis = radar_data.get_range_doppler_heatmap()
+        print("Range-Doppler heatmap shape:", heatmap_db.shape)
+        print("Velocity axis:", velocity_axis)
+        print("Range axis:", range_axis)
+        if heatmap_db.size == 0:
+            self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
+            return
+        vmin = float(np.nanmin(heatmap_db))
+        vmax = float(np.nanmax(heatmap_db))
+        if vmin == vmax:
+            vmax = vmin + 1
+        self.heatmap.glyph.color_mapper.low = vmin
+        self.heatmap.glyph.color_mapper.high = vmax
+        self.data_source.data = {
+            'image': [heatmap_db],
+            'x': [velocity_axis[0]],
+            'y': [range_axis[0]],
+            'dw': [velocity_axis[-1] - velocity_axis[0]],
+            'dh': [range_axis[-1] - range_axis[0]]
+        }
+
+
 class PlotManager:
     """Manager for handling multiple visualization tabs in the radar GUI."""
     
@@ -253,15 +301,20 @@ class PlotManager:
         # Initialize plots
         self.scatter_plot = ScatterPlot(scene_config, display_config)
         self.range_profile_plot = RangeProfilePlot(scene_config, display_config)
+        self.range_doppler_plot = RangeDopplerPlot(scene_config, display_config)
         
         # Create tabs
-        self.tabs = pn.Tabs(
-            ('Point Cloud', self.scatter_plot.view),
-            ('Range Profile', self.range_profile_plot.view) if scene_config.plot_range_profile else None
-        )
-        
-        # Create the main view
+        tabs = [
+            ('Point Cloud', self.scatter_plot.view)
+        ]
+        if scene_config.plot_range_profile:
+            tabs.append(('Range Profile', self.range_profile_plot.view))
+        if scene_config.plot_range_doppler_heat_map:
+            tabs.append(('Range-Doppler', self.range_doppler_plot.view))
+        self.tabs = pn.Tabs(*tabs)
         self.view = self.tabs
+        print("plot_range_doppler_heat_map:", scene_config.plot_range_doppler_heat_map)
+        print("Tabs created:", [label for label, _ in tabs])
     
     def update(self, radar_data: RadarData):
         """
@@ -276,18 +329,11 @@ class PlotManager:
             logger.debug("PlotManager.update received no radar_data.")
             return
 
-        # Update scatter plot
-        if hasattr(self, 'scatter_plot') and self.scatter_plot:
-            try:
-                # logger.debug("PlotManager updating scatter_plot.")
-                self.scatter_plot.update(radar_data)
-            except Exception as e:
-                logger.error(f"Error updating scatter plot via PlotManager: {e}")
-    
-        # Update range profile plot if it's enabled and exists
-        if self.scene_config.plot_range_profile and hasattr(self, 'range_profile_plot') and self.range_profile_plot:
-            try:
-                # logger.debug("PlotManager updating range_profile_plot.")
+        try:
+            self.scatter_plot.update(radar_data)
+            if self.scene_config.plot_range_profile:
                 self.range_profile_plot.update(radar_data)
-            except Exception as e:
-                logger.error(f"Error updating range profile plot via PlotManager: {e}") 
+            if self.scene_config.plot_range_doppler_heat_map:
+                self.range_doppler_plot.update(radar_data)
+        except Exception as e:
+            logger.error(f"Error updating plots: {e}") 

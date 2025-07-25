@@ -14,7 +14,6 @@ clustering:
 display:
   plot_height: 600
   plot_width: 1100
-  update_period_ms: 10
   x_range:
   - -2.5
   - 2.5
@@ -23,7 +22,7 @@ display:
   - 8.0
 processing:
   clutter_removal: false
-  frame_period_ms: 140.0
+  frame_period_ms: 440.0
   mob_enabled: false
   mob_threshold: 0.5
 radar:
@@ -42,7 +41,7 @@ recording:
   - csv
   prefix: radar_data
 tracking:
-  dt: 0.14
+  dt: 0.44
   enabled: false
   max_distance: 1.2
   max_misses: 6

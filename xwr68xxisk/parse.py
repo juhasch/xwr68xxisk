@@ -240,12 +240,14 @@ class RadarData:
             
             # Get dimensions from radar configuration
             num_range_bins = self.config_params.get('rangeBins', 256)  # Default from config files
-            num_doppler_bins = self.config_params.get('num_doppler_bins', 16)  # Default from config files
+            num_doppler_bins = self.config_params.get('num_doppler_bins', 32)  # Default from config files
             
             # Verify dimensions match the data
             if total_bins == num_range_bins * num_doppler_bins:
                 # Reshape using actual dimensions
                 self.range_doppler_heatmap = heatmap.reshape(num_range_bins, num_doppler_bins)
+                #print(self.range_doppler_heatmap.shape)
+                #np.save("range_doppler_heatmap.npy", self.range_doppler_heatmap)
             else:
                 # Log warning and use square matrix as fallback
                 logging.warning(f"Range-Doppler heatmap dimensions mismatch. Expected {num_range_bins}x{num_doppler_bins} bins but got {total_bins} total bins.")
@@ -510,9 +512,9 @@ class AWR2544Data(RadarData):
                 self.compressed_data.append(value)
                 
         # Save compressed data for debugging
-        filename = os.path.join(self.debug_dir, f"compressed_{timestamp}_{self.packet_count-1:04d}.npy")
-        np.save(filename, np.array(self.compressed_data))
-        logging.debug(f"Saved compressed data to {filename}")
+        #filename = os.path.join(self.debug_dir, f"compressed_{timestamp}_{self.packet_count-1:04d}.npy")
+        #np.save(filename, np.array(self.compressed_data))
+        #logging.debug(f"Saved compressed data to {filename}")
 
     def check_crc(self, data: bytes, packet_length: int, crc_type: bool = True) -> bool:
         """
