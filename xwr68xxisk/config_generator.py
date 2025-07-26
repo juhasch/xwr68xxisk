@@ -25,10 +25,10 @@ def generate_cfg_from_scene_profile(scene_config: RadarConfig) -> str:
     cfg_lines.append("dfeDataOutputMode 1")
     # Channel config (use antenna_config or default)
     rx_mask = 15
-    tx_mask = 7
+    tx_mask = 5  # Use TX1 and TX3 only (binary 101), matching working profile
     if hasattr(scene_config, 'antenna_config') and scene_config.antenna_config == AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV:
         rx_mask = 15
-        tx_mask = 7
+        tx_mask = 5  # Use TX1 and TX3 only (binary 101), matching working profile
     cfg_lines.append(f"channelCfg {rx_mask} {tx_mask} 0")
     cfg_lines.append("adcCfg 2 1")
     cfg_lines.append("adcbufCfg -1 0 1 1 1")
@@ -56,14 +56,14 @@ def generate_cfg_from_scene_profile(scene_config: RadarConfig) -> str:
         f"{dig_out_sample_rate} {hpf_corner_freq1} {hpf_corner_freq2} {rx_gain}"
     )
 
-    # Chirp config (3 chirps for 3 TX, correct TX enable order: [1, 4, 2])
-    for i, tx in enumerate([1, 4, 2]):
+    # Chirp config (2 chirps for TX1 and TX3, matching working profile)
+    for i, tx in enumerate([1, 4]):  # TX1 and TX3 only
         cfg_lines.append(f"chirpCfg {i} {i} 0 0 0 0 0 {tx}")
 
     # Frame config
     frame_chirp_start_idx = getattr(scene_config, 'frame_chirp_start_idx', 0)
-    frame_chirp_end_idx = 2
-    num_loops = getattr(scene_config, 'frame_num_loops', 64)
+    frame_chirp_end_idx = 1  # Use chirps 0-1 (2 chirps total), matching working profile
+    num_loops = getattr(scene_config, 'frame_num_loops', 32)  # Use 32 loops, matching working profile
     num_frames = getattr(scene_config, 'frame_num_frames', 0)
     frame_periodicity_ms = 1000.0 / getattr(scene_config, 'frame_rate_fps', 10.0)
     trigger_select = getattr(scene_config, 'frame_trigger_select', 1)
