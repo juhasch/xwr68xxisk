@@ -776,7 +776,7 @@ class RadarGUI:
         )
         
         # Add cluster centers visualization
-        p.circle(
+        p.scatter(
             x='x',
             y='y',
             size='size',
