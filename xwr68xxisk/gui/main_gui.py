@@ -1257,12 +1257,19 @@ class RadarGUI:
     
     def _frame_period_callback(self, event):
         """Handle frame period slider changes."""
+        # Always update the radar config frame rate to keep them synchronized
+        frame_rate_fps = 1000.0 / event.new
+        self.config.radar.frame_rate_fps = frame_rate_fps
+        
         if self.radar and self.radar.is_connected():
             try:
+                # Update the radar's frame period
                 self.radar.set_frame_period(event.new)
-                logger.info(f"Frame period set to {event.new}ms")
+                logger.info(f"Frame period set to {event.new}ms ({frame_rate_fps:.1f} fps)")
             except Exception as e:
                 logger.error(f"Error setting frame period: {e}")
+        else:
+            logger.info(f"Frame period updated to {event.new}ms ({frame_rate_fps:.1f} fps) - radar not connected")
     
     def _mob_enabled_callback(self, event):
         """Handle multi-object beamforming enable/disable."""
@@ -1333,6 +1340,9 @@ class RadarGUI:
     def _save_current_config(self):
         """Save current GUI state to configuration."""
         updates = {
+            'radar': {
+                'frame_rate_fps': 1000.0 / self.frame_period_slider.value
+            },
             'processing': {
                 'clutter_removal': self.clutter_removal_checkbox.value,
                 'mob_enabled': self.mob_enabled_checkbox.value,
