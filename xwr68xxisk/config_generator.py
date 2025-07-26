@@ -74,7 +74,7 @@ def generate_cfg_from_scene_profile(scene_config: RadarConfig) -> str:
     )
 
     # guiMonitor
-    detected_objects = 1 if getattr(scene_config, 'plot_scatter', True) or getattr(scene_config, 'plot_statistics', True) else 0
+    detected_objects = 1 if getattr(scene_config, 'plot_scatter', True) else 0
     log_mag_range = 1 if getattr(scene_config, 'plot_range_profile', True) else 0
     noise_profile = 1 if getattr(scene_config, 'plot_noise_profile', False) else 0
     range_azimuth_heat_map = 1 if getattr(scene_config, 'plot_range_azimuth_heat_map', False) else 0
