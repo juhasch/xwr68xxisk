@@ -1261,6 +1261,16 @@ class RadarGUI:
         frame_rate_fps = 1000.0 / event.new
         self.config.radar.frame_rate_fps = frame_rate_fps
         
+        # Regenerate the configuration file with the new frame rate
+        try:
+            from xwr68xxisk.config_generator import generate_cfg_from_scene_profile
+            config_text = generate_cfg_from_scene_profile(self.config.radar)
+            with open(self.config_file, 'w') as f:
+                f.write(config_text)
+            logger.info(f"Configuration file regenerated with frame period {event.new}ms ({frame_rate_fps:.1f} fps)")
+        except Exception as e:
+            logger.error(f"Error regenerating configuration file: {e}")
+        
         if self.radar and self.radar.is_connected():
             try:
                 # Update the radar's frame period
@@ -1340,9 +1350,6 @@ class RadarGUI:
     def _save_current_config(self):
         """Save current GUI state to configuration."""
         updates = {
-            'radar': {
-                'frame_rate_fps': 1000.0 / self.frame_period_slider.value
-            },
             'processing': {
                 'clutter_removal': self.clutter_removal_checkbox.value,
                 'mob_enabled': self.mob_enabled_checkbox.value,
