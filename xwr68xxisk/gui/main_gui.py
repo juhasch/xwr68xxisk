@@ -624,7 +624,7 @@ class RadarGUI:
             self.radar_data = RadarDataIterator(self.radar)
             
             # Initialize plot manager with current config and plot
-            self.plot_manager = PlotManager(self.config.display, self.plot)
+            self.plot_manager = PlotManager(self.config.radar, self.config.display, self.plot)
             
             # Update the plots_display_area to show the PlotManager's tabbed view
             self.plots_display_area.clear()
