@@ -6,13 +6,13 @@ This module contains tests for the radar configuration generation functionality.
 
 import pytest
 from xwr68xxisk.config_generator import generate_cfg_from_scene_profile
-from xwr68xxisk.radar_config_models import SceneProfileConfig, AntennaConfigEnum
+from xwr68xxisk.radar_config_models import RadarConfig, AntennaConfigEnum
 from enum import Enum
 
 def test_basic_config_generation():
     """Test basic configuration generation with default values."""
     # Create a basic scene config
-    config = SceneProfileConfig(
+    config = RadarConfig(
         antenna_config=AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV,
         frame_rate_fps=10.0
     )
@@ -31,7 +31,7 @@ def test_basic_config_generation():
 def test_frame_config_generation():
     """Test frame configuration generation with different frame rates."""
     # Test with 10 FPS
-    config_10fps = SceneProfileConfig(
+    config_10fps = RadarConfig(
         antenna_config=AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV,
         frame_rate_fps=10.0
     )
@@ -39,7 +39,7 @@ def test_frame_config_generation():
     assert "frameCfg 0 2 64 0 100.00 1 0" in cfg_str_10fps
     
     # Test with 20 FPS
-    config_20fps = SceneProfileConfig(
+    config_20fps = RadarConfig(
         antenna_config=AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV,
         frame_rate_fps=20.0
     )
@@ -49,7 +49,7 @@ def test_frame_config_generation():
 def test_gui_monitor_config():
     """Test GUI monitor configuration based on plot settings."""
     # Test with all plots enabled
-    config_all_plots = SceneProfileConfig(
+    config_all_plots = RadarConfig(
         antenna_config=AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV,
         plot_scatter=True,
         plot_statistics=True,
@@ -62,7 +62,7 @@ def test_gui_monitor_config():
     assert "guiMonitor 1 1 1 1 1 1" in cfg_str_all
     
     # Test with no plots enabled
-    config_no_plots = SceneProfileConfig(
+    config_no_plots = RadarConfig(
         antenna_config=AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV,
         plot_scatter=False,
         plot_statistics=False,
@@ -76,7 +76,7 @@ def test_gui_monitor_config():
 
 def test_chirp_config():
     """Test chirp configuration generation."""
-    config = SceneProfileConfig(
+    config = RadarConfig(
         antenna_config=AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV
     )
     cfg_str = generate_cfg_from_scene_profile(config)
@@ -90,7 +90,7 @@ def test_unsupported_antenna_config():
     """Test handling of unsupported antenna configurations."""
     # Create config with unsupported antenna config by directly setting the value
     # to bypass the model validation
-    config = SceneProfileConfig()
+    config = RadarConfig()
     config.antenna_config = "Unsupported Config"  # Directly set to bypass validation
     
     cfg_str = generate_cfg_from_scene_profile(config)
@@ -101,8 +101,17 @@ def test_unsupported_antenna_config():
 
 def test_profile_config_format():
     """Test the format of the profile configuration line."""
-    config = SceneProfileConfig(
-        antenna_config=AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV
+    from xwr68xxisk.radar_config_models import (
+        DfeDataOutputModeConfig, ChannelConfig, AdcConfig, AdcBufConfig, ProfileConfig,
+        ModeType, AdcOutputFormat, AdcBits
+    )
+    config = RadarConfig(
+        antenna_config=AntennaConfigEnum.CFG_4RX_3TX_15DEG_ELEV,
+        dfe_data_output_mode=DfeDataOutputModeConfig(mode_type=ModeType.FRAME_BASED_CHIRPS),
+        channel_cfg=ChannelConfig(rx_channel_en=15, tx_channel_en=5, cascading=0),
+        adc_cfg=AdcConfig(num_adc_bits=AdcBits.BITS_12, adc_output_fmt=AdcOutputFormat.COMPLEX_UNFILTERED),
+        adc_buf_cfg=AdcBufConfig(subframe_idx=-1, adc_output_fmt=0, sample_swap=1, chan_interleave=1, chirp_threshold=1),
+        profile_cfg=ProfileConfig(profile_id=0, start_freq=60.0, idle_time=7.0, adc_start_time=3.0, ramp_end_time=24.0, freq_slope_const=166.0, tx_start_time=1.0, num_adc_samples=256, dig_out_sample_rate=12500, hpf_corner_freq1=0, hpf_corner_freq2=0, rx_gain=158.0)
     )
     cfg_str = generate_cfg_from_scene_profile(config)
     
@@ -116,7 +125,7 @@ def test_profile_config_format():
     assert profile_parts[0] == 'profileCfg'
     
     # Check some specific values
-    assert float(profile_parts[2]) == 60.25  # start_freq_ghz
+    assert float(profile_parts[2]) == 60.0   # start_freq_ghz
     assert float(profile_parts[3]) == 7.0    # idle_time_us
-    assert float(profile_parts[4]) == 6.0    # adc_start_time_us
-    assert float(profile_parts[5]) == 60.0   # ramp_end_time_us 
+    assert float(profile_parts[4]) == 3.0    # adc_start_time_us
+    assert float(profile_parts[5]) == 24.0   # ramp_end_time_us 

@@ -52,7 +52,7 @@ def generate_cfg_from_scene_profile(scene_config: RadarConfig) -> str:
     rx_gain = getattr(scene_config, 'profile_rx_gain_db', 158)                  # dB (max 158 for reference)
     cfg_lines.append(
         f"profileCfg {profile_id} {start_freq:.0f} {idle_time:.0f} {adc_start_time:.0f} {ramp_end_time:.0f} "
-        f"{tx_out_power} {tx_phase_shifter} {freq_slope_const:.0f} {num_adc_samples} "
+        f"{tx_out_power} {tx_phase_shifter} {freq_slope_const:.0f} 1 {num_adc_samples} "
         f"{dig_out_sample_rate} {hpf_corner_freq1} {hpf_corner_freq2} {rx_gain}"
     )
 

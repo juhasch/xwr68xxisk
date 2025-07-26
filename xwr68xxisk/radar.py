@@ -315,9 +315,9 @@ class RadarConnection:
                     config_params['txAnt'] = bin(int(args[1])).count("1")
                     
                 elif cmd == 'profileCfg':
-                    config_params['samples'] = int(args[-5])
-                    config_params['sampleRate'] = int(args[-4])
-                    config_params['slope'] = float(args[7])
+                    config_params['samples'] = int(args[9])  # ADC samples at index 9
+                    config_params['sampleRate'] = int(args[10])  # Sample rate at index 10
+                    config_params['slope'] = float(args[7])  # Frequency slope at index 7
                     
                 elif cmd == 'frameCfg':
                     config_params['chirpsPerFrame'] = (int(args[1]) - int(args[0]) + 1) * int(args[2])
@@ -342,8 +342,8 @@ class RadarConnection:
                 continue
         
         if 'samples' in config_params:
-            rangeBins2x = 2 ** (len(bin(config_params['samples'])) - 2)
-            config_params['rangeBins'] = int(rangeBins2x/2)
+            # Range bins should equal the number of ADC samples
+            config_params['rangeBins'] = config_params['samples']
         
         if all(k in config_params for k in ['sampleRate', 'slope', 'rangeBins']):
             config_params['rangeStep'] = (3e8 * config_params['sampleRate'] * 1e3) / (2 * config_params['slope'] * 1e12 * config_params['rangeBins'] * 2)
