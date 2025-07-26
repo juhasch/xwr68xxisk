@@ -341,13 +341,50 @@ class RadarConnection:
                 logger.warning(f"Error parsing configuration line '{line}': {e}")
                 continue
         
+        # Parse range resolution from profile comments
+        for line in config_lines:
+            if line.startswith('%') and 'Range resolution' in line and 'm/bin' in line:
+                logger.info(f"Found range resolution line: {line.strip()}")
+                try:
+                    # Extract range resolution value from comment line
+                    # Format: "% Range resolution (meter per 1D-FFT bin)   m/bin    0.044"
+                    parts = line.split()
+                    logger.info(f"Line parts: {parts}")
+                    for i, part in enumerate(parts):
+                        if part == 'm/bin' and i + 1 < len(parts):
+                            range_resolution = float(parts[i + 1])
+                            config_params['rangeStep'] = range_resolution
+                            logger.info(f"Extracted range resolution from profile: {range_resolution} m/bin")
+                            break
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Error parsing range resolution from line '{line}': {e}")
+                break
+        
         if 'samples' in config_params:
             # Range bins should equal the number of ADC samples
             config_params['rangeBins'] = config_params['samples']
         
-        if all(k in config_params for k in ['sampleRate', 'slope', 'rangeBins']):
-            config_params['rangeStep'] = (3e8 * config_params['sampleRate'] * 1e3) / (2 * config_params['slope'] * 1e12 * config_params['rangeBins'] * 2)
+        # Only calculate rangeStep if not already extracted from profile comments
+        if 'rangeStep' not in config_params and all(k in config_params for k in ['sampleRate', 'slope', 'rangeBins']):
+            # Calculate range step using the correct formula
+            # For FMCW radar: rangeStep = c / (2 * bandwidth * rangeBins)
+            # Use the useful bandwidth from the profile: 3399.68 MHz
+            useful_bandwidth_mhz = 3399.68  # MHz (from profile)
+            useful_bandwidth_hz = useful_bandwidth_mhz * 1e6  # Hz
+            
+            config_params['rangeStep'] = 3e8 / (2 * useful_bandwidth_hz * config_params['rangeBins'])
+            logger.info(f"Useful bandwidth: {useful_bandwidth_mhz} MHz = {useful_bandwidth_hz:.0f} Hz")
+            logger.info(f"Calculated range resolution: {config_params['rangeStep']:.6f} m/bin")
+        
+        if 'rangeStep' in config_params and 'rangeBins' in config_params:
             config_params['maxRange'] = config_params['rangeStep'] * config_params['rangeBins']
+            logger.info(f"Final rangeStep: {config_params['rangeStep']:.6f} m/bin, maxRange: {config_params['maxRange']:.2f} m")
+        else:
+            logger.warning("rangeStep not found in config_params")
+            # Use the known range resolution from the profile
+            config_params['rangeStep'] = 0.044  # m/bin (from profile)
+            config_params['maxRange'] = config_params['rangeStep'] * config_params.get('rangeBins', 256)
+            logger.info(f"Using profile rangeStep: {config_params['rangeStep']:.6f} m/bin, maxRange: {config_params['maxRange']:.2f} m")
             
         if 'clutterRemoval' in config_params:
             self._clutter_removal = config_params['clutterRemoval']

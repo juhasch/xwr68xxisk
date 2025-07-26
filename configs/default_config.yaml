@@ -23,7 +23,7 @@ display:
   - 5.0
 processing:
   clutter_removal: false
-  frame_period_ms: 100.0
+  frame_period_ms: 500.0
   mob_enabled: false
   mob_threshold: 0.5
 radar:
@@ -79,7 +79,7 @@ radar:
   dfe_data_output_mode:
     mode_type: 1
   extended_max_velocity: null
-  frame_rate_fps: 3.0
+  frame_rate_fps: 2.0
   gui_monitor:
     detected_objects: 1
     log_mag_range: true
@@ -99,12 +99,12 @@ radar:
     enabled: false
     subframe_idx: -1
     threshold: 0.5
-  plot_noise_profile: true
-  plot_range_azimuth_heat_map: false
+  plot_noise_profile: false
+  plot_range_azimuth_heat_map: true
   plot_range_doppler_heat_map: false
-  plot_range_profile: true
+  plot_range_profile: false
   plot_scatter: true
-  plot_statistics: true
+  plot_statistics: false
   profile_cfg:
     adc_start_time: 3.0
     dig_out_sample_rate: 12500
@@ -130,7 +130,7 @@ recording:
   - csv
   prefix: radar_data
 tracking:
-  dt: 0.1
+  dt: 0.5
   enabled: false
   max_distance: 2.0
   max_misses: 5

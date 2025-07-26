@@ -64,6 +64,7 @@ class RadarData:
         self.num_detected_obj = 0
         self.subframe_number = None
         self.range_doppler_heatmap = None
+        self.azimuth_heatmap = None
         
         # Store the radar connection for iterator functionality
         self.radar_connection = radar_connection
@@ -122,6 +123,8 @@ class RadarData:
                 idx = self._parse_side_info(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_DOPPLER_HEAT_MAP:
                 idx = self._parse_range_doppler_heatmap(data_bytes, idx, tlv_length)
+            elif tlv_type == self.MMWDEMO_OUTPUT_MSG_AZIMUT_STATIC_HEAT_MAP:
+                idx = self._parse_azimuth_heatmap(data_bytes, idx, tlv_length)
             else:
                 idx += tlv_length
 
@@ -259,6 +262,68 @@ class RadarData:
         
         return idx + tlv_length
 
+    def _parse_azimuth_heatmap(self, data: bytes, idx: int, tlv_length: int) -> int:
+        """Parse azimuth static heat map data from TLV.
+        
+        According to TI documentation, the data format is:
+        - Length: (Range FFT size) × (Number of virtual antennas)
+        - Data: Complex symbols with imaginary first, real second
+        - Order: Imag(ant 0, range 0), Real(ant 0, range 0), ..., Imag(ant N-1, range 0), Real(ant N-1, range 0)
+        
+        Args:
+            data: Raw data bytes
+            idx: Current index in data
+            tlv_length: Length of TLV data in bytes
+            
+        Returns:
+            Updated index after parsing
+        """
+        # Each complex value is 4 bytes (2 bytes imag + 2 bytes real)
+        total_complex_values = tlv_length // 4
+        
+        if tlv_length % 4 != 0:
+            logging.warning("Azimuth heatmap data length is not a multiple of complex value size (4 bytes)")
+            self.azimuth_heatmap = np.array([])
+            return idx + tlv_length
+        
+        try:
+            # Create numpy array from raw bytes as int16 (2 bytes per value)
+            complex_data = np.frombuffer(data[idx:idx+tlv_length], dtype=np.int16)
+            
+            # Get dimensions from radar configuration
+            num_range_bins = self.config_params.get('rangeBins', 256)
+            num_virtual_antennas = self.config_params.get('numVirtualAntennas', 4)  # Default for typical configurations
+            
+            # Verify dimensions match the data
+            expected_complex_values = num_range_bins * num_virtual_antennas
+            if total_complex_values == expected_complex_values:
+                # Reshape to (range_bins, num_virtual_antennas, 2) where 2 represents [imag, real]
+                heatmap_complex = complex_data.reshape(num_range_bins, num_virtual_antennas, 2)
+                
+                # Convert to complex numbers: imag + j*real
+                heatmap = heatmap_complex[:, :, 0].astype(np.float32) + 1j * heatmap_complex[:, :, 1].astype(np.float32)
+                
+                # Take magnitude for visualization
+                self.azimuth_heatmap = np.abs(heatmap)
+            else:
+                # Try to infer dimensions from the data
+                if total_complex_values % num_range_bins == 0:
+                    inferred_antennas = total_complex_values // num_range_bins
+                    logging.info(f"Inferred {inferred_antennas} virtual antennas from data (expected {num_virtual_antennas})")
+                    
+                    # Reshape with inferred dimensions
+                    heatmap_complex = complex_data.reshape(num_range_bins, inferred_antennas, 2)
+                    heatmap = heatmap_complex[:, :, 0].astype(np.float32) + 1j * heatmap_complex[:, :, 1].astype(np.float32)
+                    self.azimuth_heatmap = np.abs(heatmap)
+                else:
+                    logging.warning(f"Azimuth heatmap dimensions mismatch. Expected {num_range_bins}x{num_virtual_antennas} complex values but got {total_complex_values} total values.")
+                    self.azimuth_heatmap = np.array([])
+        except Exception as e:
+            logging.error(f"Error processing azimuth heatmap: {e}")
+            self.azimuth_heatmap = np.array([])
+        
+        return idx + tlv_length
+
     def to_point_cloud(self) -> RadarPointCloud:
         """
         Convert the radar data to a RadarPointCloud object.
@@ -380,8 +445,65 @@ class RadarData:
         
         # Convert heatmap values to dB (assuming they are linear magnitude)
         heatmap_db = 20 * np.log10(self.range_doppler_heatmap + 1)  # Add 1 to avoid log(0)
-        print(heatmap_db.shape)
         return heatmap_db, range_axis, velocity_axis
+
+    def get_range_azimuth_heatmap(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Get the range-azimuth heatmap with proper scaling and axes.
+        
+        Returns:
+            Tuple containing:
+            - 2D numpy array of heatmap values in dB
+            - 1D numpy array of range values in meters
+            - 1D numpy array of azimuth values in degrees
+        """
+        if self.azimuth_heatmap is None:
+            return np.array([]), np.array([]), np.array([])
+            
+        # Get radar parameters - use actual calculated values from config
+        num_range_bins = self.config_params.get('rangeBins', 256)
+        range_resolution = self.config_params.get('rangeStep')
+        
+        if range_resolution is None:
+            logging.warning("rangeStep not found in config_params, using default 0.1 m/bin")
+            range_resolution = 0.1
+        
+        # The azimuth heatmap is range_bins × num_virtual_antennas
+        num_virtual_antennas = self.azimuth_heatmap.shape[1]
+        
+        # Create range axis using actual range resolution
+        range_axis = np.arange(num_range_bins) * range_resolution  # Start from 0
+        
+        # Convert heatmap values to dB (assuming they are linear magnitude)
+        # Handle zeros properly to avoid log(0) warnings
+        heatmap_linear = self.azimuth_heatmap.astype(np.float32)
+        # Replace zeros with a small positive value to avoid log(0)
+        heatmap_linear[heatmap_linear == 0] = 1e-10
+        heatmap_db = 20 * np.log10(heatmap_linear)
+        
+        # Interpolate azimuth axis for smoother display
+        # Original azimuth axis covers ±90 degrees with num_virtual_antennas points
+        original_azimuth_axis = np.linspace(-90, 90, num_virtual_antennas)  # degrees
+        
+        # Create interpolated azimuth axis with more points for smoother display
+        interpolated_azimuth_points = 64  # Increase from 8 to 64 points
+        interpolated_azimuth_axis = np.linspace(-90, 90, interpolated_azimuth_points)  # degrees
+        
+        # Interpolate the heatmap along the azimuth axis using RegularGridInterpolator
+        from scipy.interpolate import RegularGridInterpolator
+        
+        # Create interpolation function
+        # RegularGridInterpolator expects (y, x) coordinates for the grid
+        # where y = range, x = azimuth
+        interp_func = RegularGridInterpolator((range_axis, original_azimuth_axis), heatmap_db, method='linear')
+        
+        # Create meshgrid for interpolation
+        range_mesh, azimuth_mesh = np.meshgrid(range_axis, interpolated_azimuth_axis, indexing='ij')
+        points = np.column_stack((range_mesh.ravel(), azimuth_mesh.ravel()))
+        
+        # Interpolate to new azimuth axis
+        interpolated_heatmap = interp_func(points).reshape(heatmap_db.shape[0], interpolated_azimuth_points)
+        
+        return interpolated_heatmap, range_axis, interpolated_azimuth_axis
 
 
 class RadarDataIterator:

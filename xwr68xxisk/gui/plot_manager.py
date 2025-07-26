@@ -257,23 +257,74 @@ class RangeDopplerPlot(BasePlot):
         if not hasattr(radar_data, 'get_range_doppler_heatmap'):
             return
         heatmap_db, range_axis, velocity_axis = radar_data.get_range_doppler_heatmap()
-        print("Range-Doppler heatmap shape:", heatmap_db.shape)
-        print("Velocity axis:", velocity_axis)
-        print("Range axis:", range_axis)
         if heatmap_db.size == 0:
             self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
             return
-        vmin = float(np.nanmin(heatmap_db))
-        vmax = float(np.nanmax(heatmap_db))
+        
+        # Apply fftshift to center the zero velocity in the middle of the plot
+        # Shift along axis 1 (velocity/Doppler axis)
+        heatmap_db_shifted = np.fft.fftshift(heatmap_db, axes=1)
+        
+        vmin = float(np.nanmin(heatmap_db_shifted))
+        vmax = float(np.nanmax(heatmap_db_shifted))
         if vmin == vmax:
             vmax = vmin + 1
         self.heatmap.glyph.color_mapper.low = vmin
         self.heatmap.glyph.color_mapper.high = vmax
         self.data_source.data = {
-            'image': [heatmap_db],
+            'image': [heatmap_db_shifted],
             'x': [velocity_axis[0]],
             'y': [range_axis[0]],
             'dw': [velocity_axis[-1] - velocity_axis[0]],
+            'dh': [range_axis[-1] - range_axis[0]]
+        }
+
+
+class RangeAzimuthPlot(BasePlot):
+    """Range-azimuth heatmap plot."""
+    def _setup_plot(self) -> pn.pane.Bokeh:
+        p = figure(
+            title='Range-Azimuth Heatmap',
+            width=self.display_config.plot_width,
+            height=self.display_config.plot_height,
+            x_axis_label='Azimuth (degrees)',
+            y_axis_label='Range (m)',
+            tools='pan,wheel_zoom,box_zoom,reset,save',
+            toolbar_location='above',
+            match_aspect=True,
+        )
+        self.data_source = ColumnDataSource({'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]})
+        self.color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=1)
+        self.heatmap = p.image(
+            image='image', x='x', y='y', dw='dw', dh='dh', source=self.data_source, color_mapper=self.color_mapper
+        )
+        color_bar = ColorBar(color_mapper=self.color_mapper, label_standoff=12, location=(0, 0), title='dB')
+        p.add_layout(color_bar, 'right')
+        return pn.pane.Bokeh(p)
+
+    def update(self, radar_data: 'RadarData') -> None:
+        if not hasattr(radar_data, 'get_range_azimuth_heatmap'):
+            return
+        heatmap_db, range_axis, azimuth_axis = radar_data.get_range_azimuth_heatmap()
+        if heatmap_db.size == 0:
+            self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
+            return
+        
+        # Apply fftshift to center the zero azimuth in the middle of the plot
+        # Shift along axis 1 (azimuth axis)
+        heatmap_db_shifted = np.fft.fftshift(heatmap_db, axes=1)
+        
+        vmin = float(np.nanmin(heatmap_db_shifted))
+        vmax = float(np.nanmax(heatmap_db_shifted))
+        if vmin == vmax:
+            vmax = vmin + 1
+        self.heatmap.glyph.color_mapper.low = vmin
+        self.heatmap.glyph.color_mapper.high = vmax
+        self.data_source.data = {
+            'image': [heatmap_db_shifted],
+            'x': [azimuth_axis[0]],
+            'y': [range_axis[0]],
+            'dw': [azimuth_axis[-1] - azimuth_axis[0]],
             'dh': [range_axis[-1] - range_axis[0]]
         }
 
@@ -302,6 +353,7 @@ class PlotManager:
         self.scatter_plot = ScatterPlot(scene_config, display_config)
         self.range_profile_plot = RangeProfilePlot(scene_config, display_config)
         self.range_doppler_plot = RangeDopplerPlot(scene_config, display_config)
+        self.range_azimuth_plot = RangeAzimuthPlot(scene_config, display_config)
         
         # Create tabs
         tabs = [
@@ -311,10 +363,10 @@ class PlotManager:
             tabs.append(('Range Profile', self.range_profile_plot.view))
         if scene_config.plot_range_doppler_heat_map:
             tabs.append(('Range-Doppler', self.range_doppler_plot.view))
+        if scene_config.plot_range_azimuth_heat_map:
+            tabs.append(('Range-Azimuth', self.range_azimuth_plot.view))
         self.tabs = pn.Tabs(*tabs)
         self.view = self.tabs
-        print("plot_range_doppler_heat_map:", scene_config.plot_range_doppler_heat_map)
-        print("Tabs created:", [label for label, _ in tabs])
     
     def update(self, radar_data: RadarData):
         """
@@ -335,5 +387,7 @@ class PlotManager:
                 self.range_profile_plot.update(radar_data)
             if self.scene_config.plot_range_doppler_heat_map:
                 self.range_doppler_plot.update(radar_data)
+            if self.scene_config.plot_range_azimuth_heat_map:
+                self.range_azimuth_plot.update(radar_data)
         except Exception as e:
             logger.error(f"Error updating plots: {e}") 

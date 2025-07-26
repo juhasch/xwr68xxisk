@@ -1,6 +1,6 @@
 import panel as pn
 import param
-from panel.widgets import FloatSlider, FloatInput, Select, Checkbox, StaticText, JSONEditor
+from panel.widgets import FloatSlider, FloatInput, Select, Checkbox, StaticText, JSONEditor, IntSlider, IntInput
 
 # Assuming radar_config_models.py is accessible in the PYTHONPATH
 # Adjust import path if necessary, e.g., from ..radar_config_models import ...
@@ -11,7 +11,7 @@ pn.extension()
 class ProfileConfigView(param.Parameterized):
     """
     A Panel-based view for configuring the RadarConfig (radar profile section of the unified config).
-    Now supports 'Expert Mode' for advanced/diagnostic parameters.
+    Now supports 'Expert Mode' for advanced/diagnostic parameters with proper form-based editors.
     """
     config = param.ClassSelector(class_=RadarConfig, is_instance=True)
 
@@ -49,20 +49,45 @@ class ProfileConfigView(param.Parameterized):
     # --- Expert Mode ---
     expert_mode = param.Boolean(default=False, doc="Enable expert/advanced parameter editing.")
 
-    # Advanced/diagnostic widgets (initialized in _init_expert_widgets)
-    cfar_cfgs_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    calib_dc_range_sig_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    comp_range_bias_and_rx_chan_phase_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    measure_range_bias_and_rx_chan_phase_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    aoa_fov_cfg_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    cfar_fov_cfgs_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    extended_max_velocity_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    cq_rx_sat_monitor_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    cq_sig_img_monitor_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    analog_monitor_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    lvds_stream_cfg_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    bpm_cfg_editor = param.ClassSelector(class_=JSONEditor, default=None)
-    calib_data_editor = param.ClassSelector(class_=JSONEditor, default=None)
+    # Advanced/diagnostic widgets (replaced JSON editors with proper form widgets)
+    # CFAR Configuration
+    cfar_subframe_idx = param.ClassSelector(class_=IntInput)
+    cfar_proc_direction = param.ClassSelector(class_=Select)
+    cfar_average_mode = param.ClassSelector(class_=IntInput)
+    cfar_win_len = param.ClassSelector(class_=IntSlider)
+    cfar_guard_len = param.ClassSelector(class_=IntSlider)
+    cfar_noise_div = param.ClassSelector(class_=IntInput)
+    cfar_cyclic_mode = param.ClassSelector(class_=IntInput)
+    cfar_threshold_scale = param.ClassSelector(class_=FloatSlider)
+    cfar_peak_grouping_en = param.ClassSelector(class_=Checkbox)
+    
+    # Calibration DC Range Signal
+    calib_dc_enabled = param.ClassSelector(class_=Checkbox)
+    calib_dc_negative_bin = param.ClassSelector(class_=IntInput)
+    calib_dc_positive_bin = param.ClassSelector(class_=IntInput)
+    calib_dc_num_avg_frames = param.ClassSelector(class_=IntSlider)
+    
+    # AOA FOV Configuration
+    aoa_min_azimuth = param.ClassSelector(class_=FloatSlider)
+    aoa_max_azimuth = param.ClassSelector(class_=FloatSlider)
+    aoa_min_elevation = param.ClassSelector(class_=FloatSlider)
+    aoa_max_elevation = param.ClassSelector(class_=FloatSlider)
+    
+    # Multi-Object Beamforming
+    mob_enabled = param.ClassSelector(class_=Checkbox)
+    mob_threshold = param.ClassSelector(class_=FloatSlider)
+    
+    # GUI Monitor
+    gui_detected_objects = param.ClassSelector(class_=Select)
+    gui_log_mag_range = param.ClassSelector(class_=Checkbox)
+    gui_noise_profile = param.ClassSelector(class_=Checkbox)
+    gui_range_azimuth_heat_map = param.ClassSelector(class_=Checkbox)
+    gui_range_doppler_heat_map = param.ClassSelector(class_=Checkbox)
+    gui_stats_info = param.ClassSelector(class_=Checkbox)
+    
+    # Analog Monitor
+    analog_rx_saturation = param.ClassSelector(class_=Checkbox)
+    analog_sig_img_band = param.ClassSelector(class_=Checkbox)
 
     def __init__(self, config_instance: RadarConfig, **params):
         super().__init__(**params)
@@ -172,46 +197,46 @@ class ProfileConfigView(param.Parameterized):
         self.plot_statistics_cb = Checkbox(name="Statistics", value=self.config.plot_statistics)
 
     def _init_expert_widgets(self):
-        # Use JSONEditor for flexible editing of dict/list fields
-        self.cfar_cfgs_editor = JSONEditor(
-            value=[c.model_dump() if hasattr(c, 'model_dump') else c for c in (self.config.cfar_cfgs or [])],
-            name="CFAR Configs (Advanced)", height=120, width=500)
-        self.calib_dc_range_sig_editor = JSONEditor(
-            value=self.config.calib_dc_range_sig.model_dump() if getattr(self.config, 'calib_dc_range_sig', None) and hasattr(self.config.calib_dc_range_sig, 'model_dump') else (self.config.calib_dc_range_sig or {}),
-            name="Calib DC Range Sig (Advanced)", height=80, width=500)
-        self.comp_range_bias_and_rx_chan_phase_editor = JSONEditor(
-            value=self.config.comp_range_bias_and_rx_chan_phase or [],
-            name="Comp Range Bias & RX Chan Phase (Advanced)", height=80, width=500)
-        self.measure_range_bias_and_rx_chan_phase_editor = JSONEditor(
-            value=self.config.measure_range_bias_and_rx_chan_phase or [],
-            name="Measure Range Bias & RX Chan Phase (Advanced)", height=80, width=500)
-        self.aoa_fov_cfg_editor = JSONEditor(
-            value=self.config.aoa_fov_cfg.model_dump() if getattr(self.config, 'aoa_fov_cfg', None) and hasattr(self.config.aoa_fov_cfg, 'model_dump') else (self.config.aoa_fov_cfg or {}),
-            name="AOA FOV Config (Advanced)", height=80, width=500)
-        self.cfar_fov_cfgs_editor = JSONEditor(
-            value=[c.model_dump() if hasattr(c, 'model_dump') else c for c in (self.config.cfar_fov_cfgs or [])],
-            name="CFAR FOV Configs (Advanced)", height=80, width=500)
-        self.extended_max_velocity_editor = JSONEditor(
-            value=self.config.extended_max_velocity or {},
-            name="Extended Max Velocity (Advanced)", height=60, width=500)
-        self.cq_rx_sat_monitor_editor = JSONEditor(
-            value=self.config.cq_rx_sat_monitor or {},
-            name="CQ RX Sat Monitor (Advanced)", height=60, width=500)
-        self.cq_sig_img_monitor_editor = JSONEditor(
-            value=self.config.cq_sig_img_monitor or {},
-            name="CQ Sig Img Monitor (Advanced)", height=60, width=500)
-        self.analog_monitor_editor = JSONEditor(
-            value=self.config.analog_monitor or {},
-            name="Analog Monitor (Advanced)", height=60, width=500)
-        self.lvds_stream_cfg_editor = JSONEditor(
-            value=self.config.lvds_stream_cfg or {},
-            name="LVDS Stream Config (Advanced)", height=60, width=500)
-        self.bpm_cfg_editor = JSONEditor(
-            value=self.config.bpm_cfg or {},
-            name="BPM Config (Advanced)", height=60, width=500)
-        self.calib_data_editor = JSONEditor(
-            value=self.config.calib_data or {},
-            name="Calib Data (Advanced)", height=60, width=500)
+        """Initialize expert mode widgets with proper form controls instead of JSON editors."""
+        
+        # CFAR Configuration
+        self.cfar_subframe_idx = IntInput(name="Subframe Index", value=-1, width=100)
+        self.cfar_proc_direction = Select(name="Processing Direction", options=["Range (0)", "Doppler (1)"], value="Range (0)", width=150)
+        self.cfar_average_mode = IntInput(name="Average Mode", value=2, width=100)
+        self.cfar_win_len = IntSlider(name="Window Length", start=4, end=32, value=8, step=2, width=200)
+        self.cfar_guard_len = IntSlider(name="Guard Length", start=2, end=16, value=4, step=1, width=200)
+        self.cfar_noise_div = IntInput(name="Noise Divider", value=3, width=100)
+        self.cfar_cyclic_mode = IntInput(name="Cyclic Mode", value=0, width=100)
+        self.cfar_threshold_scale = FloatSlider(name="Threshold Scale", start=1.0, end=50.0, value=15.0, step=0.5, width=200)
+        self.cfar_peak_grouping_en = Checkbox(name="Peak Grouping", value=False)
+        
+        # Calibration DC Range Signal
+        self.calib_dc_enabled = Checkbox(name="Enable DC Calibration", value=False)
+        self.calib_dc_negative_bin = IntInput(name="Negative Bin Index", value=-5, width=100)
+        self.calib_dc_positive_bin = IntInput(name="Positive Bin Index", value=8, width=100)
+        self.calib_dc_num_avg_frames = IntSlider(name="Number of Avg Frames", start=1, end=512, value=256, step=1, width=200)
+        
+        # AOA FOV Configuration
+        self.aoa_min_azimuth = FloatSlider(name="Min Azimuth (deg)", start=-90.0, end=0.0, value=-90.0, step=1.0, width=200)
+        self.aoa_max_azimuth = FloatSlider(name="Max Azimuth (deg)", start=0.0, end=90.0, value=90.0, step=1.0, width=200)
+        self.aoa_min_elevation = FloatSlider(name="Min Elevation (deg)", start=-90.0, end=0.0, value=-90.0, step=1.0, width=200)
+        self.aoa_max_elevation = FloatSlider(name="Max Elevation (deg)", start=0.0, end=90.0, value=90.0, step=1.0, width=200)
+        
+        # Multi-Object Beamforming
+        self.mob_enabled = Checkbox(name="Enable Multi-Object Beamforming", value=True)
+        self.mob_threshold = FloatSlider(name="MOB Threshold", start=0.0, end=1.0, value=0.5, step=0.01, width=200)
+        
+        # GUI Monitor
+        self.gui_detected_objects = Select(name="Detected Objects", options=["None (0)", "Objects + Side Info (1)", "Objects Only (2)"], value="Objects + Side Info (1)", width=200)
+        self.gui_log_mag_range = Checkbox(name="Log Magnitude Range", value=True)
+        self.gui_noise_profile = Checkbox(name="Noise Profile", value=False)
+        self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=False)
+        self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=False)
+        self.gui_stats_info = Checkbox(name="Statistics Info", value=True)
+        
+        # Analog Monitor
+        self.analog_rx_saturation = Checkbox(name="RX Saturation Monitoring", value=False)
+        self.analog_sig_img_band = Checkbox(name="Signal Image Band Monitoring", value=False)
 
     def _link_widgets_to_config(self):
         # Link top selectors
@@ -222,6 +247,10 @@ class ProfileConfigView(param.Parameterized):
         self.frame_rate_input.param.watch(lambda event: setattr(self.frame_rate_slider, 'value', event.new), 'value')
         self.frame_rate_slider.param.watch(lambda event: setattr(self.config, 'frame_rate_fps', event.new), 'value')
         self.frame_rate_input.param.watch(lambda event: setattr(self.config, 'frame_rate_fps', event.new), 'value')
+        
+        # Add logging for frame rate changes
+        self.frame_rate_slider.param.watch(self._on_frame_rate_change, 'value')
+        self.frame_rate_input.param.watch(self._on_frame_rate_change, 'value')
 
         self.range_res_slider.param.watch(lambda event: setattr(self.range_res_input, 'value', event.new), 'value')
         self.range_res_input.param.watch(lambda event: setattr(self.range_res_slider, 'value', event.new), 'value')
@@ -246,20 +275,156 @@ class ProfileConfigView(param.Parameterized):
         self.plot_range_doppler_cb.param.watch(lambda event: setattr(self.config, 'plot_range_doppler_heat_map', event.new), 'value')
         self.plot_statistics_cb.param.watch(lambda event: setattr(self.config, 'plot_statistics', event.new), 'value')
 
-        # Expert mode advanced fields linking
-        self.cfar_cfgs_editor.param.watch(lambda event: setattr(self.config, 'cfar_cfgs', event.new), 'value')
-        self.calib_dc_range_sig_editor.param.watch(lambda event: setattr(self.config, 'calib_dc_range_sig', event.new), 'value')
-        self.comp_range_bias_and_rx_chan_phase_editor.param.watch(lambda event: setattr(self.config, 'comp_range_bias_and_rx_chan_phase', event.new), 'value')
-        self.measure_range_bias_and_rx_chan_phase_editor.param.watch(lambda event: setattr(self.config, 'measure_range_bias_and_rx_chan_phase', event.new), 'value')
-        self.aoa_fov_cfg_editor.param.watch(lambda event: setattr(self.config, 'aoa_fov_cfg', event.new), 'value')
-        self.cfar_fov_cfgs_editor.param.watch(lambda event: setattr(self.config, 'cfar_fov_cfgs', event.new), 'value')
-        self.extended_max_velocity_editor.param.watch(lambda event: setattr(self.config, 'extended_max_velocity', event.new), 'value')
-        self.cq_rx_sat_monitor_editor.param.watch(lambda event: setattr(self.config, 'cq_rx_sat_monitor', event.new), 'value')
-        self.cq_sig_img_monitor_editor.param.watch(lambda event: setattr(self.config, 'cq_sig_img_monitor', event.new), 'value')
-        self.analog_monitor_editor.param.watch(lambda event: setattr(self.config, 'analog_monitor', event.new), 'value')
-        self.lvds_stream_cfg_editor.param.watch(lambda event: setattr(self.config, 'lvds_stream_cfg', event.new), 'value')
-        self.bpm_cfg_editor.param.watch(lambda event: setattr(self.config, 'bpm_cfg', event.new), 'value')
-        self.calib_data_editor.param.watch(lambda event: setattr(self.config, 'calib_data', event.new), 'value')
+        # Link expert mode widgets to config
+        self._link_expert_widgets()
+
+    def _link_expert_widgets(self):
+        """Link expert mode widgets to the configuration."""
+        # CFAR Configuration
+        self.cfar_subframe_idx.param.watch(self._update_cfar_config, 'value')
+        self.cfar_proc_direction.param.watch(self._update_cfar_config, 'value')
+        self.cfar_average_mode.param.watch(self._update_cfar_config, 'value')
+        self.cfar_win_len.param.watch(self._update_cfar_config, 'value')
+        self.cfar_guard_len.param.watch(self._update_cfar_config, 'value')
+        self.cfar_noise_div.param.watch(self._update_cfar_config, 'value')
+        self.cfar_cyclic_mode.param.watch(self._update_cfar_config, 'value')
+        self.cfar_threshold_scale.param.watch(self._update_cfar_config, 'value')
+        self.cfar_peak_grouping_en.param.watch(self._update_cfar_config, 'value')
+        
+        # Calibration DC Range Signal
+        self.calib_dc_enabled.param.watch(self._update_calib_dc_config, 'value')
+        self.calib_dc_negative_bin.param.watch(self._update_calib_dc_config, 'value')
+        self.calib_dc_positive_bin.param.watch(self._update_calib_dc_config, 'value')
+        self.calib_dc_num_avg_frames.param.watch(self._update_calib_dc_config, 'value')
+        
+        # AOA FOV Configuration
+        self.aoa_min_azimuth.param.watch(self._update_aoa_config, 'value')
+        self.aoa_max_azimuth.param.watch(self._update_aoa_config, 'value')
+        self.aoa_min_elevation.param.watch(self._update_aoa_config, 'value')
+        self.aoa_max_elevation.param.watch(self._update_aoa_config, 'value')
+        
+        # Multi-Object Beamforming
+        self.mob_enabled.param.watch(self._update_mob_config, 'value')
+        self.mob_threshold.param.watch(self._update_mob_config, 'value')
+        
+        # GUI Monitor
+        self.gui_detected_objects.param.watch(self._update_gui_monitor_config, 'value')
+        self.gui_log_mag_range.param.watch(self._update_gui_monitor_config, 'value')
+        self.gui_noise_profile.param.watch(self._update_gui_monitor_config, 'value')
+        self.gui_range_azimuth_heat_map.param.watch(self._update_gui_monitor_config, 'value')
+        self.gui_range_doppler_heat_map.param.watch(self._update_gui_monitor_config, 'value')
+        self.gui_stats_info.param.watch(self._update_gui_monitor_config, 'value')
+        
+        # Analog Monitor
+        self.analog_rx_saturation.param.watch(self._update_analog_monitor_config, 'value')
+        self.analog_sig_img_band.param.watch(self._update_analog_monitor_config, 'value')
+
+    def _update_cfar_config(self, event):
+        """Update CFAR configuration from widget values."""
+        if not hasattr(self.config, 'cfar_cfg') or self.config.cfar_cfg is None:
+            from ..radar_config_models import CfarConfig
+            self.config.cfar_cfg = CfarConfig(
+                subframe_idx=self.cfar_subframe_idx.value,
+                proc_direction=0 if "Range" in self.cfar_proc_direction.value else 1,
+                average_mode=self.cfar_average_mode.value,
+                win_len=self.cfar_win_len.value,
+                guard_len=self.cfar_guard_len.value,
+                noise_div=self.cfar_noise_div.value,
+                cyclic_mode=self.cfar_cyclic_mode.value,
+                threshold_scale=self.cfar_threshold_scale.value,
+                peak_grouping_en=self.cfar_peak_grouping_en.value
+            )
+        else:
+            self.config.cfar_cfg.subframe_idx = self.cfar_subframe_idx.value
+            self.config.cfar_cfg.proc_direction = 0 if "Range" in self.cfar_proc_direction.value else 1
+            self.config.cfar_cfg.average_mode = self.cfar_average_mode.value
+            self.config.cfar_cfg.win_len = self.cfar_win_len.value
+            self.config.cfar_cfg.guard_len = self.cfar_guard_len.value
+            self.config.cfar_cfg.noise_div = self.cfar_noise_div.value
+            self.config.cfar_cfg.cyclic_mode = self.cfar_cyclic_mode.value
+            self.config.cfar_cfg.threshold_scale = self.cfar_threshold_scale.value
+            self.config.cfar_cfg.peak_grouping_en = self.cfar_peak_grouping_en.value
+
+    def _update_calib_dc_config(self, event):
+        """Update Calibration DC Range Signal configuration from widget values."""
+        if not hasattr(self.config, 'calib_dc_range_sig') or self.config.calib_dc_range_sig is None:
+            from ..radar_config_models import CalibDcRangeSigConfig
+            self.config.calib_dc_range_sig = CalibDcRangeSigConfig(
+                subframe_idx=-1,
+                enabled=self.calib_dc_enabled.value,
+                negative_bin_idx=self.calib_dc_negative_bin.value,
+                positive_bin_idx=self.calib_dc_positive_bin.value,
+                num_avg_frames=self.calib_dc_num_avg_frames.value
+            )
+        else:
+            self.config.calib_dc_range_sig.enabled = self.calib_dc_enabled.value
+            self.config.calib_dc_range_sig.negative_bin_idx = self.calib_dc_negative_bin.value
+            self.config.calib_dc_range_sig.positive_bin_idx = self.calib_dc_positive_bin.value
+            self.config.calib_dc_range_sig.num_avg_frames = self.calib_dc_num_avg_frames.value
+
+    def _update_aoa_config(self, event):
+        """Update AOA FOV configuration from widget values."""
+        if not hasattr(self.config, 'aoa_fov_cfg') or self.config.aoa_fov_cfg is None:
+            from ..radar_config_models import AoaFovConfig
+            self.config.aoa_fov_cfg = AoaFovConfig(
+                subframe_idx=-1,
+                min_azimuth_deg=self.aoa_min_azimuth.value,
+                max_azimuth_deg=self.aoa_max_azimuth.value,
+                min_elevation_deg=self.aoa_min_elevation.value,
+                max_elevation_deg=self.aoa_max_elevation.value
+            )
+        else:
+            self.config.aoa_fov_cfg.min_azimuth_deg = self.aoa_min_azimuth.value
+            self.config.aoa_fov_cfg.max_azimuth_deg = self.aoa_max_azimuth.value
+            self.config.aoa_fov_cfg.min_elevation_deg = self.aoa_min_elevation.value
+            self.config.aoa_fov_cfg.max_elevation_deg = self.aoa_max_elevation.value
+
+    def _update_mob_config(self, event):
+        """Update Multi-Object Beamforming configuration from widget values."""
+        if not hasattr(self.config, 'multi_obj_beam_forming') or self.config.multi_obj_beam_forming is None:
+            from ..radar_config_models import MultiObjBeamFormingConfig
+            self.config.multi_obj_beam_forming = MultiObjBeamFormingConfig(
+                subframe_idx=-1,
+                enabled=self.mob_enabled.value,
+                threshold=self.mob_threshold.value
+            )
+        else:
+            self.config.multi_obj_beam_forming.enabled = self.mob_enabled.value
+            self.config.multi_obj_beam_forming.threshold = self.mob_threshold.value
+
+    def _update_gui_monitor_config(self, event):
+        """Update GUI Monitor configuration from widget values."""
+        if not hasattr(self.config, 'gui_monitor') or self.config.gui_monitor is None:
+            from ..radar_config_models import GuiMonitorConfig
+            detected_objects = int(self.gui_detected_objects.value.split('(')[1].split(')')[0])
+            self.config.gui_monitor = GuiMonitorConfig(
+                detected_objects=detected_objects,
+                log_mag_range=self.gui_log_mag_range.value,
+                noise_profile=self.gui_noise_profile.value,
+                range_azimuth_heat_map=self.gui_range_azimuth_heat_map.value,
+                range_doppler_heat_map=self.gui_range_doppler_heat_map.value,
+                stats_info=self.gui_stats_info.value
+            )
+        else:
+            detected_objects = int(self.gui_detected_objects.value.split('(')[1].split(')')[0])
+            self.config.gui_monitor.detected_objects = detected_objects
+            self.config.gui_monitor.log_mag_range = self.gui_log_mag_range.value
+            self.config.gui_monitor.noise_profile = self.gui_noise_profile.value
+            self.config.gui_monitor.range_azimuth_heat_map = self.gui_range_azimuth_heat_map.value
+            self.config.gui_monitor.range_doppler_heat_map = self.gui_range_doppler_heat_map.value
+            self.config.gui_monitor.stats_info = self.gui_stats_info.value
+
+    def _update_analog_monitor_config(self, event):
+        """Update Analog Monitor configuration from widget values."""
+        if not hasattr(self.config, 'analog_monitor') or self.config.analog_monitor is None:
+            from ..radar_config_models import AnalogMonitorConfig
+            self.config.analog_monitor = AnalogMonitorConfig(
+                rx_saturation=self.analog_rx_saturation.value,
+                sig_img_band=self.analog_sig_img_band.value
+            )
+        else:
+            self.config.analog_monitor.rx_saturation = self.analog_rx_saturation.value
+            self.config.analog_monitor.sig_img_band = self.analog_sig_img_band.value
 
     # Callbacks for selector changes
     def _on_antenna_config_change(self, event):
@@ -277,19 +442,47 @@ class ProfileConfigView(param.Parameterized):
         new_val = event.new
         self.config.radial_velocity_resolution_ms = new_val
         self.radial_vel_res_numeric_display.value = new_val
+    
+    def _on_frame_rate_change(self, event):
+        """Handles changes from the frame rate slider/input widgets."""
+        import logging
+        logger = logging.getLogger(__name__)
+        new_fps = event.new
+        frame_period_ms = 1000.0 / new_fps
+        logger.info(f"ProfileConfigView frame rate changed: {new_fps:.1f} fps = {frame_period_ms:.1f} ms")
+        self.config.frame_rate_fps = new_fps
 
-    @pn.depends('expert_mode')
-    def view(self):
-        # Top Configuration Section
-        top_config_layout = pn.Row(
+    def _create_widget_cache(self):
+        """Create and cache widgets to prevent recreation."""
+        if hasattr(self, '_widget_cache'):
+            return self._widget_cache
+            
+        # Create layouts
+        top_config = self._create_top_config_layout()
+        scene_selection = self._create_scene_selection_layout()
+        plot_selection = self._create_plot_selection_layout()
+        advanced_section = self._create_advanced_section_layout()
+        
+        self._widget_cache = {
+            'top_config': top_config,
+            'scene_selection': scene_selection,
+            'plot_selection': plot_selection,
+            'advanced_section': advanced_section
+        }
+        return self._widget_cache
+    
+    def _create_top_config_layout(self):
+        """Create top configuration layout."""
+        return pn.Row(
             pn.Column(
                 StaticText(value="<b>Antenna Config (Azimuth Res - deg)</b>"), 
-                pn.Param(self.param.antenna_config_select, widgets={ 'antenna_config_select': pn.widgets.Select}) # Use pn.Param for Selectors
+                pn.Param(self.param.antenna_config_select, widgets={ 'antenna_config_select': pn.widgets.Select})
             )
         )
-        
-        # Scene Selection Section
-        scene_selection_layout = pn.Column(
+    
+    def _create_scene_selection_layout(self):
+        """Create scene selection layout."""
+        return pn.Column(
             StaticText(value="<h2>Scene Selection</h2>"),
             pn.Row(self.frame_rate_slider, self.frame_rate_input, sizing_mode='stretch_width'),
             pn.Row(self.range_res_slider, self.range_res_input, sizing_mode='stretch_width'),
@@ -297,47 +490,91 @@ class ProfileConfigView(param.Parameterized):
             pn.Row(self.max_vel_slider, self.max_vel_input, sizing_mode='stretch_width'),
             pn.Row(self.radial_vel_res_label, self.radial_vel_res_select, self.radial_vel_res_numeric_display, sizing_mode='stretch_width')
         )
-
-        # Plot Selection Section
-        plot_selection_layout = pn.Column(
+    
+    def _create_plot_selection_layout(self):
+        """Create plot selection layout."""
+        return pn.Column(
             StaticText(value="<h2>Plot Selection</h2>"),
             pn.Row(
                 pn.Column(self.plot_scatter_cb, self.plot_range_profile_cb, self.plot_noise_profile_cb),
                 pn.Column(self.plot_range_azimuth_cb, self.plot_range_doppler_cb, self.plot_statistics_cb)
             )
         )
+    
+    def _create_advanced_section_layout(self):
+        """Create advanced section layout."""
+        return pn.Column(
+            pn.pane.Markdown("## Advanced/Diagnostic Parameters (Expert Mode)"),
+            
+            # CFAR Configuration
+            pn.pane.Markdown("### CFAR Detection Configuration"),
+            pn.Row(
+                pn.Column(self.cfar_subframe_idx, self.cfar_proc_direction, self.cfar_average_mode),
+                pn.Column(self.cfar_win_len, self.cfar_guard_len, self.cfar_noise_div),
+                pn.Column(self.cfar_cyclic_mode, self.cfar_threshold_scale, self.cfar_peak_grouping_en)
+            ),
+            
+            pn.layout.Divider(),
+            
+            # Calibration DC Range Signal
+            pn.pane.Markdown("### Calibration DC Range Signal"),
+            pn.Row(
+                pn.Column(self.calib_dc_enabled, self.calib_dc_negative_bin, self.calib_dc_positive_bin),
+                pn.Column(self.calib_dc_num_avg_frames)
+            ),
+            
+            pn.layout.Divider(),
+            
+            # AOA FOV Configuration
+            pn.pane.Markdown("### Angle of Arrival FOV Configuration"),
+            pn.Row(
+                pn.Column(self.aoa_min_azimuth, self.aoa_max_azimuth),
+                pn.Column(self.aoa_min_elevation, self.aoa_max_elevation)
+            ),
+            
+            pn.layout.Divider(),
+            
+            # Multi-Object Beamforming
+            pn.pane.Markdown("### Multi-Object Beamforming"),
+            pn.Row(self.mob_enabled, self.mob_threshold),
+            
+            pn.layout.Divider(),
+            
+            # GUI Monitor
+            pn.pane.Markdown("### GUI Monitor Configuration"),
+            pn.Row(
+                pn.Column(self.gui_detected_objects, self.gui_log_mag_range, self.gui_noise_profile),
+                pn.Column(self.gui_range_azimuth_heat_map, self.gui_range_doppler_heat_map, self.gui_stats_info)
+            ),
+            
+            pn.layout.Divider(),
+            
+            # Analog Monitor
+            pn.pane.Markdown("### Analog Monitor Configuration"),
+            pn.Row(self.analog_rx_saturation, self.analog_sig_img_band)
+        )
 
+    @pn.depends('expert_mode')
+    def view(self):
+        # Use cached widgets
+        cache = self._create_widget_cache()
+        
         expert_toggle = pn.widgets.Checkbox(name="Expert Mode (show advanced parameters)", value=self.expert_mode, width=250)
         def _toggle_expert(event):
             self.expert_mode = event.new
         expert_toggle.param.watch(_toggle_expert, 'value')
 
-        # Advanced/diagnostic section (shown only if expert_mode is True)
-        advanced_section = pn.Column(
-            pn.pane.Markdown("## Advanced/Diagnostic Parameters (Expert Mode)"),
-            self.cfar_cfgs_editor,
-            self.calib_dc_range_sig_editor,
-            self.comp_range_bias_and_rx_chan_phase_editor,
-            self.measure_range_bias_and_rx_chan_phase_editor,
-            self.aoa_fov_cfg_editor,
-            self.cfar_fov_cfgs_editor,
-            self.extended_max_velocity_editor,
-            self.cq_rx_sat_monitor_editor,
-            self.cq_sig_img_monitor_editor,
-            self.analog_monitor_editor,
-            self.lvds_stream_cfg_editor,
-            self.bpm_cfg_editor,
-            self.calib_data_editor,
-            visible=self.expert_mode
-        )
+        # Advanced section visibility depends on expert_mode
+        advanced_section = cache['advanced_section']
+        advanced_section.visible = self.expert_mode
 
         return pn.Column(
             expert_toggle,
-            top_config_layout,
+            cache['top_config'],
             pn.layout.Divider(),
-            scene_selection_layout,
+            cache['scene_selection'],
             pn.layout.Divider(),
-            plot_selection_layout,
+            cache['plot_selection'],
             pn.layout.Divider(),
             advanced_section,
             sizing_mode='stretch_width'

@@ -10,7 +10,11 @@ visualization, clustering, tracking, camera integration, and recording functiona
 import os
 import logging
 import time
+import warnings
 from datetime import datetime
+
+# Suppress Bokeh document warnings
+warnings.filterwarnings("ignore", message=".*Dropping a patch because it contains a previously known reference.*")
 
 # Third-party imports
 import numpy as np
@@ -38,6 +42,10 @@ from .plot_manager import PlotManager
 from ..radar_config_models import RadarConfig
 
 logger = logging.getLogger(__name__)
+
+# Configure logging to reduce Bokeh noise
+logging.getLogger('bokeh.document').setLevel(logging.ERROR)
+logging.getLogger('bokeh.server').setLevel(logging.ERROR)
 
 # Initialize extensions
 hv.extension('bokeh')
@@ -290,16 +298,37 @@ class RadarGUI:
 
         # Instantiate the Pydantic model for the new scene config GUI
         self.profile_config_view_panel = ProfileConfigView(config_instance=self.config.radar)
+        
+        # Synchronize frame rate on initialization
+        if hasattr(self.profile_config_view_panel, 'config'):
+            profile_frame_rate_fps = self.profile_config_view_panel.config.frame_rate_fps
+            profile_frame_period_ms = 1000.0 / profile_frame_rate_fps
+            
+            # Update the main GUI frame period slider to match ProfileConfigView
+            self.frame_period_slider.value = profile_frame_period_ms
+            
+            # Update the processing config using the proper update method
+            self.config = self.config_manager.update_config({
+                'processing': {
+                    'frame_period_ms': profile_frame_period_ms
+                }
+            })
+            
+            logger.info(f"Initialized frame rate synchronization: {profile_frame_rate_fps:.1f} fps = {profile_frame_period_ms:.1f} ms")
 
         self.config_modal = pn.Column(
             config_modal_header,
             self.profile_config_view_panel.view,
             config_modal_buttons,
             visible=False, 
-            width=850, 
+            width=1000, 
             height=900,
             css_classes=['modal', 'modal-content'],
-
+            styles={
+                'max-height': '90vh',
+                'overflow-y': 'auto',
+                'overflow-x': 'hidden'
+            }
         )
 
         self.device_info_modal_close_button = pn.widgets.Button(name="Close", width=80)
@@ -706,6 +735,36 @@ class RadarGUI:
     def _save_config(self, event):
         """Save the radar profile and hide modal."""
         try:
+            # Synchronize frame rate between ProfileConfigView and main GUI
+            if hasattr(self, 'profile_config_view_panel'):
+                # Update the main GUI frame period based on ProfileConfigView frame rate
+                profile_frame_rate_fps = self.profile_config_view_panel.config.frame_rate_fps
+                profile_frame_period_ms = 1000.0 / profile_frame_rate_fps
+                
+                # Update the main GUI frame period slider
+                self.frame_period_slider.value = profile_frame_period_ms
+                
+                # Update the processing config using the proper update method
+                self.config = self.config_manager.update_config({
+                    'processing': {
+                        'frame_period_ms': profile_frame_period_ms
+                    }
+                })
+                
+                # CRITICAL: Update the radar config frame rate to match ProfileConfigView
+                self.config.radar.frame_rate_fps = profile_frame_rate_fps
+                
+                # CRITICAL: Update the radar config plot settings to match ProfileConfigView
+                self.config.radar.plot_scatter = self.profile_config_view_panel.config.plot_scatter
+                self.config.radar.plot_range_profile = self.profile_config_view_panel.config.plot_range_profile
+                self.config.radar.plot_noise_profile = self.profile_config_view_panel.config.plot_noise_profile
+                self.config.radar.plot_range_azimuth_heat_map = self.profile_config_view_panel.config.plot_range_azimuth_heat_map
+                self.config.radar.plot_range_doppler_heat_map = self.profile_config_view_panel.config.plot_range_doppler_heat_map
+                self.config.radar.plot_statistics = self.profile_config_view_panel.config.plot_statistics
+                
+                logger.info(f"Synchronized frame rate: {profile_frame_rate_fps:.1f} fps = {profile_frame_period_ms:.1f} ms")
+                logger.info(f"Synchronized plot settings: scatter={self.config.radar.plot_scatter}, range_profile={self.config.radar.plot_range_profile}, noise_profile={self.config.radar.plot_noise_profile}, range_azimuth={self.config.radar.plot_range_azimuth_heat_map}, range_doppler={self.config.radar.plot_range_doppler_heat_map}, statistics={self.config.radar.plot_statistics}")
+            
             # Generate the CFG string from the SceneProfileConfig model
             config_text_to_save = generate_cfg_from_scene_profile(self.config.radar)
             logger.info(f"Generated CFG from GUI to save and send to sensor:\n{config_text_to_save}")
@@ -1127,6 +1186,8 @@ class RadarGUI:
             left: 50% !important;
             transform: translate(-50%, -50%) !important;
             z-index: 1050 !important;
+            max-width: 95vw !important;
+            max-height: 95vh !important;
         }
         .modal-content {
             background: white !important;
@@ -1134,6 +1195,8 @@ class RadarGUI:
             border-radius: 5px !important;
             padding: 20px !important;
             box-shadow: 0 0 10px rgba(0,0,0,0.1) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
         }
         .bk-root .bk-float-panel {
             position: fixed !important;
@@ -1260,6 +1323,16 @@ class RadarGUI:
         # Always update the radar config frame rate to keep them synchronized
         frame_rate_fps = 1000.0 / event.new
         self.config.radar.frame_rate_fps = frame_rate_fps
+        
+        # Also update the ProfileConfigView frame rate to keep it synchronized
+        if hasattr(self, 'profile_config_view_panel'):
+            self.profile_config_view_panel.config.frame_rate_fps = frame_rate_fps
+            # Update the ProfileConfigView widgets to reflect the change
+            if hasattr(self.profile_config_view_panel, 'frame_rate_slider'):
+                self.profile_config_view_panel.frame_rate_slider.value = frame_rate_fps
+            if hasattr(self.profile_config_view_panel, 'frame_rate_input'):
+                self.profile_config_view_panel.frame_rate_input.value = frame_rate_fps
+            logger.info(f"Updated ProfileConfigView frame rate to {frame_rate_fps:.1f} fps")
         
         # Regenerate the configuration file with the new frame rate
         try:
