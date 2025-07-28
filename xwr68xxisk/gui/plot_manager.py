@@ -189,9 +189,9 @@ class RangeProfilePlot(BasePlot):
             y='magnitude',
             line_width=2,
             color='blue',
-            legend_label='Range Profile (Log Magnitude)',
             source=self.range_data_source,
-            name='range_profile'
+            name='range_profile',
+            legend_label='Range Profile (Log Magnitude)'
         )
         
         # Complex magnitude line (green)
@@ -200,10 +200,10 @@ class RangeProfilePlot(BasePlot):
             y='magnitude',
             line_width=2,
             color='green',
-            legend_label='Range Profile (Complex Magnitude)',
             source=self.complex_magnitude_source,
             name='complex_magnitude',
-            visible=False
+            visible=False,
+            legend_label='Range Profile (Complex Magnitude)'
         )
         
         # Complex phase line (orange)
@@ -212,10 +212,10 @@ class RangeProfilePlot(BasePlot):
             y='phase',
             line_width=2,
             color='orange',
-            legend_label='Range Profile (Complex Phase)',
             source=self.complex_phase_source,
             name='complex_phase',
-            visible=False
+            visible=False,
+            legend_label='Range Profile (Complex Phase)'
         )
         
         # Noise profile line (red)
@@ -224,9 +224,9 @@ class RangeProfilePlot(BasePlot):
             y='noise',
             line_width=2,
             color='red',
-            legend_label='Noise Floor',
             source=self.noise_data_source,
-            name='noise_profile'
+            name='noise_profile',
+            legend_label='Noise Floor'
         )
         
         p.axis.axis_label_text_font_size = '12pt'

@@ -82,10 +82,11 @@ radar:
   frame_rate_fps: 3.0
   gui_monitor:
     detected_objects: 1
-    log_mag_range: false
     noise_profile: false
     range_azimuth_heat_map: false
     range_doppler_heat_map: false
+    range_profile_enabled: true
+    range_profile_mode: log_magnitude
     stats_info: true
   lvds_stream_cfg:
     data_fmt: 0
@@ -121,6 +122,7 @@ radar:
     tx_phase_shifter: 0
     tx_start_time: 1.0
   radial_velocity_resolution_ms: 0.13
+  range_profile_mode: log_magnitude
   range_resolution_m: 0.044
 recording:
   buffer_size: 1000
