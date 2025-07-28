@@ -190,8 +190,7 @@ class RangeProfilePlot(BasePlot):
             line_width=2,
             color='blue',
             source=self.range_data_source,
-            name='range_profile',
-            legend_label='Range Profile (Log Magnitude)'
+            name='range_profile'
         )
         
         # Complex magnitude line (green)
@@ -202,8 +201,7 @@ class RangeProfilePlot(BasePlot):
             color='green',
             source=self.complex_magnitude_source,
             name='complex_magnitude',
-            visible=False,
-            legend_label='Range Profile (Complex Magnitude)'
+            visible=False
         )
         
         # Complex phase line (orange)
@@ -214,8 +212,7 @@ class RangeProfilePlot(BasePlot):
             color='orange',
             source=self.complex_phase_source,
             name='complex_phase',
-            visible=False,
-            legend_label='Range Profile (Complex Phase)'
+            visible=False
         )
         
         # Noise profile line (red)
@@ -225,8 +222,7 @@ class RangeProfilePlot(BasePlot):
             line_width=2,
             color='red',
             source=self.noise_data_source,
-            name='noise_profile',
-            legend_label='Noise Floor'
+            name='noise_profile'
         )
         
         p.axis.axis_label_text_font_size = '12pt'
@@ -235,7 +231,6 @@ class RangeProfilePlot(BasePlot):
         p.yaxis.axis_label = 'Magnitude (dB) / Phase (rad)'
         
         p.grid.grid_line_alpha = 0.3
-        p.legend.location = 'top_right'
         
         return pn.pane.Bokeh(p)
     
@@ -246,31 +241,24 @@ class RangeProfilePlot(BasePlot):
             return
             
         try:
-            # Check if we have complex range profile data
+            # Check what data is available
             has_complex_data = (radar_data.adc_complex is not None and 
                               len(radar_data.adc_complex) > 0)
-            
-            # Check if we have regular range profile data
             has_regular_data = (radar_data.adc is not None and 
                               len(radar_data.adc) > 0)
+            has_noise_data = (radar_data.noise_profile is not None and 
+                            len(radar_data.noise_profile) > 0)
             
-            # Determine which data to show based on configuration
+            # Determine which data to show based on configuration and availability
             show_complex = (hasattr(self.scene_config, 'range_profile_mode') and 
                            self.scene_config.range_profile_mode == 'complex' and 
                            has_complex_data)
             
-            # Update visibility of plot lines
+            # Update visibility based on available data and configuration
             self.range_line.visible = not show_complex and has_regular_data
-            self.complex_magnitude_line.visible = show_complex
-            self.complex_phase_line.visible = show_complex
-            
-            # Update legend labels
-            if show_complex:
-                self.range_line.legend_label = 'Range Profile (Complex Magnitude)'
-                self.complex_magnitude_line.legend_label = 'Range Profile (Complex Magnitude)'
-                self.complex_phase_line.legend_label = 'Range Profile (Complex Phase)'
-            else:
-                self.range_line.legend_label = 'Range Profile (Log Magnitude)'
+            self.complex_magnitude_line.visible = show_complex and has_complex_data
+            self.complex_phase_line.visible = show_complex and has_complex_data
+            self.noise_line.visible = has_noise_data
             
             # Update range profile data
             if show_complex and has_complex_data:
@@ -278,7 +266,6 @@ class RangeProfilePlot(BasePlot):
                 range_bins, magnitude_dB, phase = radar_data.get_complex_range_profile()
                 
                 if len(range_bins) > 0 and len(magnitude_dB) > 0:
-                    # Create range axis
                     range_axis = self._get_range_axis(radar_data, len(range_bins))
                     
                     if len(range_axis) > 0:
@@ -317,7 +304,7 @@ class RangeProfilePlot(BasePlot):
                 self.range_data_source.data = {'range': [], 'magnitude': []}
             
             # Update noise profile data
-            if radar_data.noise_profile is not None and len(radar_data.noise_profile) > 0:
+            if has_noise_data:
                 range_bins, noise_dB = radar_data.get_noise_profile()
                 
                 if len(range_bins) > 0 and len(noise_dB) > 0:
