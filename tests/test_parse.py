@@ -96,3 +96,57 @@ def test_parse_noise_profile():
     assert len(range_axis) == noise_samples
     assert noise_db.dtype == np.float32 or noise_db.dtype == np.float64
     assert range_axis.dtype == np.float32 or range_axis.dtype == np.float64 
+
+def test_parse_stats_and_temperature():
+    """Test parsing of stats and temperature stats data."""
+    # Create mock data with stats (TLV type 6) and temperature stats (TLV type 9)
+    # Stats (TLV type 6) - 24 bytes (6 uint32 values)
+    stats_tlv_type = 6
+    stats_tlv_length = 24
+    stats_data = np.random.randint(0, 1000, 6, dtype=np.uint32)
+    
+    # Temperature stats (TLV type 9) - 28 bytes (7 float values)
+    temp_tlv_type = 9
+    temp_tlv_length = 28
+    temp_data = np.random.rand(7).astype(np.float32)
+    
+    # Create packet with both TLVs
+    packet = bytearray()
+    
+    # Add stats TLV
+    packet.extend(stats_tlv_type.to_bytes(4, byteorder='little'))
+    packet.extend(stats_tlv_length.to_bytes(4, byteorder='little'))
+    packet.extend(stats_data.tobytes())
+    
+    # Add temperature stats TLV
+    packet.extend(temp_tlv_type.to_bytes(4, byteorder='little'))
+    packet.extend(temp_tlv_length.to_bytes(4, byteorder='little'))
+    packet.extend(temp_data.tobytes())
+    
+    # Create mock radar connection with 2 TLVs
+    class MockRadarConnectionStats:
+        def __init__(self, data):
+            self.data = data
+            
+        def is_connected(self):
+            return True
+            
+        def is_running(self):
+            return True
+            
+        def read_frame(self):
+            return {'frame_number': 1, 'num_tlvs': 2}, self.data
+    
+    mock_connection = MockRadarConnectionStats(packet)
+    
+    # Create radar data object
+    radar_data = RadarData(mock_connection)
+    
+    # Verify that stats and temperature stats were parsed correctly
+    assert radar_data.stats_data is not None
+    assert len(radar_data.stats_data) == stats_tlv_length
+    assert radar_data.stats_data == stats_data.tobytes()
+    
+    assert radar_data.temperature_stats_data is not None
+    assert len(radar_data.temperature_stats_data) == temp_tlv_length
+    assert radar_data.temperature_stats_data == temp_data.tobytes() 

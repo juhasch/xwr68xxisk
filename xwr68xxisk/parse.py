@@ -68,6 +68,8 @@ class RadarData:
         self.subframe_number = None
         self.range_doppler_heatmap = None
         self.azimuth_heatmap = None
+        self.stats_data = None
+        self.temperature_stats_data = None
         
         # Store the radar connection for iterator functionality
         self.radar_connection = radar_connection
@@ -136,6 +138,12 @@ class RadarData:
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_NOISE_PROFILE:
                 logger.debug(f"Parsing noise profile data with length {tlv_length}")
                 idx = self._parse_noise_profile(data_bytes, idx, tlv_length)
+            elif tlv_type == self.MMWDEMO_OUTPUT_MSG_STATS:
+                logger.debug(f"Parsing stats data with length {tlv_length}")
+                idx = self._parse_stats(data_bytes, idx, tlv_length)
+            elif tlv_type == self.MMWDEMO_OUTPUT_MSG_TEMPERATURE_STATS:
+                logger.debug(f"Parsing temperature stats data with length {tlv_length}")
+                idx = self._parse_temperature_stats(data_bytes, idx, tlv_length)
             else:
                 logger.debug(f"Skipping unknown TLV type {tlv_type} with length {tlv_length}")
                 idx += tlv_length
@@ -347,6 +355,71 @@ class RadarData:
         else:
             logging.warning("Noise profile data length is not a multiple of uint16 size")
             self.noise_profile = np.array([], dtype=np.uint16)
+        return idx + tlv_length
+
+    def _parse_stats(self, data: bytes, idx: int, tlv_length: int) -> int:
+        """Parse stats data from TLV."""
+        logger.debug(f"Parsing stats data with length {tlv_length}")
+        
+        # Store the raw data for debugging
+        raw_data = data[idx:idx+tlv_length]
+        self.stats_data = raw_data
+        
+        # Try to parse as different data types based on length
+        if tlv_length == 4:
+            # Single uint32 value
+            value = int.from_bytes(raw_data, byteorder='little')
+            logger.info(f"Stats data (uint32): {value}")
+            self.num_detected_obj = value
+        elif tlv_length == 8:
+            # Two uint32 values
+            val1 = int.from_bytes(raw_data[0:4], byteorder='little')
+            val2 = int.from_bytes(raw_data[4:8], byteorder='little')
+            logger.info(f"Stats data (2x uint32): {val1}, {val2}")
+        elif tlv_length == 24:
+            # Six uint32 values (common stats structure)
+            values = []
+            for i in range(0, tlv_length, 4):
+                val = int.from_bytes(raw_data[i:i+4], byteorder='little')
+                values.append(val)
+            logger.info(f"Stats data (6x uint32): {values}")
+        else:
+            # Unknown structure, log as hex
+            hex_data = raw_data.hex()
+            logger.info(f"Stats data (unknown structure, {tlv_length} bytes): {hex_data}")
+        
+        return idx + tlv_length
+
+    def _parse_temperature_stats(self, data: bytes, idx: int, tlv_length: int) -> int:
+        """Parse temperature stats data from TLV."""
+        logger.debug(f"Parsing temperature stats data with length {tlv_length}")
+        
+        # Store the raw data for debugging
+        raw_data = data[idx:idx+tlv_length]
+        self.temperature_stats_data = raw_data
+        
+        # Try to parse as different data types based on length
+        if tlv_length == 4:
+            # Single float value
+            value = struct.unpack('f', raw_data)[0]
+            logger.info(f"Temperature stats data (float): {value}")
+        elif tlv_length == 8:
+            # Two float values
+            val1 = struct.unpack('f', raw_data[0:4])[0]
+            val2 = struct.unpack('f', raw_data[4:8])[0]
+            logger.info(f"Temperature stats data (2x float): {val1}, {val2}")
+        elif tlv_length == 28:
+            # Seven float values (common temperature stats structure)
+            values = []
+            for i in range(0, tlv_length, 4):
+                val = struct.unpack('f', raw_data[i:i+4])[0]
+                values.append(val)
+            logger.info(f"Temperature stats data (7x float): {values}")
+        else:
+            # Unknown structure, log as hex
+            hex_data = raw_data.hex()
+            logger.info(f"Temperature stats data (unknown structure, {tlv_length} bytes): {hex_data}")
+        
         return idx + tlv_length
 
     def to_point_cloud(self) -> RadarPointCloud:
