@@ -112,14 +112,32 @@ def test_parse_stats_and_temperature():
         25       # interFrameCPULoad (%)
     ], dtype=np.uint32)
     
-    # Temperature stats (TLV type 9) - 28 bytes (1 int32 + 12 uint16 values)
+    # Temperature stats (TLV type 9) - 28 bytes (1 int32 + 24 bytes rlRfTempData_t)
     temp_tlv_type = 9
     temp_tlv_length = 28
     temp_report_valid = np.array([0], dtype=np.int32)  # 0 = valid
     
-    # Temperature data as 12 uint16 values (based on actual radar data)
-    temp_uint16_values = [12717, 0, 29, 29, 29, 29, 29, 32, 32, 31, 31, 30]
-    temp_data = np.array(temp_uint16_values, dtype=np.uint16)
+    # Create rlRfTempData structure (24 bytes)
+    time_ms = 1234567  # Time from powerup in milliseconds
+    
+    # Temperature sensors (signed int16 values in degrees Celsius)
+    temp_sensors = np.array([
+        45,   # RX0: 45°C
+        42,   # RX1: 42°C  
+        48,   # RX2: 48°C
+        44,   # RX3: 44°C
+        46,   # TX0: 46°C
+        43,   # TX1: 43°C
+        47,   # TX2: 47°C
+        41,   # PM:  41°C
+        49,   # Dig0: 49°C
+        40    # Dig1: 40°C
+    ], dtype=np.int16)
+    
+    # Create the rlRfTempData structure bytes
+    rl_rf_temp_data = bytearray()
+    rl_rf_temp_data.extend(time_ms.to_bytes(4, byteorder='little'))  # 4 bytes: time
+    rl_rf_temp_data.extend(temp_sensors.tobytes())  # 20 bytes: 10 temperature sensors
     
     # Create packet with both TLVs
     packet = bytearray()
@@ -132,8 +150,8 @@ def test_parse_stats_and_temperature():
     # Add temperature stats TLV
     packet.extend(temp_tlv_type.to_bytes(4, byteorder='little'))
     packet.extend(temp_tlv_length.to_bytes(4, byteorder='little'))
-    packet.extend(temp_report_valid.tobytes())
-    packet.extend(temp_data.tobytes())
+    packet.extend(temp_report_valid.tobytes())  # 4 bytes: tempReportValid
+    packet.extend(rl_rf_temp_data)  # 24 bytes: rlRfTempData_t structure
     
     # Create mock radar connection
     mock_connection = MockRadarConnection(packet)
@@ -154,8 +172,15 @@ def test_parse_stats_and_temperature():
     assert np.array_equal(parsed_stats, stats_data)
     
     # Verify temperature data structure
-    parsed_temp_valid = int.from_bytes(radar_data.temperature_stats_data[0:4], byteorder='little')
+    parsed_temp_valid = int.from_bytes(radar_data.temperature_stats_data[0:4], byteorder='little', signed=True)
     assert parsed_temp_valid == 0
     
-    parsed_temp_data = np.frombuffer(radar_data.temperature_stats_data[4:], dtype=np.uint16)
-    assert np.array_equal(parsed_temp_data, temp_data) 
+    # Verify time from powerup
+    parsed_time = int.from_bytes(radar_data.temperature_stats_data[4:8], byteorder='little')
+    assert parsed_time == time_ms
+    
+    # Verify temperature sensors
+    for i, expected_temp in enumerate(temp_sensors):
+        offset = 8 + i * 2
+        parsed_temp = int.from_bytes(radar_data.temperature_stats_data[offset:offset+2], byteorder='little', signed=True)
+        assert parsed_temp == expected_temp 

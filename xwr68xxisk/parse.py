@@ -404,8 +404,18 @@ class RadarData:
         - tempReportValid (int32_t): Return value from API rlRfTempData_t (0 = valid, non-zero = invalid)
         - temperatureReport (rlRfTempData_t): Detailed temperature report
         
-        The rlRfTempData_t structure typically contains temperature values for different
-        components of the radar system.
+        The rlRfTempData_t structure contains:
+        - time (uint32_t): radarSS local Time from device powerup. 1 LSB = 1 ms
+        - tmpRx0Sens (int16_t): RX0 temperature sensor reading (signed value). 1 LSB = 1 deg C
+        - tmpRx1Sens (int16_t): RX1 temperature sensor reading (signed value). 1 LSB = 1 deg C
+        - tmpRx2Sens (int16_t): RX2 temperature sensor reading (signed value). 1 LSB = 1 deg C
+        - tmpRx3Sens (int16_t): RX3 temperature sensor reading (signed value). 1 LSB = 1 deg C
+        - tmpTx0Sens (int16_t): TX0 temperature sensor reading (signed value). 1 LSB = 1 deg C
+        - tmpTx1Sens (int16_t): TX1 temperature sensor reading (signed value). 1 LSB = 1 deg C
+        - tmpTx2Sens (int16_t): TX2 temperature sensor reading (signed value). 1 LSB = 1 deg C
+        - tmpPmSens (int16_t): PM temperature sensor reading (signed value). 1 LSB = 1 deg C
+        - tmpDig0Sens (int16_t): Digital temp sensor reading (signed value). 1 LSB = 1 deg C
+        - tmpDig1Sens (int16_t): Second digital temp sensor reading (signed value). 1 LSB = 1 deg C
         """
         logger.debug(f"Parsing temperature stats data with length {tlv_length}")
         
@@ -415,39 +425,43 @@ class RadarData:
         
         # Parse tempReportValid (first 4 bytes)
         if tlv_length >= 4:
-            temp_report_valid = int.from_bytes(raw_data[0:4], byteorder='little')
+            temp_report_valid = int.from_bytes(raw_data[0:4], byteorder='little', signed=True)
             logger.info(f"Temperature stats data:")
             logger.info(f"  Temperature report valid: {temp_report_valid}")
             
-            # Parse the remaining data (24 bytes)
-            if tlv_length == 28:  # Expected size: 4 bytes int32 + 24 bytes temperature data
+            # Parse the remaining data (24 bytes) as rlRfTempData_t structure
+            if tlv_length == 28:  # Expected size: 4 bytes int32 + 24 bytes rlRfTempData_t
                 remaining_data = raw_data[4:]
                 
-                # Based on the actual data we're seeing, it appears to be 12 uint16 values
-                # rather than 6 float32 values as initially assumed
                 if len(remaining_data) == 24:
-                    # Try parsing as 12 uint16 values (more likely based on actual data)
+                    # Parse according to rlRfTempData_t structure
+                    time_ms = int.from_bytes(remaining_data[0:4], byteorder='little')
+                    
+                    # Parse 10 temperature sensors (each 2 bytes, signed int16)
+                    temp_sensors = []
+                    for i in range(4, 24, 2):
+                        temp_val = int.from_bytes(remaining_data[i:i+2], byteorder='little', signed=True)
+                        temp_sensors.append(temp_val)
+                    
+                    logger.info(f"  Time from powerup: {time_ms} ms")
+                    logger.info(f"  Temperature sensors (deg C):")
+                    logger.info(f"    RX0: {temp_sensors[0]}°C")
+                    logger.info(f"    RX1: {temp_sensors[1]}°C")
+                    logger.info(f"    RX2: {temp_sensors[2]}°C")
+                    logger.info(f"    RX3: {temp_sensors[3]}°C")
+                    logger.info(f"    TX0: {temp_sensors[4]}°C")
+                    logger.info(f"    TX1: {temp_sensors[5]}°C")
+                    logger.info(f"    TX2: {temp_sensors[6]}°C")
+                    logger.info(f"    PM:  {temp_sensors[7]}°C")
+                    logger.info(f"    Dig0: {temp_sensors[8]}°C")
+                    logger.info(f"    Dig1: {temp_sensors[9]}°C")
+                    
+                    # Also show the raw uint16 interpretation for comparison
                     uint16_values = []
-                    for i in range(0, 24, 2):
+                    for i in range(4, 24, 2):
                         val = int.from_bytes(remaining_data[i:i+2], byteorder='little')
                         uint16_values.append(val)
-                    
-                    logger.info(f"  Temperature values (12x uint16): {uint16_values}")
-                    
-                    # Also try parsing as 6 float32 values for comparison
-                    float32_values = []
-                    for i in range(0, 24, 4):
-                        val = struct.unpack('f', remaining_data[i:i+4])[0]
-                        float32_values.append(val)
-                    
-                    logger.info(f"  Temperature values (6x float32): {float32_values}")
-                    
-                    # If the uint16 values look more reasonable (not all zeros or very small),
-                    # use those as the primary interpretation
-                    if any(val > 0 for val in uint16_values):
-                        logger.info(f"  Using uint16 interpretation (likely temperature in scaled units)")
-                    else:
-                        logger.info(f"  Using float32 interpretation (likely temperature in degrees)")
+                    logger.info(f"  Raw uint16 values: {uint16_values}")
                         
                 else:
                     logger.warning(f"Unexpected temperature data length: {len(remaining_data)} bytes")
