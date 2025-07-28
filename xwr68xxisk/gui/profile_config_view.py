@@ -240,7 +240,7 @@ class ProfileConfigView(param.Parameterized):
 
     def _link_widgets_to_config(self):
         # Link top selectors
-        self.param.antenna_config_select.param.watch(self._on_antenna_config_change, 'value')
+        self.param.watch(self._on_antenna_config_change, 'antenna_config_select')
 
         # Link Scene Selection sliders and inputs bidirectionally
         self.frame_rate_slider.param.watch(lambda event: setattr(self.frame_rate_input, 'value', event.new), 'value')
