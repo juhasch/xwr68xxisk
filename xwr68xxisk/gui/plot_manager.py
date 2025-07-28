@@ -172,19 +172,54 @@ class RangeProfilePlot(BasePlot):
             'noise': []
         })
         
+        # Complex range profile data sources
+        self.complex_magnitude_source = ColumnDataSource({
+            'range': [],
+            'magnitude': []
+        })
+        
+        self.complex_phase_source = ColumnDataSource({
+            'range': [],
+            'phase': []
+        })
+        
         # Range profile line (blue)
-        p.line(
+        self.range_line = p.line(
             x='range',
             y='magnitude',
             line_width=2,
             color='blue',
-            legend_label='Range Profile',
+            legend_label='Range Profile (Log Magnitude)',
             source=self.range_data_source,
             name='range_profile'
         )
         
+        # Complex magnitude line (green)
+        self.complex_magnitude_line = p.line(
+            x='range',
+            y='magnitude',
+            line_width=2,
+            color='green',
+            legend_label='Range Profile (Complex Magnitude)',
+            source=self.complex_magnitude_source,
+            name='complex_magnitude',
+            visible=False
+        )
+        
+        # Complex phase line (orange)
+        self.complex_phase_line = p.line(
+            x='range',
+            y='phase',
+            line_width=2,
+            color='orange',
+            legend_label='Range Profile (Complex Phase)',
+            source=self.complex_phase_source,
+            name='complex_phase',
+            visible=False
+        )
+        
         # Noise profile line (red)
-        p.line(
+        self.noise_line = p.line(
             x='range',
             y='noise',
             line_width=2,
@@ -197,7 +232,7 @@ class RangeProfilePlot(BasePlot):
         p.axis.axis_label_text_font_size = '12pt'
         p.axis.axis_label_text_font_style = 'normal'
         p.xaxis.axis_label = 'Range (m)'
-        p.yaxis.axis_label = 'Magnitude (dB)'
+        p.yaxis.axis_label = 'Magnitude (dB) / Phase (rad)'
         
         p.grid.grid_line_alpha = 0.3
         p.legend.location = 'top_right'
@@ -211,64 +246,113 @@ class RangeProfilePlot(BasePlot):
             return
             
         try:
+            # Check if we have complex range profile data
+            has_complex_data = (radar_data.adc_complex is not None and 
+                              len(radar_data.adc_complex) > 0)
+            
+            # Check if we have regular range profile data
+            has_regular_data = (radar_data.adc is not None and 
+                              len(radar_data.adc) > 0)
+            
+            # Determine which data to show based on configuration
+            show_complex = (hasattr(self.scene_config, 'range_profile_mode') and 
+                           self.scene_config.range_profile_mode == 'complex' and 
+                           has_complex_data)
+            
+            # Update visibility of plot lines
+            self.range_line.visible = not show_complex and has_regular_data
+            self.complex_magnitude_line.visible = show_complex
+            self.complex_phase_line.visible = show_complex
+            
+            # Update legend labels
+            if show_complex:
+                self.range_line.legend_label = 'Range Profile (Complex Magnitude)'
+                self.complex_magnitude_line.legend_label = 'Range Profile (Complex Magnitude)'
+                self.complex_phase_line.legend_label = 'Range Profile (Complex Phase)'
+            else:
+                self.range_line.legend_label = 'Range Profile (Log Magnitude)'
+            
             # Update range profile data
-            if radar_data.adc is not None and len(radar_data.adc) > 0:
-                # Add a small epsilon to prevent log10(0) and ensure float type for log
-                magnitude_data = 20 * np.log10(np.abs(radar_data.adc.astype(np.float32)) + 1e-9)
-
-                range_axis = np.array([]) # Initialize
-                if radar_data.config_params:
-                    # rangeBins from config should define the expected length of adc data
-                    # rangeStep is used to convert bin index to meters
-                    # These should have been populated when RadarData was initialized
-                    range_bins_config = radar_data.config_params.get('rangeBins')
-                    range_step = radar_data.config_params.get('rangeStep')
-
-                    if range_step is not None: # rangeBins_config can be used for validation if needed
-                        actual_adc_len = len(radar_data.adc)
-                        # if range_bins_config is not None and actual_adc_len != range_bins_config:
-                        #    logger.warning(f"ADC data length {actual_adc_len} differs from configured rangeBins {range_bins_config}")
+            if show_complex and has_complex_data:
+                # Use complex range profile data
+                range_bins, magnitude_dB, phase = radar_data.get_complex_range_profile()
+                
+                if len(range_bins) > 0 and len(magnitude_dB) > 0:
+                    # Create range axis
+                    range_axis = self._get_range_axis(radar_data, len(range_bins))
+                    
+                    if len(range_axis) > 0:
+                        min_len = min(len(magnitude_dB), len(range_axis))
+                        self.complex_magnitude_source.data = {
+                            'range': range_axis[:min_len],
+                            'magnitude': magnitude_dB[:min_len]
+                        }
                         
-                        # Create range axis based on actual ADC data length and configured step
-                        range_axis = np.arange(actual_adc_len) * range_step
+                        min_len_phase = min(len(phase), len(range_axis))
+                        self.complex_phase_source.data = {
+                            'range': range_axis[:min_len_phase],
+                            'phase': phase[:min_len_phase]
+                        }
                     else:
-                        logger.warning("rangeStep not in radar_data.config_params. Cannot compute range axis.")
+                        self.complex_magnitude_source.data = {'range': [], 'magnitude': []}
+                        self.complex_phase_source.data = {'range': [], 'phase': []}
                 else:
-                    logger.warning("radar_data.config_params is None or empty. Cannot compute range axis.")
-
-                if len(range_axis) > 0 and len(magnitude_data) > 0 :
-                    # Ensure data alignment by taking the minimum length
+                    self.complex_magnitude_source.data = {'range': [], 'magnitude': []}
+                    self.complex_phase_source.data = {'range': [], 'phase': []}
+                    
+            elif has_regular_data:
+                # Use regular range profile data
+                magnitude_data = 20 * np.log10(np.abs(radar_data.adc.astype(np.float32)) + 1e-9)
+                range_axis = self._get_range_axis(radar_data, len(magnitude_data))
+                
+                if len(range_axis) > 0 and len(magnitude_data) > 0:
                     min_len = min(len(magnitude_data), len(range_axis))
                     self.range_data_source.data = {
                         'range': range_axis[:min_len],
                         'magnitude': magnitude_data[:min_len]
                     }
-                else: # If range_axis or magnitude_data could not be computed or is empty
+                else:
                     self.range_data_source.data = {'range': [], 'magnitude': []}
             else:
                 self.range_data_source.data = {'range': [], 'magnitude': []}
             
             # Update noise profile data
-            if hasattr(radar_data, 'get_noise_profile'):
-                noise_db, noise_range_axis = radar_data.get_noise_profile()
+            if radar_data.noise_profile is not None and len(radar_data.noise_profile) > 0:
+                range_bins, noise_dB = radar_data.get_noise_profile()
                 
-                if len(noise_db) > 0 and len(noise_range_axis) > 0:
-                    # Ensure data alignment by taking the minimum length
-                    min_len = min(len(noise_db), len(noise_range_axis))
-                    self.noise_data_source.data = {
-                        'range': noise_range_axis[:min_len],
-                        'noise': noise_db[:min_len]
-                    }
+                if len(range_bins) > 0 and len(noise_dB) > 0:
+                    range_axis = self._get_range_axis(radar_data, len(range_bins))
+                    
+                    if len(range_axis) > 0:
+                        min_len = min(len(noise_dB), len(range_axis))
+                        self.noise_data_source.data = {
+                            'range': range_axis[:min_len],
+                            'noise': noise_dB[:min_len]
+                        }
+                    else:
+                        self.noise_data_source.data = {'range': [], 'noise': []}
                 else:
                     self.noise_data_source.data = {'range': [], 'noise': []}
             else:
-                logger.debug("RadarData does not have get_noise_profile method")
                 self.noise_data_source.data = {'range': [], 'noise': []}
-            
+                
         except Exception as e:
             logger.error(f"Error updating range profile plot: {e}")
             self.range_data_source.data = {'range': [], 'magnitude': []}
             self.noise_data_source.data = {'range': [], 'noise': []}
+    
+    def _get_range_axis(self, radar_data: RadarData, data_length: int) -> np.ndarray:
+        """Get range axis for plotting."""
+        if radar_data.config_params:
+            range_step = radar_data.config_params.get('rangeStep')
+            if range_step is not None:
+                return np.arange(data_length) * range_step
+            else:
+                logger.warning("rangeStep not in radar_data.config_params. Cannot compute range axis.")
+        else:
+            logger.warning("radar_data.config_params is None or empty. Cannot compute range axis.")
+        
+        return np.array([])
 
 
 class RangeDopplerPlot(BasePlot):

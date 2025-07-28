@@ -91,11 +91,11 @@ def test_parse_noise_profile():
     assert radar_data.noise_profile.dtype == np.uint16
     
     # Test get_noise_profile method
-    noise_db, range_axis = radar_data.get_noise_profile()
-    assert len(noise_db) == noise_samples
-    assert len(range_axis) == noise_samples
-    assert noise_db.dtype == np.float32 or noise_db.dtype == np.float64
-    assert range_axis.dtype == np.float32 or range_axis.dtype == np.float64 
+    range_bins, noise_dB = radar_data.get_noise_profile()
+    assert len(noise_dB) == noise_samples
+    assert len(range_bins) == noise_samples
+    assert noise_dB.dtype == np.float32 or noise_dB.dtype == np.float64
+    assert range_bins.dtype == np.int64 
 
 def test_parse_stats_and_temperature():
     """Test parsing of stats and temperature stats data."""

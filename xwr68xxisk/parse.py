@@ -39,42 +39,40 @@ class RadarData:
     MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO = 7
     MMWDEMO_OUTPUT_MSG_AZIMUT_ELEVATION_STATIC_HEAT_MAP = 8
     MMWDEMO_OUTPUT_MSG_TEMPERATURE_STATS = 9
+    MMWDEMO_OUTPUT_MSG_RANGE_PROFILE_COMPLEX = 10
   
     def __init__(self, radar_connection=None, config_params: Dict[str, Any] = None):
-        """
-        Initialize and parse radar data packet.
-
+        """Initialize RadarData parser.
+        
         Args:
-            radar_connection: RadarConnection instance to read data from
-            config_params: Optional dictionary containing radar configuration parameters
-
-        Raises:
-            ValueError: If packet format is invalid or magic number doesn't match
+            radar_connection: Connection to the radar sensor
+            config_params: Configuration parameters for parsing
         """
-        # Initialize data containers
-        self.pc: Optional[Tuple[List[float], List[float], List[float], List[float]]] = None
-        self.adc: Optional[np.ndarray] = None
-        self.noise_profile: Optional[np.ndarray] = None
-        self.snr: List[float] = []
-        self.noise: List[float] = []
-        self.frame_number = None
-        self.num_tlvs = 0
+        self.radar_connection = radar_connection
+        self.config_params = config_params or {}
+        
+        # Header information
         self.magic_word = None
         self.version = None
         self.total_packet_len = None
         self.platform = None
+        self.frame_number = None
         self.time_cpu_cycles = None
-        self.num_detected_obj = 0
-        self.subframe_number = None
+        self.num_detected_obj = None
+        self.num_tlvs = None
+        
+        # Data arrays
+        self.pc = ([], [], [], [])  # Point cloud (x, y, z, velocity)
+        self.adc = None  # Range profile data (log magnitude)
+        self.adc_complex = None  # Complex range profile data
+        self.side_info = ([], [])  # SNR and noise data
+        self.snr = []
+        self.noise = []
         self.range_doppler_heatmap = None
-        self.azimuth_heatmap = None
+        self.range_azimuth_heatmap = None
+        self.noise_profile: Optional[np.ndarray] = None
         self.stats_data = None
         self.temperature_stats_data = None
-        
-        # Store the radar connection for iterator functionality
-        self.radar_connection = radar_connection
-        
-        self.config_params = config_params or {}
         
         if radar_connection is None or not radar_connection.is_connected() or not radar_connection.is_running:
             return
@@ -144,6 +142,9 @@ class RadarData:
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_TEMPERATURE_STATS:
                 logger.debug(f"Parsing temperature stats data with length {tlv_length}")
                 idx = self._parse_temperature_stats(data_bytes, idx, tlv_length)
+            elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_PROFILE_COMPLEX:
+                logger.debug(f"Parsing complex range profile data with length {tlv_length}")
+                idx = self._parse_complex_range_profile(data_bytes, idx, tlv_length)
             else:
                 logger.debug(f"Skipping unknown TLV type {tlv_type} with length {tlv_length}")
                 idx += tlv_length
@@ -478,6 +479,19 @@ class RadarData:
         
         return idx + tlv_length
 
+    def _parse_complex_range_profile(self, data: bytes, idx: int, tlv_length: int) -> int:
+        """Parse complex range profile data from TLV."""
+        # Ensure tlv_length is a multiple of 4 (size of uint16)
+        usable_length = tlv_length - (tlv_length % 4)
+        logger.debug(f"usable_length: {usable_length}")
+        if usable_length > 0:
+            logger.debug("Starting to parse complex range profile data")
+            self.adc_complex = np.frombuffer(data[idx:idx+usable_length], dtype=np.uint16)
+        else:
+            logging.warning("Complex range profile data length is not a multiple of uint16 size")
+            self.adc_complex = np.array([], dtype=np.uint16)
+        return idx + tlv_length
+
     def to_point_cloud(self) -> RadarPointCloud:
         """
         Convert the radar data to a RadarPointCloud object.
@@ -666,34 +680,57 @@ class RadarData:
         return interpolated_heatmap, range_axis, interpolated_azimuth_axis
 
     def get_noise_profile(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Get the noise profile with proper scaling and range axis.
+        """Get noise profile data in dB scale.
         
         Returns:
-            Tuple containing:
-            - 1D numpy array of noise values in dB
-            - 1D numpy array of range values in meters
+            Tuple of (range_bins, noise_profile_dB) where:
+            - range_bins: Array of range bin indices
+            - noise_profile_dB: Noise profile in dB scale
         """
-        if self.noise_profile is None or len(self.noise_profile) == 0:
+        if self.noise_profile is None:
             return np.array([]), np.array([])
-            
-        # Get radar parameters
-        range_resolution = self.config_params.get('rangeStep')
         
-        if range_resolution is None:
-            logger.warning("rangeStep not found in config_params, using default 0.044 m/bin")
-            range_resolution = 0.044  # Default from profile
+        # Convert to dB scale (similar to range profile)
+        noise_dB = 20 * np.log10(self.noise_profile.astype(np.float32) + 1e-10)
+        range_bins = np.arange(len(noise_dB))
         
-        # Create range axis based on actual noise profile data length
-        actual_noise_len = len(self.noise_profile)
-        range_axis = np.arange(actual_noise_len) * range_resolution
+        return range_bins, noise_dB
+    
+    def get_complex_range_profile(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Get complex range profile data.
         
-        # Convert noise profile values to dB (assuming they are linear magnitude)
-        # Add small epsilon to avoid log(0) warnings
-        noise_db = 20 * np.log10(self.noise_profile.astype(np.float32) + 1e-9)
+        Returns:
+            Tuple of (range_bins, magnitude, phase) where:
+            - range_bins: Array of range bin indices
+            - magnitude: Magnitude of complex range profile
+            - phase: Phase of complex range profile in radians
+        """
+        if self.adc_complex is None:
+            return np.array([]), np.array([]), np.array([])
         
-        logger.debug(f"Noise profile: range_axis from 0 to {range_axis[-1]:.3f} m, noise_db from {np.min(noise_db):.1f} to {np.max(noise_db):.1f} dB")
+        # Complex range profile data is stored as alternating real/imaginary parts
+        # Each complex number is 4 bytes (2 bytes real + 2 bytes imaginary)
+        if len(self.adc_complex) % 2 != 0:
+            logger.warning("Complex range profile data length is not even")
+            return np.array([]), np.array([]), np.array([])
         
-        return noise_db, range_axis
+        # Extract real and imaginary parts
+        real_parts = self.adc_complex[::2]  # Even indices
+        imag_parts = self.adc_complex[1::2]  # Odd indices
+        
+        # Convert to complex numbers
+        complex_data = real_parts.astype(np.float32) + 1j * imag_parts.astype(np.float32)
+        
+        # Calculate magnitude and phase
+        magnitude = np.abs(complex_data)
+        phase = np.angle(complex_data)
+        
+        # Convert magnitude to dB scale
+        magnitude_dB = 20 * np.log10(magnitude + 1e-10)
+        
+        range_bins = np.arange(len(magnitude_dB))
+        
+        return range_bins, magnitude_dB, phase
 
 
 class RadarDataIterator:

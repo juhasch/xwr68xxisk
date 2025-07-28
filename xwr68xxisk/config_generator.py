@@ -75,7 +75,19 @@ def generate_cfg_from_scene_profile(scene_config: RadarConfig) -> str:
 
     # guiMonitor
     detected_objects = 1 if getattr(scene_config, 'plot_scatter', True) else 0
-    log_mag_range = 1 if getattr(scene_config, 'plot_range_profile', True) else 0
+    
+    # Range profile configuration
+    range_profile_enabled = getattr(scene_config, 'plot_range_profile', True)
+    range_profile_mode = getattr(scene_config, 'range_profile_mode', 'log_magnitude')
+    
+    # Set log_mag_range based on enabled state and mode
+    if range_profile_enabled and range_profile_mode == 'log_magnitude':
+        log_mag_range = 1
+    elif range_profile_enabled and range_profile_mode == 'complex':
+        log_mag_range = 2  # Complex mode
+    else:
+        log_mag_range = 0  # Disabled
+    
     noise_profile = 1 if getattr(scene_config, 'plot_noise_profile', False) else 0
     range_azimuth_heat_map = 1 if getattr(scene_config, 'plot_range_azimuth_heat_map', False) else 0
     range_doppler_heat_map = 1 if getattr(scene_config, 'plot_range_doppler_heat_map', False) else 0

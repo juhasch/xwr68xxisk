@@ -156,7 +156,7 @@ class ConfigManager:
                 aoa_fov_cfg=AoaFovConfig(subframe_idx=-1, min_azimuth_deg=-90.0, max_azimuth_deg=90.0, min_elevation_deg=-90.0, max_elevation_deg=90.0),
                 cfar_cfg=CfarConfig(subframe_idx=-1, proc_direction=0, average_mode=2, win_len=8, guard_len=4, noise_div=3, cyclic_mode=0, threshold_scale=15.0, peak_grouping_en=False),
                 multi_obj_beam_forming=MultiObjBeamFormingConfig(subframe_idx=-1, enabled=False, threshold=0.5),
-                gui_monitor=GuiMonitorConfig(detected_objects=1, log_mag_range=True, noise_profile=False, range_azimuth_heat_map=False, range_doppler_heat_map=False, stats_info=True),
+                gui_monitor=GuiMonitorConfig(detected_objects=1, range_profile_enabled=True, range_profile_mode="log_magnitude", noise_profile=False, range_azimuth_heat_map=False, range_doppler_heat_map=False, stats_info=True),
                 analog_monitor=AnalogMonitorConfig(rx_saturation=False, sig_img_band=False),
                 lvds_stream_cfg=LvdsStreamConfig(subframe_idx=-1, enable_header=False, data_fmt=0, enable_sw=False)
             ).model_dump(),

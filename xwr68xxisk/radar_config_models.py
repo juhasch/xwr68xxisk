@@ -88,7 +88,8 @@ class MultiObjBeamFormingConfig(BaseModel):
 
 class GuiMonitorConfig(BaseModel):
     detected_objects: int = Field(..., description="0: None, 1: Objects + side info, 2: Objects only")
-    log_mag_range: bool = Field(..., description="Log magnitude range")
+    range_profile_enabled: bool = Field(True, description="Enable range profile output")
+    range_profile_mode: str = Field("log_magnitude", description="Range profile mode: 'log_magnitude' or 'complex'")
     noise_profile: bool = Field(..., description="Noise floor profile")
     range_azimuth_heat_map: bool = Field(..., description="Range-azimuth heat map")
     range_doppler_heat_map: bool = Field(..., description="Range-Doppler heat map")
@@ -145,6 +146,7 @@ class RadarConfig(BaseModel):
     )
     plot_scatter: bool = Field(True, description="Enable Scatter Plot in GUI (not sent to radar)")
     plot_range_profile: bool = Field(True, description="Enable Range Profile plot in GUI (not sent to radar)")
+    range_profile_mode: str = Field("log_magnitude", description="Range profile mode: 'log_magnitude' or 'complex'")
     plot_noise_profile: bool = Field(False, description="Enable Noise Profile plot in GUI (not sent to radar)")
     plot_range_azimuth_heat_map: bool = Field(False, description="Enable Range Azimuth Heat Map in GUI (not sent to radar)")
     plot_range_doppler_heat_map: bool = Field(False, description="Enable Range Doppler Heat Map in GUI (not sent to radar)")
@@ -222,7 +224,7 @@ if __name__ == "__main__":
         aoa_fov_cfg=AoaFovConfig(subframe_idx=0, min_azimuth_deg=-90.0, max_azimuth_deg=90.0, min_elevation_deg=-90.0, max_elevation_deg=90.0),
         cfar_cfg=CfarConfig(subframe_idx=0, proc_direction=0, average_mode=0, win_len=16, guard_len=4, noise_div=1, cyclic_mode=0, threshold_scale=1.0, peak_grouping_en=True),
         multi_obj_beam_forming=MultiObjBeamFormingConfig(subframe_idx=0, enabled=True, threshold=0.1),
-        gui_monitor=GuiMonitorConfig(detected_objects=1, log_mag_range=True, noise_profile=True, range_azimuth_heat_map=True, range_doppler_heat_map=True, stats_info=True),
+        gui_monitor=GuiMonitorConfig(detected_objects=1, range_profile_enabled=True, range_profile_mode="log_magnitude", noise_profile=True, range_azimuth_heat_map=True, range_doppler_heat_map=True, stats_info=True),
         analog_monitor=AnalogMonitorConfig(rx_saturation=True, sig_img_band=True),
         lvds_stream_cfg=LvdsStreamConfig(subframe_idx=0, enable_header=True, data_fmt=0, enable_sw=True)
     )
