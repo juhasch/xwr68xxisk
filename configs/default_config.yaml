@@ -105,7 +105,7 @@ radar:
   plot_range_doppler_heat_map: false
   plot_range_profile: true
   plot_scatter: true
-  plot_statistics: true
+  plot_statistics: false
   profile_cfg:
     adc_start_time: 3.0
     dig_out_sample_rate: 12500

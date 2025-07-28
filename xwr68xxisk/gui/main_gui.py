@@ -757,13 +757,14 @@ class RadarGUI:
                 # CRITICAL: Update the radar config plot settings to match ProfileConfigView
                 self.config.radar.plot_scatter = self.profile_config_view_panel.config.plot_scatter
                 self.config.radar.plot_range_profile = self.profile_config_view_panel.config.plot_range_profile
+                self.config.radar.range_profile_mode = self.profile_config_view_panel.config.range_profile_mode
                 self.config.radar.plot_noise_profile = self.profile_config_view_panel.config.plot_noise_profile
                 self.config.radar.plot_range_azimuth_heat_map = self.profile_config_view_panel.config.plot_range_azimuth_heat_map
                 self.config.radar.plot_range_doppler_heat_map = self.profile_config_view_panel.config.plot_range_doppler_heat_map
                 self.config.radar.plot_statistics = self.profile_config_view_panel.config.plot_statistics
                 
                 logger.info(f"Synchronized frame rate: {profile_frame_rate_fps:.1f} fps = {profile_frame_period_ms:.1f} ms")
-                logger.info(f"Synchronized plot settings: scatter={self.config.radar.plot_scatter}, range_profile={self.config.radar.plot_range_profile}, noise_profile={self.config.radar.plot_noise_profile}, range_azimuth={self.config.radar.plot_range_azimuth_heat_map}, range_doppler={self.config.radar.plot_range_doppler_heat_map}, statistics={self.config.radar.plot_statistics}")
+                logger.info(f"Synchronized plot settings: scatter={self.config.radar.plot_scatter}, range_profile={self.config.radar.plot_range_profile}, range_profile_mode={self.config.radar.range_profile_mode}, noise_profile={self.config.radar.plot_noise_profile}, range_azimuth={self.config.radar.plot_range_azimuth_heat_map}, range_doppler={self.config.radar.plot_range_doppler_heat_map}, statistics={self.config.radar.plot_statistics}")
             
             # Generate the CFG string from the SceneProfileConfig model
             config_text_to_save = generate_cfg_from_scene_profile(self.config.radar)
