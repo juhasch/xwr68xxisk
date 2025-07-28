@@ -94,7 +94,6 @@ class ProfileConfigView(param.Parameterized):
     
     # GUI Monitor
     gui_detected_objects = param.ClassSelector(class_=Select)
-    gui_range_profile_enabled = param.ClassSelector(class_=Checkbox)
     gui_range_profile_mode = param.ClassSelector(class_=Select)
     gui_noise_profile = param.ClassSelector(class_=Checkbox)
     gui_range_azimuth_heat_map = param.ClassSelector(class_=Checkbox)
@@ -245,8 +244,9 @@ class ProfileConfigView(param.Parameterized):
         
         # GUI Monitor
         self.gui_detected_objects = Select(name="Detected Objects", options=["None (0)", "Objects + Side Info (1)", "Objects Only (2)"], value="Objects + Side Info (1)", width=200)
-        self.gui_range_profile_enabled = Checkbox(name="Enable Range Profile", value=self.config.plot_range_profile)
-        self.gui_range_profile_mode = Select(name="Range Profile Mode", options=["Log Magnitude", "Complex"], value="Log Magnitude", width=200)
+        # Set initial value based on current config
+        initial_mode = "Log Magnitude" if getattr(self.config, 'range_profile_mode', 'log_magnitude') == 'log_magnitude' else "Complex"
+        self.gui_range_profile_mode = Select(name="Range Profile Mode", options=["Log Magnitude", "Complex"], value=initial_mode, width=200)
         self.gui_noise_profile = Checkbox(name="Noise Profile", value=self.config.plot_noise_profile)
         self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=self.config.plot_range_azimuth_heat_map)
         self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=self.config.plot_range_doppler_heat_map)
@@ -294,7 +294,6 @@ class ProfileConfigView(param.Parameterized):
         self.plot_statistics_cb.param.watch(lambda event: setattr(self.config, 'plot_statistics', event.new), 'value')
 
         # Link plot selections to GUI monitor widgets directly
-        self.plot_range_profile_cb.param.watch(lambda event: setattr(self.gui_range_profile_enabled, 'value', event.new), 'value')
         self.plot_range_profile_cb.param.watch(lambda event: setattr(self.gui_range_profile_mode, 'value', event.new), 'value')
         self.plot_noise_profile_cb.param.watch(lambda event: setattr(self.gui_noise_profile, 'value', event.new), 'value')
         self.plot_range_azimuth_cb.param.watch(lambda event: setattr(self.gui_range_azimuth_heat_map, 'value', event.new), 'value')
@@ -335,7 +334,6 @@ class ProfileConfigView(param.Parameterized):
         
         # GUI Monitor
         self.gui_detected_objects.param.watch(self._update_gui_monitor_config, 'value')
-        self.gui_range_profile_enabled.param.watch(self._update_gui_monitor_config, 'value')
         self.gui_range_profile_mode.param.watch(self._update_gui_monitor_config, 'value')
         self.gui_noise_profile.param.watch(self._update_gui_monitor_config, 'value')
         self.gui_range_azimuth_heat_map.param.watch(self._update_gui_monitor_config, 'value')
@@ -428,7 +426,7 @@ class ProfileConfigView(param.Parameterized):
             # Update config with new GUI monitor settings
             self.config.gui_monitor = GuiMonitorConfig(
                 detected_objects=detected_objects,
-                range_profile_enabled=self.gui_range_profile_enabled.value,
+                range_profile_enabled=self.config.plot_range_profile,  # Use the main config setting
                 range_profile_mode="log_magnitude" if self.gui_range_profile_mode.value == "Log Magnitude" else "complex",
                 noise_profile=self.gui_noise_profile.value,
                 range_azimuth_heat_map=self.gui_range_azimuth_heat_map.value,
@@ -437,7 +435,6 @@ class ProfileConfigView(param.Parameterized):
             )
             
             # Also update the main config plot settings to match
-            self.config.plot_range_profile = self.gui_range_profile_enabled.value
             self.config.range_profile_mode = "log_magnitude" if self.gui_range_profile_mode.value == "Log Magnitude" else "complex"
             self.config.plot_noise_profile = self.gui_noise_profile.value
             self.config.plot_range_azimuth_heat_map = self.gui_range_azimuth_heat_map.value
@@ -576,7 +573,7 @@ class ProfileConfigView(param.Parameterized):
             # GUI Monitor
             pn.pane.Markdown("### GUI Monitor Configuration"),
             pn.Row(
-                pn.Column(self.gui_detected_objects, self.gui_range_profile_enabled, self.gui_range_profile_mode),
+                pn.Column(self.gui_detected_objects, self.gui_range_profile_mode),
                 pn.Column(self.gui_noise_profile, self.gui_range_azimuth_heat_map, self.gui_range_doppler_heat_map, self.gui_stats_info)
             ),
             
