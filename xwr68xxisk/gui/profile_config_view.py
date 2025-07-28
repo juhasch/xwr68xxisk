@@ -1,6 +1,21 @@
-import panel as pn
+"""
+Profile configuration view for radar settings.
+
+This module provides a Panel-based view for configuring radar profile settings
+with both basic and expert mode options.
+"""
+
+import logging
 import param
-from panel.widgets import FloatSlider, FloatInput, Select, Checkbox, StaticText, JSONEditor, IntSlider, IntInput
+import panel as pn
+from panel.widgets import (
+    Select, FloatSlider, FloatInput, IntSlider, IntInput, 
+    Checkbox, StaticText, Button, TextAreaInput
+)
+from ..radar_config_models import RadarConfig, AntennaConfigEnum, GuiMonitorConfig
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # Assuming radar_config_models.py is accessible in the PYTHONPATH
 # Adjust import path if necessary, e.g., from ..radar_config_models import ...
