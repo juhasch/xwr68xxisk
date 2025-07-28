@@ -82,11 +82,11 @@ radar:
   frame_rate_fps: 2.0
   gui_monitor:
     detected_objects: 1
-    log_mag_range: true
-    noise_profile: false
+    log_mag_range: false
+    noise_profile: true
     range_azimuth_heat_map: false
     range_doppler_heat_map: false
-    stats_info: true
+    stats_info: false
   lvds_stream_cfg:
     data_fmt: 0
     enable_header: false
@@ -99,7 +99,7 @@ radar:
     enabled: false
     subframe_idx: -1
     threshold: 0.5
-  plot_noise_profile: false
+  plot_noise_profile: true
   plot_range_azimuth_heat_map: false
   plot_range_doppler_heat_map: false
   plot_range_profile: true

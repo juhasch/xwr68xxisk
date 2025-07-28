@@ -54,6 +54,7 @@ class RadarData:
         # Initialize data containers
         self.pc: Optional[Tuple[List[float], List[float], List[float], List[float]]] = None
         self.adc: Optional[np.ndarray] = None
+        self.noise_profile: Optional[np.ndarray] = None
         self.snr: List[float] = []
         self.noise: List[float] = []
         self.frame_number = None
@@ -132,6 +133,9 @@ class RadarData:
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_AZIMUT_STATIC_HEAT_MAP:
                 logger.debug(f"Parsing azimuth heatmap data with length {tlv_length}")
                 idx = self._parse_azimuth_heatmap(data_bytes, idx, tlv_length)
+            elif tlv_type == self.MMWDEMO_OUTPUT_MSG_NOISE_PROFILE:
+                logger.debug(f"Parsing noise profile data with length {tlv_length}")
+                idx = self._parse_noise_profile(data_bytes, idx, tlv_length)
             else:
                 logger.debug(f"Skipping unknown TLV type {tlv_type} with length {tlv_length}")
                 idx += tlv_length
@@ -332,6 +336,19 @@ class RadarData:
         
         return idx + tlv_length
 
+    def _parse_noise_profile(self, data: bytes, idx: int, tlv_length: int) -> int:
+        """Parse noise profile data from TLV."""
+        # Ensure tlv_length is a multiple of 2 (size of uint16)
+        usable_length = tlv_length - (tlv_length % 2)
+        logger.debug(f"usable_length: {usable_length}")
+        if usable_length > 0:
+            logger.debug("Starting to parse noise profile data")
+            self.noise_profile = np.frombuffer(data[idx:idx+usable_length], dtype=np.uint16)
+        else:
+            logging.warning("Noise profile data length is not a multiple of uint16 size")
+            self.noise_profile = np.array([], dtype=np.uint16)
+        return idx + tlv_length
+
     def to_point_cloud(self) -> RadarPointCloud:
         """
         Convert the radar data to a RadarPointCloud object.
@@ -518,6 +535,36 @@ class RadarData:
         interpolated_heatmap = interp_func(points).reshape(heatmap_db.shape[0], interpolated_azimuth_points)
         
         return interpolated_heatmap, range_axis, interpolated_azimuth_axis
+
+    def get_noise_profile(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Get the noise profile with proper scaling and range axis.
+        
+        Returns:
+            Tuple containing:
+            - 1D numpy array of noise values in dB
+            - 1D numpy array of range values in meters
+        """
+        if self.noise_profile is None or len(self.noise_profile) == 0:
+            return np.array([]), np.array([])
+            
+        # Get radar parameters
+        range_resolution = self.config_params.get('rangeStep')
+        
+        if range_resolution is None:
+            logger.warning("rangeStep not found in config_params, using default 0.044 m/bin")
+            range_resolution = 0.044  # Default from profile
+        
+        # Create range axis based on actual noise profile data length
+        actual_noise_len = len(self.noise_profile)
+        range_axis = np.arange(actual_noise_len) * range_resolution
+        
+        # Convert noise profile values to dB (assuming they are linear magnitude)
+        # Add small epsilon to avoid log(0) warnings
+        noise_db = 20 * np.log10(self.noise_profile.astype(np.float32) + 1e-9)
+        
+        logger.debug(f"Noise profile: range_axis from 0 to {range_axis[-1]:.3f} m, noise_db from {np.min(noise_db):.1f} to {np.max(noise_db):.1f} dB")
+        
+        return noise_db, range_axis
 
 
 class RadarDataIterator:
