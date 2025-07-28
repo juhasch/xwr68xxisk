@@ -1,8 +1,8 @@
 import numpy as np
-import struct
-from typing import Tuple, List, Optional, Iterator, Dict, Any
-import time
 import logging
+import struct
+from typing import Optional, Tuple, List, Iterator, Dict, Any
+import time
 import os
 import math
 from .point_cloud import RadarPointCloud
@@ -401,7 +401,7 @@ class RadarData:
         """Parse temperature stats data from TLV.
         
         Based on MmwDemo_temperatureStats_t structure:
-        - tempReportValid (int32_t): Return value from API rlRfTempData_t
+        - tempReportValid (int32_t): Return value from API rlRfTempData_t (0 = valid, non-zero = invalid)
         - temperatureReport (rlRfTempData_t): Detailed temperature report
         
         The rlRfTempData_t structure typically contains temperature values for different
@@ -413,26 +413,54 @@ class RadarData:
         raw_data = data[idx:idx+tlv_length]
         self.temperature_stats_data = raw_data
         
-        if tlv_length == 28:  # 4 bytes for tempReportValid + 24 bytes for temperatureReport
-            # Parse tempReportValid (int32_t)
-            temp_report_valid = int.from_bytes(raw_data[0:4], byteorder='little', signed=True)
-            
-            # Parse temperatureReport (rlRfTempData_t - typically 6 float values)
-            temp_values = []
-            for i in range(4, tlv_length, 4):
-                temp_val = struct.unpack('f', raw_data[i:i+4])[0]
-                temp_values.append(temp_val)
-            
+        # Parse tempReportValid (first 4 bytes)
+        if tlv_length >= 4:
+            temp_report_valid = int.from_bytes(raw_data[0:4], byteorder='little')
             logger.info(f"Temperature stats data:")
             logger.info(f"  Temperature report valid: {temp_report_valid}")
-            if temp_report_valid == 0:
-                logger.info(f"  Temperature values (valid): {temp_values}")
+            
+            # Parse the remaining data (24 bytes)
+            if tlv_length == 28:  # Expected size: 4 bytes int32 + 24 bytes temperature data
+                remaining_data = raw_data[4:]
+                
+                # Based on the actual data we're seeing, it appears to be 12 uint16 values
+                # rather than 6 float32 values as initially assumed
+                if len(remaining_data) == 24:
+                    # Try parsing as 12 uint16 values (more likely based on actual data)
+                    uint16_values = []
+                    for i in range(0, 24, 2):
+                        val = int.from_bytes(remaining_data[i:i+2], byteorder='little')
+                        uint16_values.append(val)
+                    
+                    logger.info(f"  Temperature values (12x uint16): {uint16_values}")
+                    
+                    # Also try parsing as 6 float32 values for comparison
+                    float32_values = []
+                    for i in range(0, 24, 4):
+                        val = struct.unpack('f', remaining_data[i:i+4])[0]
+                        float32_values.append(val)
+                    
+                    logger.info(f"  Temperature values (6x float32): {float32_values}")
+                    
+                    # If the uint16 values look more reasonable (not all zeros or very small),
+                    # use those as the primary interpretation
+                    if any(val > 0 for val in uint16_values):
+                        logger.info(f"  Using uint16 interpretation (likely temperature in scaled units)")
+                    else:
+                        logger.info(f"  Using float32 interpretation (likely temperature in degrees)")
+                        
+                else:
+                    logger.warning(f"Unexpected temperature data length: {len(remaining_data)} bytes")
+                    hex_data = ' '.join(f'{b:02x}' for b in remaining_data)
+                    logger.info(f"Temperature stats data (unknown structure, {len(remaining_data)} bytes): {hex_data}")
             else:
-                logger.warning(f"  Temperature values (invalid, error code: {temp_report_valid}): {temp_values}")
+                logger.warning(f"Unexpected TLV length for temperature stats: {tlv_length} bytes")
+                hex_data = ' '.join(f'{b:02x}' for b in raw_data)
+                logger.info(f"Temperature stats data (unknown structure, {tlv_length} bytes): {hex_data}")
         else:
-            # Unknown structure, log as hex
-            hex_data = raw_data.hex()
-            logger.info(f"Temperature stats data (unknown structure, {tlv_length} bytes): {hex_data}")
+            logger.warning(f"Temperature stats TLV too short: {tlv_length} bytes")
+            hex_data = ' '.join(f'{b:02x}' for b in raw_data)
+            logger.info(f"Temperature stats data (too short, {tlv_length} bytes): {hex_data}")
         
         return idx + tlv_length
 

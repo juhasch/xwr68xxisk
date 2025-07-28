@@ -112,13 +112,14 @@ def test_parse_stats_and_temperature():
         25       # interFrameCPULoad (%)
     ], dtype=np.uint32)
     
-    # Temperature stats (TLV type 9) - 28 bytes (1 int32 + 6 float values)
+    # Temperature stats (TLV type 9) - 28 bytes (1 int32 + 12 uint16 values)
     temp_tlv_type = 9
     temp_tlv_length = 28
     temp_report_valid = np.array([0], dtype=np.int32)  # 0 = valid
-    temp_data = np.array([
-        45.5, 42.3, 48.1, 44.7, 46.2, 43.8
-    ], dtype=np.float32)
+    
+    # Temperature data as 12 uint16 values (based on actual radar data)
+    temp_uint16_values = [12717, 0, 29, 29, 29, 29, 29, 32, 32, 31, 31, 30]
+    temp_data = np.array(temp_uint16_values, dtype=np.uint16)
     
     # Create packet with both TLVs
     packet = bytearray()
@@ -134,32 +135,27 @@ def test_parse_stats_and_temperature():
     packet.extend(temp_report_valid.tobytes())
     packet.extend(temp_data.tobytes())
     
-    # Create mock radar connection with 2 TLVs
-    class MockRadarConnectionStats:
-        def __init__(self, data):
-            self.data = data
-            
-        def is_connected(self):
-            return True
-            
-        def is_running(self):
-            return True
-            
-        def read_frame(self):
-            return {'frame_number': 1, 'num_tlvs': 2}, self.data
-    
-    mock_connection = MockRadarConnectionStats(packet)
+    # Create mock radar connection
+    mock_connection = MockRadarConnection(packet)
     
     # Create radar data object
     radar_data = RadarData(mock_connection)
     
-    # Verify that stats and temperature stats were parsed correctly
+    # Verify stats data
     assert radar_data.stats_data is not None
-    assert len(radar_data.stats_data) == stats_tlv_length
-    assert radar_data.stats_data == stats_data.tobytes()
+    assert len(radar_data.stats_data) == 24
     
+    # Verify temperature stats data
     assert radar_data.temperature_stats_data is not None
-    assert len(radar_data.temperature_stats_data) == temp_tlv_length
-    # Verify the temperature data structure (4 bytes int32 + 24 bytes float32)
-    expected_temp_data = temp_report_valid.tobytes() + temp_data.tobytes()
-    assert radar_data.temperature_stats_data == expected_temp_data 
+    assert len(radar_data.temperature_stats_data) == 28
+    
+    # Verify the parsed values match our input
+    parsed_stats = np.frombuffer(radar_data.stats_data, dtype=np.uint32)
+    assert np.array_equal(parsed_stats, stats_data)
+    
+    # Verify temperature data structure
+    parsed_temp_valid = int.from_bytes(radar_data.temperature_stats_data[0:4], byteorder='little')
+    assert parsed_temp_valid == 0
+    
+    parsed_temp_data = np.frombuffer(radar_data.temperature_stats_data[4:], dtype=np.uint16)
+    assert np.array_equal(parsed_temp_data, temp_data) 
