@@ -6,7 +6,9 @@ import logging
 import os
 import math
 from .point_cloud import RadarPointCloud
+import logging
 
+logger = logging.getLogger(__name__)
 
 class RadarData:
     """
@@ -99,7 +101,7 @@ class RadarData:
         data_bytes = data
         idx = 0  # Start after header
         
-        for _ in range(self.num_tlvs):
+        for tlv_idx in range(self.num_tlvs):
             if idx + 8 > len(data_bytes):  # Check if we have enough data to read TLV header
                 logging.warning(f"Insufficient data for TLV header at position {idx}")
                 break
@@ -108,24 +110,30 @@ class RadarData:
             tlv_length = int.from_bytes(data_bytes[idx+4:idx+8], byteorder='little')
             idx += 8
             
+            logger.debug(f"TLV {tlv_idx + 1}/{self.num_tlvs}: type={tlv_type}, length={tlv_length}")
+            
             # Ensure we have enough data to process this TLV
             if idx + tlv_length > len(data_bytes):
                 logging.warning(f"Insufficient data for TLV type {tlv_type} with length {tlv_length}")
                 break
                 
             if tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS:
-                print(f"Parsing point cloud data with length {tlv_length}")
+                logger.debug(f"Parsing point cloud data with length {tlv_length}")
                 idx = self._parse_point_cloud(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_PROFILE:
-                print(f"Parsing range profile data with length {tlv_length}")
+                logger.debug(f"Parsing range profile data with length {tlv_length}")
                 idx = self._parse_range_profile(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO:
+                logger.debug(f"Parsing side info data with length {tlv_length}")
                 idx = self._parse_side_info(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_RANGE_DOPPLER_HEAT_MAP:
+                logger.debug(f"Parsing range-Doppler heatmap data with length {tlv_length}")
                 idx = self._parse_range_doppler_heatmap(data_bytes, idx, tlv_length)
             elif tlv_type == self.MMWDEMO_OUTPUT_MSG_AZIMUT_STATIC_HEAT_MAP:
+                logger.debug(f"Parsing azimuth heatmap data with length {tlv_length}")
                 idx = self._parse_azimuth_heatmap(data_bytes, idx, tlv_length)
             else:
+                logger.debug(f"Skipping unknown TLV type {tlv_type} with length {tlv_length}")
                 idx += tlv_length
 
     def _parse_point_cloud(self, data: bytes, idx: int, tlv_length: int) -> int:
@@ -166,9 +174,9 @@ class RadarData:
         """Parse range profile data from TLV."""
         # Ensure tlv_length is a multiple of 2 (size of uint16)
         usable_length = tlv_length - (tlv_length % 2)
-        print(f"usable_length: {usable_length}")
+        logger.debug(f"usable_length: {usable_length}")
         if usable_length > 0:
-            print("Starting to parse range profile data")
+            logger.debug("Starting to parse range profile data")
             self.adc = np.frombuffer(data[idx:idx+usable_length], dtype=np.uint16)
         else:
             logging.warning("Range profile data length is not a multiple of uint16 size")
@@ -243,14 +251,14 @@ class RadarData:
             
             # Get dimensions from radar configuration
             num_range_bins = self.config_params.get('rangeBins', 256)  # Default from config files
-            num_doppler_bins = self.config_params.get('num_doppler_bins', 32)  # Default from config files
+            num_doppler_bins = self.config_params.get('num_doppler_bins') # Default from config files
             
+            logger.debug(f"num_range_bins: {num_range_bins}, num_doppler_bins: {num_doppler_bins}")
+
             # Verify dimensions match the data
             if total_bins == num_range_bins * num_doppler_bins:
                 # Reshape using actual dimensions
                 self.range_doppler_heatmap = heatmap.reshape(num_range_bins, num_doppler_bins)
-                #print(self.range_doppler_heatmap.shape)
-                #np.save("range_doppler_heatmap.npy", self.range_doppler_heatmap)
             else:
                 # Log warning and use square matrix as fallback
                 logging.warning(f"Range-Doppler heatmap dimensions mismatch. Expected {num_range_bins}x{num_doppler_bins} bins but got {total_bins} total bins.")
@@ -430,7 +438,11 @@ class RadarData:
             
         # Get radar parameters
         num_range_bins = self.config_params.get('rangeBins', 256)
-        range_resolution = self.config_params.get('rangeStep', 0.1)  # meters per bin
+        range_resolution = self.config_params.get('rangeStep')
+        
+        if range_resolution is None:
+            logger.warning("rangeStep not found in config_params, using default 0.044 m/bin")
+            range_resolution = 0.044  # Default from profile
         
         # Calculate velocity resolution from chirp parameters
         chirp_duration = self.config_params.get('rampEndTime', 60) * 1e-6  # Convert μs to seconds
@@ -442,6 +454,8 @@ class RadarData:
         range_axis = np.arange(num_range_bins) * range_resolution
         num_doppler_bins = self.range_doppler_heatmap.shape[1]
         velocity_axis = np.linspace(-num_doppler_bins//2, num_doppler_bins//2-1, num_doppler_bins) * velocity_resolution
+        
+        logger.debug(f"Range-Doppler heatmap: range_axis from 0 to {range_axis[-1]:.3f} m, velocity_axis from {velocity_axis[0]:.3f} to {velocity_axis[-1]:.3f} m/s")
         
         # Convert heatmap values to dB (assuming they are linear magnitude)
         heatmap_db = 20 * np.log10(self.range_doppler_heatmap + 1)  # Add 1 to avoid log(0)
@@ -464,8 +478,8 @@ class RadarData:
         range_resolution = self.config_params.get('rangeStep')
         
         if range_resolution is None:
-            logging.warning("rangeStep not found in config_params, using default 0.1 m/bin")
-            range_resolution = 0.1
+            logger.warning("rangeStep not found in config_params, using default 0.044 m/bin")
+            range_resolution = 0.044  # Default from profile
         
         # The azimuth heatmap is range_bins × num_virtual_antennas
         num_virtual_antennas = self.azimuth_heatmap.shape[1]

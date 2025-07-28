@@ -320,9 +320,16 @@ class RadarConnection:
                     config_params['slope'] = float(args[7])  # Frequency slope at index 7
                     
                 elif cmd == 'frameCfg':
-                    config_params['chirpsPerFrame'] = (int(args[1]) - int(args[0]) + 1) * int(args[2])
+                    start_chirp = int(args[0])
+                    end_chirp = int(args[1])
+                    num_loops = int(args[2])
+                    chirps_per_frame = (end_chirp - start_chirp + 1) * num_loops
+                    config_params['chirpsPerFrame'] = chirps_per_frame
                     if 'framePeriod' not in config_params:
                         config_params['framePeriod'] = float(args[4])
+                    # Set num_doppler_bins based on the number of loops
+                    config_params['num_doppler_bins'] = num_loops
+                    logger.debug(f"FrameCfg: start={start_chirp}, end={end_chirp}, loops={num_loops}, chirpsPerFrame={chirps_per_frame}, num_doppler_bins={config_params['num_doppler_bins']}")
                     
                 elif cmd == 'multiObjBeamForming':
                     if len(args) >= 3:
@@ -365,15 +372,23 @@ class RadarConnection:
             config_params['rangeBins'] = config_params['samples']
         
         # Only calculate rangeStep if not already extracted from profile comments
-        if 'rangeStep' not in config_params and all(k in config_params for k in ['sampleRate', 'slope', 'rangeBins']):
-            # Calculate range step using the correct formula
-            # For FMCW radar: rangeStep = c / (2 * bandwidth * rangeBins)
-            # Use the useful bandwidth from the profile: 3399.68 MHz
-            useful_bandwidth_mhz = 3399.68  # MHz (from profile)
-            useful_bandwidth_hz = useful_bandwidth_mhz * 1e6  # Hz
+        if 'rangeStep' not in config_params and all(k in config_params for k in ['sampleRate', 'slope', 'samples']):
+            # For FMCW radar: rangeStep = (c * sampleRate) / (2 * slope * numADCSamples)
+            # All values in MHz or Msps, so units are consistent
+            c = 3e8  # Speed of light in m/s
+            sample_rate_msps = config_params['sampleRate'] * 1e-3 # Convert ksps to Msps
+            slope_mhz_us = config_params['slope']              # MHz/us
             
-            config_params['rangeStep'] = 3e8 / (2 * useful_bandwidth_hz * config_params['rangeBins'])
-            logger.info(f"Useful bandwidth: {useful_bandwidth_mhz} MHz = {useful_bandwidth_hz:.0f} Hz")
+            # Bandwidth = slope * ADC sampling time
+            # ADC sampling time = num_adc_samples / sample_rate
+            adc_sampling_time_us = config_params['samples'] / (config_params['sampleRate'] * 1e-3) # us
+            bandwidth_ghz = slope_mhz_us * adc_sampling_time_us * 1e-3 # GHz
+            
+            # Range resolution = c / (2 * Bandwidth)
+            range_resolution = c / (2 * bandwidth_ghz * 1e9)
+            
+            config_params['rangeStep'] = range_resolution
+            logger.info(f"Bandwidth: {bandwidth_ghz*1e3:.2f} MHz")
             logger.info(f"Calculated range resolution: {config_params['rangeStep']:.6f} m/bin")
         
         if 'rangeStep' in config_params and 'rangeBins' in config_params:
@@ -381,18 +396,20 @@ class RadarConnection:
             logger.info(f"Final rangeStep: {config_params['rangeStep']:.6f} m/bin, maxRange: {config_params['maxRange']:.2f} m")
         else:
             logger.warning("rangeStep not found in config_params")
-            # Use the known range resolution from the profile
+            # Use default values from profile
             config_params['rangeStep'] = 0.044  # m/bin (from profile)
             config_params['maxRange'] = config_params['rangeStep'] * config_params.get('rangeBins', 256)
             logger.info(f"Using profile rangeStep: {config_params['rangeStep']:.6f} m/bin, maxRange: {config_params['maxRange']:.2f} m")
-            
+        
+        # Set radar instance parameters from config
         if 'clutterRemoval' in config_params:
             self._clutter_removal = config_params['clutterRemoval']
         if 'mobEnabled' in config_params:
             self.mob_enabled = config_params['mobEnabled']
         if 'mobThreshold' in config_params:
             self.mob_threshold = config_params['mobThreshold']
-            
+        
+        logger.info(f"Final radar parameters: {config_params}")
         return config_params
 
     def _format_radar_params(self, params: dict) -> str:

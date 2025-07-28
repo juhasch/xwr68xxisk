@@ -187,6 +187,7 @@ class RangeProfilePlot(BasePlot):
     def update(self, radar_data: RadarData) -> None:
         """Update the range profile plot with new radar data."""
         if not radar_data:
+            logger.debug("RangeProfilePlot.update: radar_data is None or empty")
             return
             
         try:
@@ -254,13 +255,13 @@ class RangeDopplerPlot(BasePlot):
         return pn.pane.Bokeh(p)
 
     def update(self, radar_data: 'RadarData') -> None:
-        if not hasattr(radar_data, 'get_range_doppler_heatmap'):
+        if not hasattr(radar_data, 'get_range_doppler_heatmap') or not radar_data.config_params:
             return
         heatmap_db, range_axis, velocity_axis = radar_data.get_range_doppler_heatmap()
         if heatmap_db.size == 0:
             self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
             return
-        
+    
         # Apply fftshift to center the zero velocity in the middle of the plot
         # Shift along axis 1 (velocity/Doppler axis)
         heatmap_db_shifted = np.fft.fftshift(heatmap_db, axes=1)
@@ -303,7 +304,7 @@ class RangeAzimuthPlot(BasePlot):
         return pn.pane.Bokeh(p)
 
     def update(self, radar_data: 'RadarData') -> None:
-        if not hasattr(radar_data, 'get_range_azimuth_heatmap'):
+        if not hasattr(radar_data, 'get_range_azimuth_heatmap') or not radar_data.config_params:
             return
         heatmap_db, range_axis, azimuth_axis = radar_data.get_range_azimuth_heatmap()
         if heatmap_db.size == 0:
