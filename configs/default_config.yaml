@@ -87,7 +87,7 @@ radar:
     range_doppler_heat_map: false
     range_profile_enabled: true
     range_profile_mode: log_magnitude
-    stats_info: true
+    stats_info: false
   lvds_stream_cfg:
     data_fmt: 0
     enable_header: false
@@ -122,7 +122,7 @@ radar:
     tx_phase_shifter: 0
     tx_start_time: 1.0
   radial_velocity_resolution_ms: 0.13
-  range_profile_mode: log_magnitude
+  range_profile_mode: complex
   range_resolution_m: 0.044
 recording:
   buffer_size: 1000

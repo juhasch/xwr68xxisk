@@ -155,7 +155,7 @@ class RangeProfilePlot(BasePlot):
     def _setup_plot(self) -> pn.pane.Bokeh:
         """Set up the range profile plot."""
         p = figure(
-            title='Range Profile & Noise Floor',
+            title='Range Profile (Log Magnitude) & Noise Floor',
             width=self.display_config.plot_width,
             height=self.display_config.plot_height,
             tools='pan,wheel_zoom,box_zoom,reset,save',
@@ -183,7 +183,7 @@ class RangeProfilePlot(BasePlot):
             'phase': []
         })
         
-        # Range profile line (blue)
+        # Range profile line (blue) - used for both regular and complex log magnitude
         self.range_line = p.line(
             x='range',
             y='magnitude',
@@ -193,7 +193,7 @@ class RangeProfilePlot(BasePlot):
             name='range_profile'
         )
         
-        # Complex magnitude line (green)
+        # Complex magnitude line (green) - not used anymore
         self.complex_magnitude_line = p.line(
             x='range',
             y='magnitude',
@@ -204,7 +204,7 @@ class RangeProfilePlot(BasePlot):
             visible=False
         )
         
-        # Complex phase line (orange)
+        # Complex phase line (orange) - not used anymore
         self.complex_phase_line = p.line(
             x='range',
             y='phase',
@@ -255,14 +255,14 @@ class RangeProfilePlot(BasePlot):
                            has_complex_data)
             
             # Update visibility based on available data and configuration
-            self.range_line.visible = not show_complex and has_regular_data
-            self.complex_magnitude_line.visible = show_complex and has_complex_data
-            self.complex_phase_line.visible = show_complex and has_complex_data
+            self.range_line.visible = has_regular_data or (show_complex and has_complex_data)
+            self.complex_magnitude_line.visible = False  # Not used anymore
+            self.complex_phase_line.visible = False      # Not used anymore
             self.noise_line.visible = has_noise_data
             
             # Update range profile data
             if show_complex and has_complex_data:
-                # Use complex range profile data
+                # Use complex range profile data - plot log magnitude
                 range_bins, magnitude_dB, phase = radar_data.get_complex_range_profile()
                 
                 if len(range_bins) > 0 and len(magnitude_dB) > 0:
@@ -270,22 +270,14 @@ class RangeProfilePlot(BasePlot):
                     
                     if len(range_axis) > 0:
                         min_len = min(len(magnitude_dB), len(range_axis))
-                        self.complex_magnitude_source.data = {
+                        self.range_data_source.data = {
                             'range': range_axis[:min_len],
                             'magnitude': magnitude_dB[:min_len]
                         }
-                        
-                        min_len_phase = min(len(phase), len(range_axis))
-                        self.complex_phase_source.data = {
-                            'range': range_axis[:min_len_phase],
-                            'phase': phase[:min_len_phase]
-                        }
                     else:
-                        self.complex_magnitude_source.data = {'range': [], 'magnitude': []}
-                        self.complex_phase_source.data = {'range': [], 'phase': []}
+                        self.range_data_source.data = {'range': [], 'magnitude': []}
                 else:
-                    self.complex_magnitude_source.data = {'range': [], 'magnitude': []}
-                    self.complex_phase_source.data = {'range': [], 'phase': []}
+                    self.range_data_source.data = {'range': [], 'magnitude': []}
                     
             elif has_regular_data:
                 # Use regular range profile data
