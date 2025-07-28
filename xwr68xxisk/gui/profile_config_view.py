@@ -95,6 +95,7 @@ class ProfileConfigView(param.Parameterized):
         self._init_widgets()
         self._init_expert_widgets()
         self._link_widgets_to_config()
+        self._update_gui_monitor_config(None)
 
     def _init_widgets(self):
         # Initialize top selectors
@@ -228,11 +229,11 @@ class ProfileConfigView(param.Parameterized):
         
         # GUI Monitor
         self.gui_detected_objects = Select(name="Detected Objects", options=["None (0)", "Objects + Side Info (1)", "Objects Only (2)"], value="Objects + Side Info (1)", width=200)
-        self.gui_log_mag_range = Checkbox(name="Log Magnitude Range", value=True)
-        self.gui_noise_profile = Checkbox(name="Noise Profile", value=False)
-        self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=False)
-        self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=False)
-        self.gui_stats_info = Checkbox(name="Statistics Info", value=True)
+        self.gui_log_mag_range = Checkbox(name="Log Magnitude Range", value=self.config.plot_range_profile)
+        self.gui_noise_profile = Checkbox(name="Noise Profile", value=self.config.plot_noise_profile)
+        self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=self.config.plot_range_azimuth_heat_map)
+        self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=self.config.plot_range_doppler_heat_map)
+        self.gui_stats_info = Checkbox(name="Statistics Info", value=self.config.plot_statistics)
         
         # Analog Monitor
         self.analog_rx_saturation = Checkbox(name="RX Saturation Monitoring", value=False)

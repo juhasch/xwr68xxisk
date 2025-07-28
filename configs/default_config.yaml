@@ -102,7 +102,7 @@ radar:
   plot_noise_profile: false
   plot_range_azimuth_heat_map: false
   plot_range_doppler_heat_map: false
-  plot_range_profile: false
+  plot_range_profile: true
   plot_scatter: true
   plot_statistics: false
   profile_cfg:
