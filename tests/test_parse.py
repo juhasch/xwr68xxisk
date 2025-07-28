@@ -103,12 +103,22 @@ def test_parse_stats_and_temperature():
     # Stats (TLV type 6) - 24 bytes (6 uint32 values)
     stats_tlv_type = 6
     stats_tlv_length = 24
-    stats_data = np.random.randint(0, 1000, 6, dtype=np.uint32)
+    stats_data = np.array([
+        1500,    # interFrameProcessingTime (usec)
+        200,     # transmitOutputTime (usec)
+        500,     # interFrameProcessingMargin (usec)
+        100,     # interChirpProcessingMargin (usec)
+        75,      # activeFrameCPULoad (%)
+        25       # interFrameCPULoad (%)
+    ], dtype=np.uint32)
     
-    # Temperature stats (TLV type 9) - 28 bytes (7 float values)
+    # Temperature stats (TLV type 9) - 28 bytes (1 int32 + 6 float values)
     temp_tlv_type = 9
     temp_tlv_length = 28
-    temp_data = np.random.rand(7).astype(np.float32)
+    temp_report_valid = np.array([0], dtype=np.int32)  # 0 = valid
+    temp_data = np.array([
+        45.5, 42.3, 48.1, 44.7, 46.2, 43.8
+    ], dtype=np.float32)
     
     # Create packet with both TLVs
     packet = bytearray()
@@ -121,6 +131,7 @@ def test_parse_stats_and_temperature():
     # Add temperature stats TLV
     packet.extend(temp_tlv_type.to_bytes(4, byteorder='little'))
     packet.extend(temp_tlv_length.to_bytes(4, byteorder='little'))
+    packet.extend(temp_report_valid.tobytes())
     packet.extend(temp_data.tobytes())
     
     # Create mock radar connection with 2 TLVs
@@ -149,4 +160,6 @@ def test_parse_stats_and_temperature():
     
     assert radar_data.temperature_stats_data is not None
     assert len(radar_data.temperature_stats_data) == temp_tlv_length
-    assert radar_data.temperature_stats_data == temp_data.tobytes() 
+    # Verify the temperature data structure (4 bytes int32 + 24 bytes float32)
+    expected_temp_data = temp_report_valid.tobytes() + temp_data.tobytes()
+    assert radar_data.temperature_stats_data == expected_temp_data 

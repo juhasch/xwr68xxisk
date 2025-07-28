@@ -358,31 +358,38 @@ class RadarData:
         return idx + tlv_length
 
     def _parse_stats(self, data: bytes, idx: int, tlv_length: int) -> int:
-        """Parse stats data from TLV."""
+        """Parse stats data from TLV.
+        
+        Based on MmwDemo_output_message_stats_t structure:
+        - interFrameProcessingTime (uint32_t): Interframe processing time in usec
+        - transmitOutputTime (uint32_t): Transmission time of output detection information in usec
+        - interFrameProcessingMargin (uint32_t): Interframe processing margin in usec
+        - interChirpProcessingMargin (uint32_t): Interchirp processing margin in usec
+        - activeFrameCPULoad (uint32_t): CPU Load (%) during active frame duration
+        - interFrameCPULoad (uint32_t): CPU Load (%) during inter frame duration
+        """
         logger.debug(f"Parsing stats data with length {tlv_length}")
         
         # Store the raw data for debugging
         raw_data = data[idx:idx+tlv_length]
         self.stats_data = raw_data
         
-        # Try to parse as different data types based on length
-        if tlv_length == 4:
-            # Single uint32 value
-            value = int.from_bytes(raw_data, byteorder='little')
-            logger.info(f"Stats data (uint32): {value}")
-            self.num_detected_obj = value
-        elif tlv_length == 8:
-            # Two uint32 values
-            val1 = int.from_bytes(raw_data[0:4], byteorder='little')
-            val2 = int.from_bytes(raw_data[4:8], byteorder='little')
-            logger.info(f"Stats data (2x uint32): {val1}, {val2}")
-        elif tlv_length == 24:
-            # Six uint32 values (common stats structure)
-            values = []
-            for i in range(0, tlv_length, 4):
-                val = int.from_bytes(raw_data[i:i+4], byteorder='little')
-                values.append(val)
-            logger.info(f"Stats data (6x uint32): {values}")
+        if tlv_length == 24:  # 6 uint32_t values
+            # Parse according to MmwDemo_output_message_stats_t structure
+            inter_frame_processing_time = int.from_bytes(raw_data[0:4], byteorder='little')
+            transmit_output_time = int.from_bytes(raw_data[4:8], byteorder='little')
+            inter_frame_processing_margin = int.from_bytes(raw_data[8:12], byteorder='little')
+            inter_chirp_processing_margin = int.from_bytes(raw_data[12:16], byteorder='little')
+            active_frame_cpu_load = int.from_bytes(raw_data[16:20], byteorder='little')
+            inter_frame_cpu_load = int.from_bytes(raw_data[20:24], byteorder='little')
+            
+            logger.info(f"Stats data:")
+            logger.info(f"  Inter-frame processing time: {inter_frame_processing_time} usec")
+            logger.info(f"  Transmit output time: {transmit_output_time} usec")
+            logger.info(f"  Inter-frame processing margin: {inter_frame_processing_margin} usec")
+            logger.info(f"  Inter-chirp processing margin: {inter_chirp_processing_margin} usec")
+            logger.info(f"  Active frame CPU load: {active_frame_cpu_load}%")
+            logger.info(f"  Inter-frame CPU load: {inter_frame_cpu_load}%")
         else:
             # Unknown structure, log as hex
             hex_data = raw_data.hex()
@@ -391,30 +398,37 @@ class RadarData:
         return idx + tlv_length
 
     def _parse_temperature_stats(self, data: bytes, idx: int, tlv_length: int) -> int:
-        """Parse temperature stats data from TLV."""
+        """Parse temperature stats data from TLV.
+        
+        Based on MmwDemo_temperatureStats_t structure:
+        - tempReportValid (int32_t): Return value from API rlRfTempData_t
+        - temperatureReport (rlRfTempData_t): Detailed temperature report
+        
+        The rlRfTempData_t structure typically contains temperature values for different
+        components of the radar system.
+        """
         logger.debug(f"Parsing temperature stats data with length {tlv_length}")
         
         # Store the raw data for debugging
         raw_data = data[idx:idx+tlv_length]
         self.temperature_stats_data = raw_data
         
-        # Try to parse as different data types based on length
-        if tlv_length == 4:
-            # Single float value
-            value = struct.unpack('f', raw_data)[0]
-            logger.info(f"Temperature stats data (float): {value}")
-        elif tlv_length == 8:
-            # Two float values
-            val1 = struct.unpack('f', raw_data[0:4])[0]
-            val2 = struct.unpack('f', raw_data[4:8])[0]
-            logger.info(f"Temperature stats data (2x float): {val1}, {val2}")
-        elif tlv_length == 28:
-            # Seven float values (common temperature stats structure)
-            values = []
-            for i in range(0, tlv_length, 4):
-                val = struct.unpack('f', raw_data[i:i+4])[0]
-                values.append(val)
-            logger.info(f"Temperature stats data (7x float): {values}")
+        if tlv_length == 28:  # 4 bytes for tempReportValid + 24 bytes for temperatureReport
+            # Parse tempReportValid (int32_t)
+            temp_report_valid = int.from_bytes(raw_data[0:4], byteorder='little', signed=True)
+            
+            # Parse temperatureReport (rlRfTempData_t - typically 6 float values)
+            temp_values = []
+            for i in range(4, tlv_length, 4):
+                temp_val = struct.unpack('f', raw_data[i:i+4])[0]
+                temp_values.append(temp_val)
+            
+            logger.info(f"Temperature stats data:")
+            logger.info(f"  Temperature report valid: {temp_report_valid}")
+            if temp_report_valid == 0:
+                logger.info(f"  Temperature values (valid): {temp_values}")
+            else:
+                logger.warning(f"  Temperature values (invalid, error code: {temp_report_valid}): {temp_values}")
         else:
             # Unknown structure, log as hex
             hex_data = raw_data.hex()
