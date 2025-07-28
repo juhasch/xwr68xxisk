@@ -240,7 +240,7 @@ class ProfileConfigView(param.Parameterized):
 
     def _link_widgets_to_config(self):
         # Link top selectors
-        self.param.watch(self._on_antenna_config_change, 'antenna_config_select')
+        self.param.antenna_config_select.param.watch(self._on_antenna_config_change, 'value')
 
         # Link Scene Selection sliders and inputs bidirectionally
         self.frame_rate_slider.param.watch(lambda event: setattr(self.frame_rate_input, 'value', event.new), 'value')
@@ -274,6 +274,13 @@ class ProfileConfigView(param.Parameterized):
         self.plot_range_azimuth_cb.param.watch(lambda event: setattr(self.config, 'plot_range_azimuth_heat_map', event.new), 'value')
         self.plot_range_doppler_cb.param.watch(lambda event: setattr(self.config, 'plot_range_doppler_heat_map', event.new), 'value')
         self.plot_statistics_cb.param.watch(lambda event: setattr(self.config, 'plot_statistics', event.new), 'value')
+
+        # Link plot selections to GUI monitor widgets directly
+        self.plot_range_profile_cb.param.watch(lambda event: setattr(self.gui_log_mag_range, 'value', event.new), 'value')
+        self.plot_noise_profile_cb.param.watch(lambda event: setattr(self.gui_noise_profile, 'value', event.new), 'value')
+        self.plot_range_azimuth_cb.param.watch(lambda event: setattr(self.gui_range_azimuth_heat_map, 'value', event.new), 'value')
+        self.plot_range_doppler_cb.param.watch(lambda event: setattr(self.gui_range_doppler_heat_map, 'value', event.new), 'value')
+        self.plot_statistics_cb.param.watch(lambda event: setattr(self.gui_stats_info, 'value', event.new), 'value')
 
         # Link expert mode widgets to config
         self._link_expert_widgets()

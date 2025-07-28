@@ -100,7 +100,7 @@ radar:
     subframe_idx: -1
     threshold: 0.5
   plot_noise_profile: false
-  plot_range_azimuth_heat_map: true
+  plot_range_azimuth_heat_map: false
   plot_range_doppler_heat_map: false
   plot_range_profile: false
   plot_scatter: true
