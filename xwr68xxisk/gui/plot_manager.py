@@ -155,24 +155,43 @@ class RangeProfilePlot(BasePlot):
     def _setup_plot(self) -> pn.pane.Bokeh:
         """Set up the range profile plot."""
         p = figure(
-            title='Range Profile',
+            title='Range Profile & Noise Floor',
             width=self.display_config.plot_width,
             height=self.display_config.plot_height,
             tools='pan,wheel_zoom,box_zoom,reset,save',
             toolbar_location='above'
         )
         
-        self.data_source = ColumnDataSource({
+        self.range_data_source = ColumnDataSource({
             'range': [],
             'magnitude': []
         })
         
+        self.noise_data_source = ColumnDataSource({
+            'range': [],
+            'noise': []
+        })
+        
+        # Range profile line (blue)
         p.line(
             x='range',
             y='magnitude',
             line_width=2,
-            source=self.data_source,
+            color='blue',
+            legend_label='Range Profile',
+            source=self.range_data_source,
             name='range_profile'
+        )
+        
+        # Noise profile line (red)
+        p.line(
+            x='range',
+            y='noise',
+            line_width=2,
+            color='red',
+            legend_label='Noise Floor',
+            source=self.noise_data_source,
+            name='noise_profile'
         )
         
         p.axis.axis_label_text_font_size = '12pt'
@@ -181,6 +200,7 @@ class RangeProfilePlot(BasePlot):
         p.yaxis.axis_label = 'Magnitude (dB)'
         
         p.grid.grid_line_alpha = 0.3
+        p.legend.location = 'top_right'
         
         return pn.pane.Bokeh(p)
     
@@ -191,6 +211,7 @@ class RangeProfilePlot(BasePlot):
             return
             
         try:
+            # Update range profile data
             if radar_data.adc is not None and len(radar_data.adc) > 0:
                 # Add a small epsilon to prevent log10(0) and ensure float type for log
                 magnitude_data = 20 * np.log10(np.abs(radar_data.adc.astype(np.float32)) + 1e-9)
@@ -218,82 +239,36 @@ class RangeProfilePlot(BasePlot):
                 if len(range_axis) > 0 and len(magnitude_data) > 0 :
                     # Ensure data alignment by taking the minimum length
                     min_len = min(len(magnitude_data), len(range_axis))
-                    self.data_source.data = {
+                    self.range_data_source.data = {
                         'range': range_axis[:min_len],
                         'magnitude': magnitude_data[:min_len]
                     }
                 else: # If range_axis or magnitude_data could not be computed or is empty
-                    self.data_source.data = {'range': [], 'magnitude': []}
+                    self.range_data_source.data = {'range': [], 'magnitude': []}
             else:
-                self.data_source.data = {'range': [], 'magnitude': []}
+                self.range_data_source.data = {'range': [], 'magnitude': []}
             
-        except Exception as e:
-            logger.error(f"Error updating range profile plot: {e}")
-            self.data_source.data = {'range': [], 'magnitude': []}
-
-
-class NoiseProfilePlot(BasePlot):
-    """Noise profile plot showing noise floor vs range."""
-    
-    def _setup_plot(self) -> pn.pane.Bokeh:
-        """Set up the noise profile plot."""
-        p = figure(
-            title='Noise Profile',
-            width=self.display_config.plot_width,
-            height=self.display_config.plot_height,
-            tools='pan,wheel_zoom,box_zoom,reset,save',
-            toolbar_location='above'
-        )
-        
-        self.data_source = ColumnDataSource({
-            'range': [],
-            'noise': []
-        })
-        
-        p.line(
-            x='range',
-            y='noise',
-            line_width=2,
-            color='red',
-            source=self.data_source,
-            name='noise_profile'
-        )
-        
-        p.axis.axis_label_text_font_size = '12pt'
-        p.axis.axis_label_text_font_style = 'normal'
-        p.xaxis.axis_label = 'Range (m)'
-        p.yaxis.axis_label = 'Noise Floor (dB)'
-        
-        p.grid.grid_line_alpha = 0.3
-        
-        return pn.pane.Bokeh(p)
-    
-    def update(self, radar_data: RadarData) -> None:
-        """Update the noise profile plot with new radar data."""
-        if not radar_data:
-            logger.debug("NoiseProfilePlot.update: radar_data is None or empty")
-            return
-            
-        try:
+            # Update noise profile data
             if hasattr(radar_data, 'get_noise_profile'):
-                noise_db, range_axis = radar_data.get_noise_profile()
+                noise_db, noise_range_axis = radar_data.get_noise_profile()
                 
-                if len(noise_db) > 0 and len(range_axis) > 0:
+                if len(noise_db) > 0 and len(noise_range_axis) > 0:
                     # Ensure data alignment by taking the minimum length
-                    min_len = min(len(noise_db), len(range_axis))
-                    self.data_source.data = {
-                        'range': range_axis[:min_len],
+                    min_len = min(len(noise_db), len(noise_range_axis))
+                    self.noise_data_source.data = {
+                        'range': noise_range_axis[:min_len],
                         'noise': noise_db[:min_len]
                     }
                 else:
-                    self.data_source.data = {'range': [], 'noise': []}
+                    self.noise_data_source.data = {'range': [], 'noise': []}
             else:
                 logger.debug("RadarData does not have get_noise_profile method")
-                self.data_source.data = {'range': [], 'noise': []}
+                self.noise_data_source.data = {'range': [], 'noise': []}
             
         except Exception as e:
-            logger.error(f"Error updating noise profile plot: {e}")
-            self.data_source.data = {'range': [], 'noise': []}
+            logger.error(f"Error updating range profile plot: {e}")
+            self.range_data_source.data = {'range': [], 'magnitude': []}
+            self.noise_data_source.data = {'range': [], 'noise': []}
 
 
 class RangeDopplerPlot(BasePlot):
@@ -417,7 +392,6 @@ class PlotManager:
         # Initialize plots
         self.scatter_plot = ScatterPlot(scene_config, display_config)
         self.range_profile_plot = RangeProfilePlot(scene_config, display_config)
-        self.noise_profile_plot = NoiseProfilePlot(scene_config, display_config)
         self.range_doppler_plot = RangeDopplerPlot(scene_config, display_config)
         self.range_azimuth_plot = RangeAzimuthPlot(scene_config, display_config)
         
@@ -427,8 +401,6 @@ class PlotManager:
         ]
         if scene_config.plot_range_profile:
             tabs.append(('Range Profile', self.range_profile_plot.view))
-        if scene_config.plot_noise_profile:
-            tabs.append(('Noise Profile', self.noise_profile_plot.view))
         if scene_config.plot_range_doppler_heat_map:
             tabs.append(('Range-Doppler', self.range_doppler_plot.view))
         if scene_config.plot_range_azimuth_heat_map:
@@ -453,8 +425,6 @@ class PlotManager:
             self.scatter_plot.update(radar_data)
             if self.scene_config.plot_range_profile:
                 self.range_profile_plot.update(radar_data)
-            if self.scene_config.plot_noise_profile:
-                self.noise_profile_plot.update(radar_data)
             if self.scene_config.plot_range_doppler_heat_map:
                 self.range_doppler_plot.update(radar_data)
             if self.scene_config.plot_range_azimuth_heat_map:
