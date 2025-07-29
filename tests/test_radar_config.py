@@ -265,5 +265,106 @@ class TestRadarConfig(unittest.TestCase):
         self.assertFalse(config_empty.set_clutter_removal(True))
 
 
+"""Test radar configuration trigger mode functionality"""
+
+import pytest
+from xwr68xxisk.radar_config import TriggerModeCommand, RadarProfile
+
+
+class TestTriggerModeCommand:
+    """Test the TriggerModeCommand class"""
+    
+    def test_trigger_mode_creation(self):
+        """Test creating trigger mode command"""
+        cmd = TriggerModeCommand([0])
+        assert cmd.name == 'triggerMode'
+        assert cmd.mode == 0
+        assert cmd.is_timer_based is True
+        assert cmd.is_software_trigger is False
+        assert cmd.is_hardware_trigger is False
+    
+    def test_trigger_mode_software(self):
+        """Test software trigger mode"""
+        cmd = TriggerModeCommand([1])
+        assert cmd.mode == 1
+        assert cmd.is_timer_based is False
+        assert cmd.is_software_trigger is True
+        assert cmd.is_hardware_trigger is False
+    
+    def test_trigger_mode_hardware(self):
+        """Test hardware trigger mode"""
+        cmd = TriggerModeCommand([2])
+        assert cmd.mode == 2
+        assert cmd.is_timer_based is False
+        assert cmd.is_software_trigger is False
+        assert cmd.is_hardware_trigger is True
+    
+    def test_trigger_mode_setter(self):
+        """Test setting trigger mode"""
+        cmd = TriggerModeCommand([0])
+        cmd.mode = 1
+        assert cmd.mode == 1
+        assert cmd.is_software_trigger is True
+    
+    def test_trigger_mode_invalid(self):
+        """Test invalid trigger mode raises error"""
+        cmd = TriggerModeCommand([0])
+        with pytest.raises(ValueError, match="Trigger mode must be 0, 1, or 2"):
+            cmd.mode = 3
+    
+    def test_trigger_mode_to_string(self):
+        """Test command string conversion"""
+        cmd = TriggerModeCommand([1])
+        assert cmd.to_string() == "triggerMode 1"
+
+
+class TestRadarProfileTriggerMode:
+    """Test trigger mode functionality in RadarProfile"""
+    
+    def test_set_trigger_mode_existing(self):
+        """Test setting trigger mode when command exists"""
+        profile = RadarProfile("test")
+        # Add trigger mode command
+        trigger_cmd = TriggerModeCommand([0])
+        profile.add_command(trigger_cmd)
+        
+        # Test setting different modes
+        assert profile.set_trigger_mode(1) is True
+        assert trigger_cmd.mode == 1
+        
+        assert profile.set_trigger_mode(2) is True
+        assert trigger_cmd.mode == 2
+        
+        assert profile.set_trigger_mode(0) is True
+        assert trigger_cmd.mode == 0
+    
+    def test_set_trigger_mode_not_found(self):
+        """Test setting trigger mode when command doesn't exist"""
+        profile = RadarProfile("test")
+        assert profile.set_trigger_mode(1) is False
+    
+    def test_trigger_mode_from_string(self):
+        """Test parsing trigger mode from string"""
+        profile_str = """
+        triggerMode 1
+        sensorStop
+        """
+        profile = RadarProfile.from_string(profile_str)
+        
+        trigger_cmd = profile.get_command('triggerMode')
+        assert trigger_cmd is not None
+        assert trigger_cmd.mode == 1
+        assert trigger_cmd.is_software_trigger is True
+    
+    def test_trigger_mode_to_string(self):
+        """Test converting trigger mode to string"""
+        profile = RadarProfile("test")
+        trigger_cmd = TriggerModeCommand([2])
+        profile.add_command(trigger_cmd)
+        
+        profile_str = profile.to_string()
+        assert "triggerMode 2" in profile_str
+
+
 if __name__ == "__main__":
     unittest.main() 

@@ -60,6 +60,7 @@ class RadarCommand:
             'clutterRemoval': ClutterRemovalCommand,
             'calibDcRangeSig': CalibDcRangeSigCommand,
             'aoaFovCfg': AoaFovConfigCommand,
+            'triggerMode': TriggerModeCommand,
         }
         
         if name in command_classes:
@@ -699,6 +700,56 @@ class AoaFovConfigCommand(RadarCommand):
         self.params[4] = value
 
 
+class TriggerModeCommand(RadarCommand):
+    """Trigger mode configuration command
+    
+    Format: "triggerMode <mode>"
+    
+    Parameters:
+        mode: Trigger mode selection
+            0 = Timer-based trigger (default)
+            1 = Software trigger  
+            2 = Hardware trigger via GPIO 1
+    """
+    
+    def __init__(self, params: List[Union[int, float, str]]):
+        super().__init__('triggerMode', params)
+    
+    @property
+    def mode(self) -> int:
+        """Get trigger mode
+        0 = Timer-based trigger (default)
+        1 = Software trigger
+        2 = Hardware trigger via GPIO 1
+        """
+        return self.params[0]
+    
+    @mode.setter
+    def mode(self, value: int):
+        """Set trigger mode
+        Args:
+            value: Trigger mode (0: timer-based, 1: software, 2: hardware)
+        """
+        if value not in [0, 1, 2]:
+            raise ValueError("Trigger mode must be 0, 1, or 2")
+        self.params[0] = value
+    
+    @property
+    def is_timer_based(self) -> bool:
+        """Check if timer-based triggering is enabled"""
+        return self.mode == 0
+    
+    @property
+    def is_software_trigger(self) -> bool:
+        """Check if software triggering is enabled"""
+        return self.mode == 1
+    
+    @property
+    def is_hardware_trigger(self) -> bool:
+        """Check if hardware triggering is enabled"""
+        return self.mode == 2
+
+
 class RadarProfile:
     """Main class for radar profile management"""
     
@@ -865,6 +916,19 @@ class RadarProfile:
         clutter_cmd = self.get_command('clutterRemoval')
         if clutter_cmd:
             clutter_cmd.params[1] = 1 if enabled else 0
+            return True
+        return False
+
+    def set_trigger_mode(self, mode: int) -> bool:
+        """Set the trigger mode for the radar
+        Args:
+            mode: Trigger mode (0: timer-based, 1: software, 2: hardware)
+        Returns:
+            True if trigger mode was updated, False if not found
+        """
+        trigger_cmd = self.get_command('triggerMode')
+        if trigger_cmd:
+            trigger_cmd.mode = mode
             return True
         return False
 

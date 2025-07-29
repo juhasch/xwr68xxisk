@@ -86,7 +86,7 @@ radar:
     range_azimuth_heat_map: false
     range_doppler_heat_map: false
     range_profile_enabled: true
-    range_profile_mode: log_magnitude
+    range_profile_mode: complex
     stats_info: false
   lvds_stream_cfg:
     data_fmt: 0
