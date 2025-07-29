@@ -158,6 +158,7 @@ class RangeProfilePlot(BasePlot):
             title='Range Profile (Log Magnitude) & Noise Floor',
             width=self.display_config.plot_width,
             height=self.display_config.plot_height,
+            y_range=(0, 90),  # Fixed y-axis range from 0 to +90 dB
             tools='pan,wheel_zoom,box_zoom,reset,save',
             toolbar_location='above'
         )
@@ -357,30 +358,97 @@ class RangeDopplerPlot(BasePlot):
         return pn.pane.Bokeh(p)
 
     def update(self, radar_data: 'RadarData') -> None:
-        if not hasattr(radar_data, 'get_range_doppler_heatmap') or not radar_data.config_params:
-            return
-        heatmap_db, range_axis, velocity_axis = radar_data.get_range_doppler_heatmap()
-        if heatmap_db.size == 0:
+        """Update the range-Doppler heatmap plot with new radar data."""
+        try:
+            if not hasattr(radar_data, 'get_range_doppler_heatmap') or not radar_data.config_params:
+                logger.debug("RangeDopplerPlot: Missing get_range_doppler_heatmap method or config_params")
+                return
+                
+            heatmap_db, range_axis, velocity_axis = radar_data.get_range_doppler_heatmap()
+            
+            if heatmap_db.size == 0:
+                logger.debug("RangeDopplerPlot: Empty heatmap data")
+                self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
+                return
+            
+            logger.debug(f"RangeDopplerPlot: Heatmap shape: {heatmap_db.shape}, range_axis: {range_axis.shape}, velocity_axis: {velocity_axis.shape}")
+            
+            # Check for invalid data
+            if np.any(np.isnan(heatmap_db)) or np.any(np.isinf(heatmap_db)):
+                logger.warning("RangeDopplerPlot: Heatmap contains NaN or Inf values, using zeros")
+                heatmap_db = np.zeros_like(heatmap_db)
+            
+            # Apply fftshift to center the zero velocity in the middle of the plot
+            # Shift along axis 1 (velocity/Doppler axis)
+            try:
+                heatmap_db_shifted = np.fft.fftshift(heatmap_db, axes=1)
+                logger.debug(f"RangeDopplerPlot: Applied fftshift, shape: {heatmap_db_shifted.shape}")
+            except Exception as e:
+                logger.error(f"RangeDopplerPlot: Error applying fftshift: {e}")
+                heatmap_db_shifted = heatmap_db  # Use unshifted data as fallback
+            
+            # Calculate min/max values safely
+            try:
+                vmin = float(np.nanmin(heatmap_db_shifted))
+                vmax = float(np.nanmax(heatmap_db_shifted))
+                
+                # Handle case where all values are the same
+                if vmin == vmax:
+                    vmax = vmin + 1
+                    
+                logger.debug(f"RangeDopplerPlot: Value range: {vmin:.2f} to {vmax:.2f}")
+                
+                # Update color mapper
+                self.heatmap.glyph.color_mapper.low = vmin
+                self.heatmap.glyph.color_mapper.high = vmax
+                
+            except Exception as e:
+                logger.error(f"RangeDopplerPlot: Error calculating value range: {e}")
+                # Use default range
+                self.heatmap.glyph.color_mapper.low = 0
+                self.heatmap.glyph.color_mapper.high = 1
+            
+            # Update data source
+            try:
+                # Ensure axes have valid values
+                if len(velocity_axis) == 0 or len(range_axis) == 0:
+                    logger.warning("RangeDopplerPlot: Empty velocity or range axis")
+                    self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
+                    return
+                
+                # Ensure we have valid bounds
+                x_start = float(velocity_axis[0])
+                x_end = float(velocity_axis[-1])
+                y_start = float(range_axis[0])
+                y_end = float(range_axis[-1])
+                
+                # Handle case where start and end are the same
+                if x_start == x_end:
+                    x_end = x_start + 1
+                if y_start == y_end:
+                    y_end = y_start + 1
+                
+                logger.debug(f"RangeDopplerPlot: Updating data source with bounds: x=[{x_start:.3f}, {x_end:.3f}], y=[{y_start:.3f}, {y_end:.3f}]")
+                
+                self.data_source.data = {
+                    'image': [heatmap_db_shifted],
+                    'x': [x_start],
+                    'y': [y_start],
+                    'dw': [x_end - x_start],
+                    'dh': [y_end - y_start]
+                }
+                
+                logger.debug("RangeDopplerPlot: Successfully updated data source")
+                
+            except Exception as e:
+                logger.error(f"RangeDopplerPlot: Error updating data source: {e}")
+                # Fallback to empty data
+                self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
+                
+        except Exception as e:
+            logger.error(f"RangeDopplerPlot: Unexpected error in update: {e}")
+            # Ensure we don't leave the plot in a broken state
             self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
-            return
-    
-        # Apply fftshift to center the zero velocity in the middle of the plot
-        # Shift along axis 1 (velocity/Doppler axis)
-        heatmap_db_shifted = np.fft.fftshift(heatmap_db, axes=1)
-        
-        vmin = float(np.nanmin(heatmap_db_shifted))
-        vmax = float(np.nanmax(heatmap_db_shifted))
-        if vmin == vmax:
-            vmax = vmin + 1
-        self.heatmap.glyph.color_mapper.low = vmin
-        self.heatmap.glyph.color_mapper.high = vmax
-        self.data_source.data = {
-            'image': [heatmap_db_shifted],
-            'x': [velocity_axis[0]],
-            'y': [range_axis[0]],
-            'dw': [velocity_axis[-1] - velocity_axis[0]],
-            'dh': [range_axis[-1] - range_axis[0]]
-        }
 
 
 class RangeAzimuthPlot(BasePlot):
@@ -406,30 +474,97 @@ class RangeAzimuthPlot(BasePlot):
         return pn.pane.Bokeh(p)
 
     def update(self, radar_data: 'RadarData') -> None:
-        if not hasattr(radar_data, 'get_range_azimuth_heatmap') or not radar_data.config_params:
-            return
-        heatmap_db, range_axis, azimuth_axis = radar_data.get_range_azimuth_heatmap()
-        if heatmap_db.size == 0:
+        """Update the range-azimuth heatmap plot with new radar data."""
+        try:
+            if not hasattr(radar_data, 'get_range_azimuth_heatmap') or not radar_data.config_params:
+                logger.debug("RangeAzimuthPlot: Missing get_range_azimuth_heatmap method or config_params")
+                return
+                
+            heatmap_db, range_axis, azimuth_axis = radar_data.get_range_azimuth_heatmap()
+            
+            if heatmap_db.size == 0:
+                logger.debug("RangeAzimuthPlot: Empty heatmap data")
+                self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
+                return
+            
+            logger.debug(f"RangeAzimuthPlot: Heatmap shape: {heatmap_db.shape}, range_axis: {range_axis.shape}, azimuth_axis: {azimuth_axis.shape}")
+            
+            # Check for invalid data
+            if np.any(np.isnan(heatmap_db)) or np.any(np.isinf(heatmap_db)):
+                logger.warning("RangeAzimuthPlot: Heatmap contains NaN or Inf values, using zeros")
+                heatmap_db = np.zeros_like(heatmap_db)
+            
+            # Apply fftshift to center the zero azimuth in the middle of the plot
+            # Shift along axis 1 (azimuth axis)
+            try:
+                heatmap_db_shifted = np.fft.fftshift(heatmap_db, axes=1)
+                logger.debug(f"RangeAzimuthPlot: Applied fftshift, shape: {heatmap_db_shifted.shape}")
+            except Exception as e:
+                logger.error(f"RangeAzimuthPlot: Error applying fftshift: {e}")
+                heatmap_db_shifted = heatmap_db  # Use unshifted data as fallback
+            
+            # Calculate min/max values safely
+            try:
+                vmin = float(np.nanmin(heatmap_db_shifted))
+                vmax = float(np.nanmax(heatmap_db_shifted))
+                
+                # Handle case where all values are the same
+                if vmin == vmax:
+                    vmax = vmin + 1
+                    
+                logger.debug(f"RangeAzimuthPlot: Value range: {vmin:.2f} to {vmax:.2f}")
+                
+                # Update color mapper
+                self.heatmap.glyph.color_mapper.low = vmin
+                self.heatmap.glyph.color_mapper.high = vmax
+                
+            except Exception as e:
+                logger.error(f"RangeAzimuthPlot: Error calculating value range: {e}")
+                # Use default range
+                self.heatmap.glyph.color_mapper.low = 0
+                self.heatmap.glyph.color_mapper.high = 1
+            
+            # Update data source
+            try:
+                # Ensure axes have valid values
+                if len(azimuth_axis) == 0 or len(range_axis) == 0:
+                    logger.warning("RangeAzimuthPlot: Empty azimuth or range axis")
+                    self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
+                    return
+                
+                # Ensure we have valid bounds
+                x_start = float(azimuth_axis[0])
+                x_end = float(azimuth_axis[-1])
+                y_start = float(range_axis[0])
+                y_end = float(range_axis[-1])
+                
+                # Handle case where start and end are the same
+                if x_start == x_end:
+                    x_end = x_start + 1
+                if y_start == y_end:
+                    y_end = y_start + 1
+                
+                logger.debug(f"RangeAzimuthPlot: Updating data source with bounds: x=[{x_start:.3f}, {x_end:.3f}], y=[{y_start:.3f}, {y_end:.3f}]")
+                
+                self.data_source.data = {
+                    'image': [heatmap_db_shifted],
+                    'x': [x_start],
+                    'y': [y_start],
+                    'dw': [x_end - x_start],
+                    'dh': [y_end - y_start]
+                }
+                
+                logger.debug("RangeAzimuthPlot: Successfully updated data source")
+                
+            except Exception as e:
+                logger.error(f"RangeAzimuthPlot: Error updating data source: {e}")
+                # Fallback to empty data
+                self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
+                
+        except Exception as e:
+            logger.error(f"RangeAzimuthPlot: Unexpected error in update: {e}")
+            # Ensure we don't leave the plot in a broken state
             self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
-            return
-        
-        # Apply fftshift to center the zero azimuth in the middle of the plot
-        # Shift along axis 1 (azimuth axis)
-        heatmap_db_shifted = np.fft.fftshift(heatmap_db, axes=1)
-        
-        vmin = float(np.nanmin(heatmap_db_shifted))
-        vmax = float(np.nanmax(heatmap_db_shifted))
-        if vmin == vmax:
-            vmax = vmin + 1
-        self.heatmap.glyph.color_mapper.low = vmin
-        self.heatmap.glyph.color_mapper.high = vmax
-        self.data_source.data = {
-            'image': [heatmap_db_shifted],
-            'x': [azimuth_axis[0]],
-            'y': [range_axis[0]],
-            'dw': [azimuth_axis[-1] - azimuth_axis[0]],
-            'dh': [range_axis[-1] - range_axis[0]]
-        }
 
 
 class PlotManager:
@@ -485,12 +620,41 @@ class PlotManager:
             return
 
         try:
-            self.scatter_plot.update(radar_data)
+            logger.debug("PlotManager: Starting plot updates")
+            
+            # Update scatter plot
+            try:
+                self.scatter_plot.update(radar_data)
+                logger.debug("PlotManager: Scatter plot updated successfully")
+            except Exception as e:
+                logger.error(f"PlotManager: Error updating scatter plot: {e}")
+            
+            # Update range profile plot if enabled
             if self.scene_config.plot_range_profile:
-                self.range_profile_plot.update(radar_data)
+                try:
+                    self.range_profile_plot.update(radar_data)
+                    logger.debug("PlotManager: Range profile plot updated successfully")
+                except Exception as e:
+                    logger.error(f"PlotManager: Error updating range profile plot: {e}")
+            
+            # Update range-Doppler plot if enabled
             if self.scene_config.plot_range_doppler_heat_map:
-                self.range_doppler_plot.update(radar_data)
+                try:
+                    self.range_doppler_plot.update(radar_data)
+                    logger.debug("PlotManager: Range-Doppler plot updated successfully")
+                except Exception as e:
+                    logger.error(f"PlotManager: Error updating range-Doppler plot: {e}")
+            
+            # Update range-azimuth plot if enabled
             if self.scene_config.plot_range_azimuth_heat_map:
-                self.range_azimuth_plot.update(radar_data)
+                try:
+                    self.range_azimuth_plot.update(radar_data)
+                    logger.debug("PlotManager: Range-azimuth plot updated successfully")
+                except Exception as e:
+                    logger.error(f"PlotManager: Error updating range-azimuth plot: {e}")
+                    
+            logger.debug("PlotManager: All plot updates completed")
+            
         except Exception as e:
-            logger.error(f"Error updating plots: {e}") 
+            logger.error(f"PlotManager: Unexpected error in update: {e}")
+            # Don't let the error propagate and freeze the GUI 
