@@ -247,10 +247,10 @@ class ProfileConfigView(param.Parameterized):
         # Set initial value based on current config
         initial_mode = "Log Magnitude" if getattr(self.config, 'range_profile_mode', 'log_magnitude') == 'log_magnitude' else "Complex"
         self.gui_range_profile_mode = Select(name="Range Profile Mode", options=["Log Magnitude", "Complex"], value=initial_mode, width=200)
-        self.gui_noise_profile = Checkbox(name="Noise Profile", value=getattr(self.config, 'plot_noise_profile', False))
-        self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=getattr(self.config, 'plot_range_azimuth_heat_map', False))
-        self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=getattr(self.config, 'plot_range_doppler_heat_map', False))
-        self.gui_stats_info = Checkbox(name="Statistics Info", value=getattr(self.config, 'plot_statistics', True))
+        #self.gui_noise_profile = Checkbox(name="Noise Profile", value=self.config.plot_noise_profile)
+        #self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=self.config.plot_range_azimuth_heat_map)
+        #self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=self.config.plot_range_doppler_heat_map)
+        #self.gui_stats_info = Checkbox(name="Statistics Info", value=self.config.plot_statistics)
         
         # Analog Monitor
         self.analog_rx_saturation = Checkbox(name="RX Saturation Monitoring", value=False)
@@ -310,10 +310,10 @@ class ProfileConfigView(param.Parameterized):
 
         # Link plot selections to GUI monitor widgets directly
         self.plot_range_profile_cb.param.watch(lambda event: setattr(self.gui_range_profile_mode, 'value', event.new), 'value')
-        self.plot_noise_profile_cb.param.watch(lambda event: setattr(self.gui_noise_profile, 'value', event.new), 'value')
-        self.plot_range_azimuth_cb.param.watch(lambda event: setattr(self.gui_range_azimuth_heat_map, 'value', event.new), 'value')
-        self.plot_range_doppler_cb.param.watch(lambda event: setattr(self.gui_range_doppler_heat_map, 'value', event.new), 'value')
-        self.plot_statistics_cb.param.watch(lambda event: setattr(self.gui_stats_info, 'value', event.new), 'value')
+        #self.plot_noise_profile_cb.param.watch(lambda event: setattr(self.gui_noise_profile, 'value', event.new), 'value')
+        #self.plot_range_azimuth_cb.param.watch(lambda event: setattr(self.gui_range_azimuth_heat_map, 'value', event.new), 'value')
+        #self.plot_range_doppler_cb.param.watch(lambda event: setattr(self.gui_range_doppler_heat_map, 'value', event.new), 'value')
+        #self.plot_statistics_cb.param.watch(lambda event: setattr(self.gui_stats_info, 'value', event.new), 'value')
 
         # Link expert mode widgets to config
         self._link_expert_widgets()
@@ -350,10 +350,10 @@ class ProfileConfigView(param.Parameterized):
         # GUI Monitor
         self.gui_detected_objects.param.watch(self._update_gui_monitor_config, 'value')
         self.gui_range_profile_mode.param.watch(self._update_gui_monitor_config, 'value')
-        self.gui_noise_profile.param.watch(self._update_gui_monitor_config, 'value')
-        self.gui_range_azimuth_heat_map.param.watch(self._update_gui_monitor_config, 'value')
-        self.gui_range_doppler_heat_map.param.watch(self._update_gui_monitor_config, 'value')
-        self.gui_stats_info.param.watch(self._update_gui_monitor_config, 'value')
+        #self.gui_noise_profile.param.watch(self._update_gui_monitor_config, 'value')
+        #self.gui_range_azimuth_heat_map.param.watch(self._update_gui_monitor_config, 'value')
+        #self.gui_range_doppler_heat_map.param.watch(self._update_gui_monitor_config, 'value')
+        #self.gui_stats_info.param.watch(self._update_gui_monitor_config, 'value')
         
         # Analog Monitor
         self.analog_rx_saturation.param.watch(self._update_analog_monitor_config, 'value')
@@ -446,18 +446,22 @@ class ProfileConfigView(param.Parameterized):
                 detected_objects=detected_objects,
                 range_profile_enabled=self.config.plot_range_profile,  # Use the main config setting
                 range_profile_mode="log_magnitude" if self.gui_range_profile_mode.value == "Log Magnitude" else "complex",
-                noise_profile=self.gui_noise_profile.value,
-                range_azimuth_heat_map=self.gui_range_azimuth_heat_map.value,
-                range_doppler_heat_map=self.gui_range_doppler_heat_map.value,
-                stats_info=self.gui_stats_info.value
+                noise_profile=getattr(self, 'gui_noise_profile', None) and self.gui_noise_profile.value or False,
+                range_azimuth_heat_map=getattr(self, 'gui_range_azimuth_heat_map', None) and self.gui_range_azimuth_heat_map.value or False,
+                range_doppler_heat_map=getattr(self, 'gui_range_doppler_heat_map', None) and self.gui_range_doppler_heat_map.value or False,
+                stats_info=getattr(self, 'gui_stats_info', None) and self.gui_stats_info.value or True
             )
             
-            # Also update the main config plot settings to match
+            # Also update the main config plot settings to match (only if widgets exist)
             self.config.range_profile_mode = "log_magnitude" if self.gui_range_profile_mode.value == "Log Magnitude" else "complex"
-            self.config.plot_noise_profile = self.gui_noise_profile.value
-            self.config.plot_range_azimuth_heat_map = self.gui_range_azimuth_heat_map.value
-            self.config.plot_range_doppler_heat_map = self.gui_range_doppler_heat_map.value
-            self.config.plot_statistics = self.gui_stats_info.value
+            if hasattr(self, 'gui_noise_profile') and self.gui_noise_profile is not None:
+                self.config.plot_noise_profile = self.gui_noise_profile.value
+            if hasattr(self, 'gui_range_azimuth_heat_map') and self.gui_range_azimuth_heat_map is not None:
+                self.config.plot_range_azimuth_heat_map = self.gui_range_azimuth_heat_map.value
+            if hasattr(self, 'gui_range_doppler_heat_map') and self.gui_range_doppler_heat_map is not None:
+                self.config.plot_range_doppler_heat_map = self.gui_range_doppler_heat_map.value
+            if hasattr(self, 'gui_stats_info') and self.gui_stats_info is not None:
+                self.config.plot_statistics = self.gui_stats_info.value
             
         except Exception as e:
             logger.error(f"Error updating GUI monitor config: {e}")
