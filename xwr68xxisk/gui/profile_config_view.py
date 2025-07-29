@@ -23,11 +23,15 @@ from ..radar_config_models import RadarConfig, AntennaConfigEnum
 
 pn.extension()
 
+import logging
+logger = logging.getLogger(__name__)
+
 class ProfileConfigView(param.Parameterized):
     """
     A Panel-based view for configuring the RadarConfig (radar profile section of the unified config).
     Now supports 'Expert Mode' for advanced/diagnostic parameters with proper form-based editors.
     """
+
     config = param.ClassSelector(class_=RadarConfig, is_instance=True)
 
     # Widgets for direct binding if not using pn.Param from Pydantic model directly
@@ -103,6 +107,9 @@ class ProfileConfigView(param.Parameterized):
     # Analog Monitor
     analog_rx_saturation = param.ClassSelector(class_=Checkbox)
     analog_sig_img_band = param.ClassSelector(class_=Checkbox)
+    
+    # Trigger Mode Configuration
+    trigger_mode_select = param.ClassSelector(class_=Select)
 
     def __init__(self, config_instance: RadarConfig, **params):
         super().__init__(**params)
@@ -247,14 +254,29 @@ class ProfileConfigView(param.Parameterized):
         # Set initial value based on current config
         initial_mode = "Log Magnitude" if getattr(self.config, 'range_profile_mode', 'log_magnitude') == 'log_magnitude' else "Complex"
         self.gui_range_profile_mode = Select(name="Range Profile Mode", options=["Log Magnitude", "Complex"], value=initial_mode, width=200)
-        self.gui_noise_profile = Checkbox(name="Noise Profile", value=self.config.plot_noise_profile)
-        self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=self.config.plot_range_azimuth_heat_map)
-        self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=self.config.plot_range_doppler_heat_map)
-        self.gui_stats_info = Checkbox(name="Statistics Info", value=self.config.plot_statistics)
+        #self.gui_noise_profile = Checkbox(name="Noise Profile", value=self.config.plot_noise_profile)
+        #self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=self.config.plot_range_azimuth_heat_map)
+        #self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=self.config.plot_range_doppler_heat_map)
+        #self.gui_stats_info = Checkbox(name="Statistics Info", value=self.config.plot_statistics)
         
         # Analog Monitor
         self.analog_rx_saturation = Checkbox(name="RX Saturation Monitoring", value=False)
         self.analog_sig_img_band = Checkbox(name="Signal Image Band Monitoring", value=False)
+        
+        # Trigger Mode Configuration
+        trigger_mode_options = [
+            "Timer-based (0)",
+            "Software (1)", 
+            "Hardware (2)"
+        ]
+        # Get current trigger mode from config, default to 0 (timer-based)
+        current_trigger_mode = getattr(self.config, 'trigger_mode', 0)
+        self.trigger_mode_select = Select(
+            name="Trigger Mode",
+            options=trigger_mode_options,
+            value=trigger_mode_options[current_trigger_mode],
+            width=200
+        )
 
     def _link_widgets_to_config(self):
         # Link top selectors
@@ -343,6 +365,9 @@ class ProfileConfigView(param.Parameterized):
         # Analog Monitor
         self.analog_rx_saturation.param.watch(self._update_analog_monitor_config, 'value')
         self.analog_sig_img_band.param.watch(self._update_analog_monitor_config, 'value')
+        
+        # Trigger Mode
+        self.trigger_mode_select.param.watch(self._update_trigger_mode_config, 'value')
 
     def _update_cfar_config(self, event):
         """Update CFAR configuration from widget values."""
@@ -455,6 +480,24 @@ class ProfileConfigView(param.Parameterized):
         else:
             self.config.analog_monitor.rx_saturation = self.analog_rx_saturation.value
             self.config.analog_monitor.sig_img_band = self.analog_sig_img_band.value
+
+    def _update_trigger_mode_config(self, event):
+        """Update trigger mode configuration from widget values."""
+        # Extract the mode number from the selected option
+        # Options are: "Timer-based (0)", "Software (1)", "Hardware (2)"
+        selected_option = event.new
+        if "(0)" in selected_option:
+            mode = 0
+        elif "(1)" in selected_option:
+            mode = 1
+        elif "(2)" in selected_option:
+            mode = 2
+        else:
+            mode = 0  # Default to timer-based
+            
+        # Update the config
+        self.config.trigger_mode = mode
+        logger.info(f"Trigger mode updated to: {mode} ({selected_option})")
 
     # Callbacks for selector changes
     def _on_antenna_config_change(self, event):
@@ -581,7 +624,13 @@ class ProfileConfigView(param.Parameterized):
             
             # Analog Monitor
             pn.pane.Markdown("### Analog Monitor Configuration"),
-            pn.Row(self.analog_rx_saturation, self.analog_sig_img_band)
+            pn.Row(self.analog_rx_saturation, self.analog_sig_img_band),
+            
+            pn.layout.Divider(),
+            
+            # Trigger Mode Configuration
+            pn.pane.Markdown("### Trigger Mode Configuration"),
+            pn.Row(self.trigger_mode_select)
         )
 
     @pn.depends('expert_mode')

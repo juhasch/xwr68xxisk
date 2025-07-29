@@ -286,14 +286,10 @@ class RadarGUI:
         config_modal_header = pn.Row(
             pn.pane.Markdown('## Sensor Profile'),
             pn.layout.HSpacer(),
-            pn.widgets.Button(name='✕', width=30, align='end'), # This will be self.close_button
-            sizing_mode='stretch_width'
-        )
-        config_modal_buttons = pn.Row(
-            pn.layout.HSpacer(),
             Button(name="Save", button_type="primary", width=100), # This will be self.save_button
             Button(name="Cancel", width=100), # This will be self.cancel_button
-            margin=(20, 0, 0, 0),
+            pn.widgets.Button(name='✕', width=30, align='end'), # This will be self.close_button
+            sizing_mode='stretch_width'
         )
 
         # Instantiate the Pydantic model for the new scene config GUI
@@ -319,7 +315,6 @@ class RadarGUI:
         self.config_modal = pn.Column(
             config_modal_header,
             self.profile_config_view_panel.view,
-            config_modal_buttons,
             visible=False, 
             width=1000, 
             height=900,
@@ -346,9 +341,9 @@ class RadarGUI:
         )
 
         # Get references to modal buttons (adjust indices based on new direct structure)
-        self.close_button = self.config_modal[0][2] # Header row, 3rd element
-        self.save_button = self.config_modal[2][1]  # Buttons row, 1st element
-        self.cancel_button = self.config_modal[2][2] # Buttons row, 2nd element
+        self.close_button = self.config_modal[0][4] # Header row, 5th element (after Save and Cancel)
+        self.save_button = self.config_modal[0][2]  # Header row, 3rd element
+        self.cancel_button = self.config_modal[0][3] # Header row, 4th element
         # self.original_version_info_display is now explicitly referenced
 
         # Initialize clustering and tracking

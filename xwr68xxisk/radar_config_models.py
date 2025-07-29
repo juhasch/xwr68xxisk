@@ -144,6 +144,12 @@ class RadarConfig(BaseModel):
         0.13,
         description="Desired radial velocity resolution in m/s for GUI/scene selection. Not sent to radar as a command."
     )
+    trigger_mode: int = Field(
+        0,
+        ge=0,
+        le=2,
+        description="Trigger mode: 0=timer-based (default), 1=software, 2=hardware"
+    )
     plot_scatter: bool = Field(True, description="Enable Scatter Plot in GUI (not sent to radar)")
     plot_range_profile: bool = Field(True, description="Enable Range Profile plot in GUI (not sent to radar)")
     range_profile_mode: str = Field("log_magnitude", description="Range profile mode: 'log_magnitude' or 'complex'")
