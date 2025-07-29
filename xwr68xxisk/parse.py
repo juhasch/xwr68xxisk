@@ -22,11 +22,13 @@ class RadarData:
         MMWDEMO_OUTPUT_MSG_RANGE_PROFILE (int): TLV type for range profile data
         MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO (int): TLV type for side info
         pc (Tuple[List[float], List[float], List[float], List[float]]): Point cloud data (x,y,z,velocity)
-        adc (np.ndarray): Range profile data
+        adc (np.ndarray): Range profile data (log magnitude)
+        adc_complex (np.ndarray): Complex range profile data (raw complex values)
         side_info (Tuple[List[float], List[float]]): SNR and noise data
         snr (List[float]): Signal-to-noise ratio for each point
         noise (List[float]): Noise level for each point
         range_doppler_heatmap (np.ndarray): Range-Doppler heat map matrix (range bins × Doppler bins)
+        noise_profile (np.ndarray): Noise profile data
     """
     
     # TLV (Type-Length-Value) types
@@ -480,16 +482,62 @@ class RadarData:
         return idx + tlv_length
 
     def _parse_complex_range_profile(self, data: bytes, idx: int, tlv_length: int) -> int:
-        """Parse complex range profile data from TLV."""
-        # Ensure tlv_length is a multiple of 4 (size of uint16)
-        usable_length = tlv_length - (tlv_length % 4)
-        logger.debug(f"usable_length: {usable_length}")
-        if usable_length > 0:
-            logger.debug("Starting to parse complex range profile data")
-            self.adc_complex = np.frombuffer(data[idx:idx+usable_length], dtype=np.uint16)
-        else:
-            logging.warning("Complex range profile data length is not a multiple of uint16 size")
-            self.adc_complex = np.array([], dtype=np.uint16)
+        """Parse complex range profile data from TLV.
+        
+        The complex data format follows the cmplx16ImRe_t structure:
+        - Each complex value is 4 bytes (2 bytes imag + 2 bytes real)
+        - Data represents 0th Doppler bin (stationary objects) for each range bin
+        - Byte order is little-endian
+        
+        Args:
+            data: Raw data bytes
+            idx: Current index in data
+            tlv_length: Length of TLV data in bytes
+            
+        Returns:
+            Updated index after parsing
+        """
+        # Each complex value is 4 bytes (2 bytes imag + 2 bytes real)
+        total_complex_values = tlv_length // 4
+        
+        if tlv_length % 4 != 0:
+            logging.warning("Complex range profile data length is not a multiple of complex value size (4 bytes)")
+            self.adc_complex = np.array([])
+            return idx + tlv_length
+        
+        try:
+            # Create numpy array from raw bytes as int16 (2 bytes per value)
+            complex_data = np.frombuffer(data[idx:idx+tlv_length], dtype=np.int16)
+            
+            # Get number of range bins from configuration
+            num_range_bins = self.config_params.get('rangeBins', 256)
+            
+            # Verify dimensions match the data
+            if total_complex_values == num_range_bins:
+                # Reshape to (num_range_bins, 2) where 2 represents [imag, real]
+                complex_reshaped = complex_data.reshape(num_range_bins, 2)
+                
+                # Convert to complex numbers: imag + j*real
+                # Note: The data format is [imag, real] pairs
+                self.adc_complex = complex_reshaped[:, 0].astype(np.float32) + 1j * complex_reshaped[:, 1].astype(np.float32)
+                
+                logger.debug(f"Parsed complex range profile: {num_range_bins} range bins")
+            else:
+                logging.warning(f"Complex range profile dimensions mismatch. Expected {num_range_bins} complex values but got {total_complex_values} total values.")
+                # Try to use the data as-is if dimensions don't match
+                if len(complex_data) >= 2:
+                    # Reshape to pairs of [imag, real]
+                    num_pairs = len(complex_data) // 2
+                    complex_reshaped = complex_data[:num_pairs*2].reshape(num_pairs, 2)
+                    self.adc_complex = complex_reshaped[:, 0].astype(np.float32) + 1j * complex_reshaped[:, 1].astype(np.float32)
+                    logger.warning(f"Using {num_pairs} complex values from data")
+                else:
+                    self.adc_complex = np.array([])
+                    
+        except Exception as e:
+            logging.error(f"Error processing complex range profile: {e}")
+            self.adc_complex = np.array([])
+        
         return idx + tlv_length
 
     def to_point_cloud(self) -> RadarPointCloud:
@@ -699,35 +747,27 @@ class RadarData:
     def get_complex_range_profile(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Get complex range profile data.
         
+        The complex data represents the raw radar signal at the 0th Doppler bin 
+        (stationary objects) for each range bin, stored as complex numbers.
+        
         Returns:
             Tuple of (range_bins, magnitude, phase) where:
             - range_bins: Array of range bin indices
-            - magnitude: Magnitude of complex range profile
+            - magnitude: Magnitude of complex range profile in dB
             - phase: Phase of complex range profile in radians
         """
-        if self.adc_complex is None:
+        if self.adc_complex is None or len(self.adc_complex) == 0:
             return np.array([]), np.array([]), np.array([])
         
-        # Complex range profile data is stored as alternating real/imaginary parts
-        # Each complex number is 4 bytes (2 bytes real + 2 bytes imaginary)
-        if len(self.adc_complex) % 2 != 0:
-            logger.warning("Complex range profile data length is not even")
-            return np.array([]), np.array([]), np.array([])
-        
-        # Extract real and imaginary parts
-        real_parts = self.adc_complex[::2]  # Even indices
-        imag_parts = self.adc_complex[1::2]  # Odd indices
-        
-        # Convert to complex numbers
-        complex_data = real_parts.astype(np.float32) + 1j * imag_parts.astype(np.float32)
-        
-        # Calculate magnitude and phase
-        magnitude = np.abs(complex_data)
-        phase = np.angle(complex_data)
+        # The adc_complex is already stored as complex numbers from parsing
+        # Calculate magnitude and phase directly
+        magnitude = np.abs(self.adc_complex)
+        phase = np.angle(self.adc_complex)
         
         # Convert magnitude to dB scale
         magnitude_dB = 20 * np.log10(magnitude + 1e-10)
         
+        # Create range bins array
         range_bins = np.arange(len(magnitude_dB))
         
         return range_bins, magnitude_dB, phase
