@@ -142,24 +142,24 @@ class ConfigManager:
         return MainConfig(
             version="1.0",
             radar=RadarConfig(
-                dfe_data_output_mode=DfeDataOutputModeConfig(mode_type=ModeType.FRAME_BASED_CHIRPS),
-                channel_cfg=ChannelConfig(rx_channel_en=15, tx_channel_en=7, cascading=0),
-                adc_cfg=AdcConfig(num_adc_bits=AdcBits.BITS_16, adc_output_fmt=AdcOutputFormat.COMPLEX_FILTERED),
-                adc_buf_cfg=AdcBufConfig(subframe_idx=-1, adc_output_fmt=0, sample_swap=1, chan_interleave=1, chirp_threshold=4),
+                dfe_data_output_mode=DfeDataOutputModeConfig(mode_type=ModeType.FRAME_BASED_CHIRPS).model_dump(),
+                channel_cfg=ChannelConfig(rx_channel_en=15, tx_channel_en=7, cascading=0).model_dump(),
+                adc_cfg=AdcConfig(num_adc_bits=AdcBits.BITS_16, adc_output_fmt=AdcOutputFormat.COMPLEX_FILTERED).model_dump(),
+                adc_buf_cfg=AdcBufConfig(subframe_idx=-1, adc_output_fmt=0, sample_swap=1, chan_interleave=1, chirp_threshold=4).model_dump(),
                 profile_cfg=ProfileConfig(
                     profile_id=0, start_freq=60.0, idle_time=7.0, adc_start_time=3.0, ramp_end_time=24.0,
                     tx_out_power=0, tx_phase_shifter=0, freq_slope_const=166.0, tx_start_time=1.0,
                     num_adc_samples=256, dig_out_sample_rate=12500, hpf_corner_freq1=0, hpf_corner_freq2=0, rx_gain=30.0
-                ),
-                calib_dc_range_sig=CalibDcRangeSigConfig(subframe_idx=-1, enabled=False, negative_bin_idx=-5, positive_bin_idx=8, num_avg_frames=256),
-                clutter_removal=ClutterRemovalConfig(subframe_idx=-1, enabled=False),
-                aoa_fov_cfg=AoaFovConfig(subframe_idx=-1, min_azimuth_deg=-90.0, max_azimuth_deg=90.0, min_elevation_deg=-90.0, max_elevation_deg=90.0),
-                cfar_cfg=CfarConfig(subframe_idx=-1, proc_direction=0, average_mode=2, win_len=8, guard_len=4, noise_div=3, cyclic_mode=0, threshold_scale=15.0, peak_grouping_en=False),
-                multi_obj_beam_forming=MultiObjBeamFormingConfig(subframe_idx=-1, enabled=False, threshold=0.5),
-                gui_monitor=GuiMonitorConfig(detected_objects=1, range_profile_enabled=True, range_profile_mode="log_magnitude", noise_profile=False, range_azimuth_heat_map=False, range_doppler_heat_map=False, stats_info=True),
-                analog_monitor=AnalogMonitorConfig(rx_saturation=False, sig_img_band=False),
-                lvds_stream_cfg=LvdsStreamConfig(subframe_idx=-1, enable_header=False, data_fmt=0, enable_sw=False)
-            ).model_dump(),
+                ).model_dump(),
+                calib_dc_range_sig=CalibDcRangeSigConfig(subframe_idx=-1, enabled=False, negative_bin_idx=-5, positive_bin_idx=8, num_avg_frames=256).model_dump(),
+                clutter_removal=ClutterRemovalConfig(subframe_idx=-1, enabled=False).model_dump(),
+                aoa_fov_cfg=AoaFovConfig(subframe_idx=-1, min_azimuth_deg=-90.0, max_azimuth_deg=90.0, min_elevation_deg=-90.0, max_elevation_deg=90.0).model_dump(),
+                cfar_cfg=CfarConfig(subframe_idx=-1, proc_direction=0, average_mode=2, win_len=8, guard_len=4, noise_div=3, cyclic_mode=0, threshold_scale=15.0, peak_grouping_en=False).model_dump(),
+                multi_obj_beam_forming=MultiObjBeamFormingConfig(subframe_idx=-1, enabled=False, threshold=0.5).model_dump(),
+                gui_monitor=GuiMonitorConfig(detected_objects=1, range_profile_enabled=True, range_profile_mode="log_magnitude", noise_profile=False, range_azimuth_heat_map=False, range_doppler_heat_map=False, stats_info=True).model_dump(),
+                analog_monitor=AnalogMonitorConfig(rx_saturation=False, sig_img_band=False).model_dump(),
+                lvds_stream_cfg=LvdsStreamConfig(subframe_idx=-1, enable_header=False, data_fmt=0, enable_sw=False).model_dump()
+            ),
             clustering=ClusteringConfig(),
             tracking=TrackingConfig(),
             display=DisplayConfig(),
