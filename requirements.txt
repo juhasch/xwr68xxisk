@@ -5,4 +5,4 @@ bokeh>=3.2.0
 colorcet>=3.0.0
 PyYAML>=6.0.0
 pyserial>=3.5
-mmwserial>=0.1.0 
+pydantic>=2.0.0 
