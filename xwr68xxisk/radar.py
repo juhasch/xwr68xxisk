@@ -499,10 +499,19 @@ class RadarConnection:
                 if not ignore_response:
                     response = self._read_cli_response()
                     if response:
-                        if "Done" not in response:
-                            logger.error(f"Error in command '{command}': {response}")
-                            raise RadarConnectionError(f"Configuration error: {response}")
-                        logger.debug(f"Response: {response}")
+                        # Check if response contains "Done" (success)
+                        response_text = ' '.join(response)
+                        if "Done" not in response_text:
+                            # Check if this is an unsupported command error
+                            if "is not recognized as a CLI command" in response_text:
+                                cmd_name = command.split()[0] if command.split() else "unknown"
+                                logger.warning(f"Command '{cmd_name}' is not supported by this firmware version. Skipping command: {command}")
+                                logger.debug(f"Response: {response}")
+                            else:
+                                logger.error(f"Error in command '{command}': {response}")
+                                raise RadarConnectionError(f"Configuration error: {response}")
+                        else:
+                            logger.debug(f"Response: {response}")
         
         if self._detected_cli_port.startswith('/dev/tty.'):
             self.baudrate = 460800
@@ -585,29 +594,76 @@ class RadarConnection:
             return None
             
         try:
-            if packet := self.data_port.read_until(self.MAGIC_WORD):
-                self.total_frames += 1
-                header = self._parse_header(packet)
-                frame = header['frame_number']
+            # First, find the magic word
+            magic_found = False
+            timeout_count = 0
+            max_timeout = 100  # Maximum attempts to find magic word
+            
+            while not magic_found and timeout_count < max_timeout:
+                # Read one byte at a time to find magic word
+                byte_data = self.data_port.read(1)
+                if not byte_data:
+                    timeout_count += 1
+                    continue
                 
-                if self.last_frame is not None:
-                    if frame != self.last_frame + 1:
-                        missed = frame - self.last_frame - 1
-                        self.missed_frames += missed
-                        logger.warning(f"Missed {missed} frames between {self.last_frame} and {frame}")
-                    elif frame <= self.last_frame:
-                        logger.error(f"Invalid frame sequence: {self.last_frame} -> {frame}")
-                        self.invalid_packets += 1
-                
-                self.last_frame = frame
-                
-                payload = np.frombuffer(packet[32:], dtype=np.uint8)
-                
-                return header, payload
-            else:
+                # Check if this byte matches the first byte of magic word
+                if byte_data[0] == self.MAGIC_WORD[0]:
+                    # Read the rest of the magic word
+                    magic_candidate = byte_data + self.data_port.read(self.MAGIC_WORD_LENGTH - 1)
+                    if magic_candidate == self.MAGIC_WORD:
+                        magic_found = True
+                        break
+                    else:
+                        # Not a complete magic word, continue searching
+                        continue
+                timeout_count += 1
+            
+            if not magic_found:
                 self.failed_reads += 1
-                logger.warning("Failed to read packet")
+                logger.warning("Failed to find magic word in packet")
                 return None
+            
+            # Read the header (32 bytes after magic word)
+            header_data = self.data_port.read(32)
+            if len(header_data) != 32:
+                self.failed_reads += 1
+                logger.warning(f"Incomplete header: got {len(header_data)} bytes, expected 32")
+                return None
+            
+            # Parse header
+            header = self._parse_header(header_data)
+            frame = header['frame_number']
+            
+            if self.last_frame is not None:
+                if frame != self.last_frame + 1:
+                    missed = frame - self.last_frame - 1
+                    self.missed_frames += missed
+                    logger.warning(f"Missed {missed} frames between {self.last_frame} and {frame}")
+                elif frame <= self.last_frame:
+                    logger.error(f"Invalid frame sequence: {self.last_frame} -> {frame}")
+                    self.invalid_packets += 1
+            
+            self.last_frame = frame
+            
+            # Read the payload based on total packet length
+            total_packet_len = header['total_packet_len']
+            payload_length = total_packet_len - 32 - self.MAGIC_WORD_LENGTH  # Subtract header and magic word
+            
+            if payload_length < 0:
+                self.failed_reads += 1
+                logger.warning(f"Invalid payload length: {payload_length}")
+                return None
+            
+            payload_data = self.data_port.read(payload_length)
+            if len(payload_data) != payload_length:
+                self.failed_reads += 1
+                logger.warning(f"Incomplete payload: got {len(payload_data)} bytes, expected {payload_length}")
+                return None
+            
+            self.total_frames += 1
+            payload = np.frombuffer(payload_data, dtype=np.uint8)
+            
+            return header, payload
                 
         except Exception as e:
             logger.error(f"Error reading frame: {e}")

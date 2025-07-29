@@ -71,7 +71,7 @@ class RadarData:
         self.snr = []
         self.noise = []
         self.range_doppler_heatmap = None
-        self.range_azimuth_heatmap = None
+        self.azimuth_heatmap = None
         self.noise_profile: Optional[np.ndarray] = None
         self.stats_data = None
         self.temperature_stats_data = None
@@ -86,17 +86,29 @@ class RadarData:
                 return
                 
             header, payload = frame_data
-            if header is not None:
+            if header is not None and payload is not None:
                 self.frame_number = header.get('frame_number')
                 self.num_tlvs = header.get('num_tlvs', 0)  # Changed from num_detected_obj to num_tlvs
+                
+                # Ensure we have valid payload data
+                if len(payload) == 0:
+                    logging.warning("Empty payload received from radar")
+                    return
+                    
                 try:
                     self._parse_tlv_data(payload)
                 except Exception as tlv_error:
                     logging.error(f"Error parsing TLV data: {tlv_error}")
+                    # Ensure azimuth_heatmap is initialized even if parsing fails
+                    if not hasattr(self, 'azimuth_heatmap') or self.azimuth_heatmap is None:
+                        self.azimuth_heatmap = np.array([])
             else:
                 logging.warning("Header information is missing")
         except Exception as e:
             logging.error(f"Error reading radar data: {e}")
+            # Ensure azimuth_heatmap is initialized even if reading fails
+            if not hasattr(self, 'azimuth_heatmap') or self.azimuth_heatmap is None:
+                self.azimuth_heatmap = np.array([])
             return
 
     def _parse_tlv_data(self, data: np.ndarray) -> None:
@@ -106,7 +118,7 @@ class RadarData:
         
         for tlv_idx in range(self.num_tlvs):
             if idx + 8 > len(data_bytes):  # Check if we have enough data to read TLV header
-                logging.warning(f"Insufficient data for TLV header at position {idx}")
+                logging.warning(f"Insufficient data for TLV header at position {idx}, available: {len(data_bytes) - idx} bytes")
                 break
                 
             tlv_type = int.from_bytes(data_bytes[idx:idx+4], byteorder='little')
@@ -117,7 +129,12 @@ class RadarData:
             
             # Ensure we have enough data to process this TLV
             if idx + tlv_length > len(data_bytes):
-                logging.warning(f"Insufficient data for TLV type {tlv_type} with length {tlv_length}")
+                logging.warning(f"Insufficient data for TLV type {tlv_type} with length {tlv_length}, available: {len(data_bytes) - idx} bytes")
+                # Try to process what we can with the available data
+                available_length = len(data_bytes) - idx
+                if available_length > 0:
+                    logger.debug(f"Attempting to process TLV type {tlv_type} with available data: {available_length} bytes")
+                    idx = self._parse_tlv_with_available_data(data_bytes, idx, tlv_type, available_length)
                 break
                 
             if tlv_type == self.MMWDEMO_OUTPUT_MSG_DETECTED_POINTS:
@@ -150,6 +167,27 @@ class RadarData:
             else:
                 logger.debug(f"Skipping unknown TLV type {tlv_type} with length {tlv_length}")
                 idx += tlv_length
+
+    def _parse_tlv_with_available_data(self, data: bytes, idx: int, tlv_type: int, available_length: int) -> int:
+        """Parse TLV data with limited available data.
+        
+        This method is called when there's insufficient data for a complete TLV.
+        It attempts to process what data is available.
+        
+        Args:
+            data: Raw data bytes
+            idx: Current index in data
+            tlv_type: Type of TLV
+            available_length: Length of available data
+            
+        Returns:
+            Updated index after parsing
+        """
+        logger.warning(f"Processing TLV type {tlv_type} with limited data: {available_length} bytes available")
+        
+        # For now, just skip the available data and return
+        # In the future, we could implement partial parsing for specific TLV types
+        return idx + available_length
 
     def _parse_point_cloud(self, data: bytes, idx: int, tlv_length: int) -> int:
         """Parse point cloud data from TLV."""
@@ -301,6 +339,12 @@ class RadarData:
         Returns:
             Updated index after parsing
         """
+        # Check if we have enough data for this TLV
+        if idx + tlv_length > len(data):
+            logging.warning(f"Insufficient data for azimuth heatmap TLV: need {tlv_length} bytes, have {len(data) - idx} bytes")
+            self.azimuth_heatmap = np.array([])
+            return len(data)  # Return end of available data
+        
         # Each complex value is 4 bytes (2 bytes imag + 2 bytes real)
         total_complex_values = tlv_length // 4
         
@@ -328,6 +372,7 @@ class RadarData:
                 
                 # Take magnitude for visualization
                 self.azimuth_heatmap = np.abs(heatmap)
+                logger.debug(f"Successfully parsed azimuth heatmap: {num_range_bins}x{num_virtual_antennas}")
             else:
                 # Try to infer dimensions from the data
                 if total_complex_values % num_range_bins == 0:
@@ -338,9 +383,25 @@ class RadarData:
                     heatmap_complex = complex_data.reshape(num_range_bins, inferred_antennas, 2)
                     heatmap = heatmap_complex[:, :, 0].astype(np.float32) + 1j * heatmap_complex[:, :, 1].astype(np.float32)
                     self.azimuth_heatmap = np.abs(heatmap)
+                    logger.debug(f"Successfully parsed azimuth heatmap with inferred dimensions: {num_range_bins}x{inferred_antennas}")
                 else:
                     logging.warning(f"Azimuth heatmap dimensions mismatch. Expected {num_range_bins}x{num_virtual_antennas} complex values but got {total_complex_values} total values.")
-                    self.azimuth_heatmap = np.array([])
+                    # Try to create a reasonable heatmap anyway
+                    if total_complex_values > 0:
+                        # Try to make it square-ish
+                        side_length = int(np.sqrt(total_complex_values))
+                        if side_length * side_length == total_complex_values:
+                            # Perfect square
+                            heatmap_complex = complex_data.reshape(side_length, side_length, 2)
+                            heatmap = heatmap_complex[:, :, 0].astype(np.float32) + 1j * heatmap_complex[:, :, 1].astype(np.float32)
+                            self.azimuth_heatmap = np.abs(heatmap)
+                            logger.warning(f"Created square azimuth heatmap: {side_length}x{side_length}")
+                        else:
+                            # Not a perfect square, use as 1D array
+                            self.azimuth_heatmap = np.array([])
+                            logger.warning(f"Could not create reasonable azimuth heatmap from {total_complex_values} complex values")
+                    else:
+                        self.azimuth_heatmap = np.array([])
         except Exception as e:
             logging.error(f"Error processing azimuth heatmap: {e}")
             self.azimuth_heatmap = np.array([])
@@ -678,7 +739,12 @@ class RadarData:
             - 1D numpy array of range values in meters
             - 1D numpy array of azimuth values in degrees
         """
-        if self.azimuth_heatmap is None:
+        # Safety check for azimuth_heatmap attribute
+        if not hasattr(self, 'azimuth_heatmap') or self.azimuth_heatmap is None:
+            return np.array([]), np.array([]), np.array([])
+        
+        # Check if azimuth_heatmap is empty or has invalid shape
+        if len(self.azimuth_heatmap) == 0 or self.azimuth_heatmap.shape[0] == 0:
             return np.array([]), np.array([]), np.array([])
             
         # Get radar parameters - use actual calculated values from config
@@ -690,6 +756,10 @@ class RadarData:
             range_resolution = 0.044  # Default from profile
         
         # The azimuth heatmap is range_bins × num_virtual_antennas
+        if len(self.azimuth_heatmap.shape) < 2:
+            logger.warning("azimuth_heatmap is not 2D, returning empty arrays")
+            return np.array([]), np.array([]), np.array([])
+            
         num_virtual_antennas = self.azimuth_heatmap.shape[1]
         
         # Create range axis using actual range resolution
