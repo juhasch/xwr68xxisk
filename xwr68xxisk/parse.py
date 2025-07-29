@@ -304,7 +304,7 @@ class RadarData:
             
             # Get dimensions from radar configuration
             num_range_bins = self.config_params.get('rangeBins', 256)  # Default from config files
-            num_doppler_bins = self.config_params.get('num_doppler_bins') # Default from config files
+            num_doppler_bins = self.config_params.get('num_doppler_bins', 32)  # Default to 32 if not found
             
             logger.debug(f"num_range_bins: {num_range_bins}, num_doppler_bins: {num_doppler_bins}")
 
@@ -312,11 +312,27 @@ class RadarData:
             if total_bins == num_range_bins * num_doppler_bins:
                 # Reshape using actual dimensions
                 self.range_doppler_heatmap = heatmap.reshape(num_range_bins, num_doppler_bins)
+                logger.debug(f"Successfully parsed range-Doppler heatmap: {num_range_bins}x{num_doppler_bins}")
             else:
-                # Log warning and use square matrix as fallback
+                # Log warning and try to infer dimensions
                 logging.warning(f"Range-Doppler heatmap dimensions mismatch. Expected {num_range_bins}x{num_doppler_bins} bins but got {total_bins} total bins.")
-                dim = int(np.sqrt(total_bins))
-                self.range_doppler_heatmap = heatmap.reshape(dim, -1)
+                
+                # Try to infer dimensions from the data
+                if total_bins % num_range_bins == 0:
+                    inferred_doppler_bins = total_bins // num_range_bins
+                    logging.info(f"Inferred {inferred_doppler_bins} Doppler bins from data (expected {num_doppler_bins})")
+                    self.range_doppler_heatmap = heatmap.reshape(num_range_bins, inferred_doppler_bins)
+                else:
+                    # Use square matrix as fallback
+                    dim = int(np.sqrt(total_bins))
+                    if dim * dim == total_bins:
+                        self.range_doppler_heatmap = heatmap.reshape(dim, dim)
+                        logging.warning(f"Using square heatmap: {dim}x{dim}")
+                    else:
+                        # Last resort: use as 1D array
+                        self.range_doppler_heatmap = heatmap.reshape(1, -1)
+                        logging.warning(f"Using 1D heatmap: 1x{total_bins}")
+                        
         except Exception as e:
             logging.error(f"Error processing range-Doppler heatmap: {e}")
             self.range_doppler_heatmap = np.array([], dtype=np.uint16)
@@ -704,6 +720,11 @@ class RadarData:
         """
         if self.range_doppler_heatmap is None:
             return np.array([]), np.array([]), np.array([])
+        
+        # Check if heatmap has valid shape
+        if len(self.range_doppler_heatmap.shape) != 2:
+            logger.warning(f"Range-Doppler heatmap has invalid shape: {self.range_doppler_heatmap.shape}")
+            return np.array([]), np.array([]), np.array([])
             
         # Get radar parameters
         num_range_bins = self.config_params.get('rangeBins', 256)
@@ -726,9 +747,18 @@ class RadarData:
         
         logger.debug(f"Range-Doppler heatmap: range_axis from 0 to {range_axis[-1]:.3f} m, velocity_axis from {velocity_axis[0]:.3f} to {velocity_axis[-1]:.3f} m/s")
         
+        # Check for invalid data
+        if np.any(np.isnan(self.range_doppler_heatmap)) or np.any(np.isinf(self.range_doppler_heatmap)):
+            logger.warning("Range-Doppler heatmap contains NaN or Inf values")
+            return np.array([]), np.array([]), np.array([])
+        
         # Convert heatmap values to dB (assuming they are linear magnitude)
-        heatmap_db = 20 * np.log10(self.range_doppler_heatmap + 1)  # Add 1 to avoid log(0)
-        return heatmap_db, range_axis, velocity_axis
+        try:
+            heatmap_db = 20 * np.log10(self.range_doppler_heatmap.astype(np.float32) + 1)  # Add 1 to avoid log(0)
+            return heatmap_db, range_axis, velocity_axis
+        except Exception as e:
+            logger.error(f"Error converting range-Doppler heatmap to dB: {e}")
+            return np.array([]), np.array([]), np.array([])
 
     def get_range_azimuth_heatmap(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Get the range-azimuth heatmap with proper scaling and axes.
