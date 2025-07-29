@@ -124,6 +124,7 @@ radar:
   radial_velocity_resolution_ms: 0.13
   range_profile_mode: complex
   range_resolution_m: 0.044
+  trigger_mode: 0
 recording:
   buffer_size: 1000
   directory: recordings

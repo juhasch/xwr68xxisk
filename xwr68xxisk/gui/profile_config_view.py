@@ -17,14 +17,7 @@ from ..radar_config_models import RadarConfig, AntennaConfigEnum, GuiMonitorConf
 # Initialize logger
 logger = logging.getLogger(__name__)
 
-# Assuming radar_config_models.py is accessible in the PYTHONPATH
-# Adjust import path if necessary, e.g., from ..radar_config_models import ...
-from ..radar_config_models import RadarConfig, AntennaConfigEnum
-
 pn.extension()
-
-import logging
-logger = logging.getLogger(__name__)
 
 class ProfileConfigView(param.Parameterized):
     """
@@ -254,10 +247,10 @@ class ProfileConfigView(param.Parameterized):
         # Set initial value based on current config
         initial_mode = "Log Magnitude" if getattr(self.config, 'range_profile_mode', 'log_magnitude') == 'log_magnitude' else "Complex"
         self.gui_range_profile_mode = Select(name="Range Profile Mode", options=["Log Magnitude", "Complex"], value=initial_mode, width=200)
-        #self.gui_noise_profile = Checkbox(name="Noise Profile", value=self.config.plot_noise_profile)
-        #self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=self.config.plot_range_azimuth_heat_map)
-        #self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=self.config.plot_range_doppler_heat_map)
-        #self.gui_stats_info = Checkbox(name="Statistics Info", value=self.config.plot_statistics)
+        self.gui_noise_profile = Checkbox(name="Noise Profile", value=getattr(self.config, 'plot_noise_profile', False))
+        self.gui_range_azimuth_heat_map = Checkbox(name="Range Azimuth Heat Map", value=getattr(self.config, 'plot_range_azimuth_heat_map', False))
+        self.gui_range_doppler_heat_map = Checkbox(name="Range Doppler Heat Map", value=getattr(self.config, 'plot_range_doppler_heat_map', False))
+        self.gui_stats_info = Checkbox(name="Statistics Info", value=getattr(self.config, 'plot_statistics', True))
         
         # Analog Monitor
         self.analog_rx_saturation = Checkbox(name="RX Saturation Monitoring", value=False)
