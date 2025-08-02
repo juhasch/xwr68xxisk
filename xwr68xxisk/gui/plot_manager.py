@@ -264,7 +264,7 @@ class RangeProfilePlot(BasePlot):
             
             # Update range profile data
             if show_complex and has_complex_data:
-                # Use complex range profile data - plot log magnitude
+                # Use complex range profile data - plot log magnitude (with averaging)
                 range_bins, magnitude_dB, phase = radar_data.get_complex_range_profile()
                 
                 if len(range_bins) > 0 and len(magnitude_dB) > 0:
@@ -283,7 +283,8 @@ class RangeProfilePlot(BasePlot):
                     
             elif has_regular_data:
                 # Use regular range profile data
-                magnitude_data = 20 * np.log10(np.abs(radar_data.adc.astype(np.float32)) + 1e-9)
+                magnitude_data = radar_data.adc.astype(np.float32) # Test to see if this works
+                #magnitude_data = 20 * np.log10(np.abs(radar_data.adc.astype(np.float32)) + 1e-9)
                 range_axis = self._get_range_axis(radar_data, len(magnitude_data))
                 
                 if len(range_axis) > 0 and len(magnitude_data) > 0:

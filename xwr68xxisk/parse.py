@@ -42,6 +42,10 @@ class RadarData:
     MMWDEMO_OUTPUT_MSG_AZIMUT_ELEVATION_STATIC_HEAT_MAP = 8
     MMWDEMO_OUTPUT_MSG_TEMPERATURE_STATS = 9
     MMWDEMO_OUTPUT_MSG_RANGE_PROFILE_COMPLEX = 10
+    
+    # Class-level buffer for averaging complex range profile data
+    _complex_magnitude_buffer = []
+    _max_buffer_size = 10
   
     def __init__(self, radar_connection=None, config_params: Dict[str, Any] = None):
         """Initialize RadarData parser.
@@ -846,15 +850,16 @@ class RadarData:
         return range_bins, noise_dB
     
     def get_complex_range_profile(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Get complex range profile data.
+        """Get complex range profile data with averaging over the last 10 frames.
         
         The complex data represents the raw radar signal at the 0th Doppler bin 
         (stationary objects) for each range bin, stored as complex numbers.
+        The magnitude data is averaged over the last 10 frames to reduce noise.
         
         Returns:
             Tuple of (range_bins, magnitude, phase) where:
             - range_bins: Array of range bin indices
-            - magnitude: Magnitude of complex range profile in dB
+            - magnitude: Averaged magnitude of complex range profile in dB
             - phase: Phase of complex range profile in radians
         """
         if self.adc_complex is None or len(self.adc_complex) == 0:
@@ -868,10 +873,25 @@ class RadarData:
         # Convert magnitude to dB scale
         magnitude_dB = 20 * np.log10(magnitude + 1e-10)
         
-        # Create range bins array
-        range_bins = np.arange(len(magnitude_dB))
+        # Add current magnitude data to class-level buffer
+        if len(magnitude_dB) > 0:
+            RadarData._complex_magnitude_buffer.append(magnitude_dB.copy())
+            # Keep only the last max_buffer_size frames
+            if len(RadarData._complex_magnitude_buffer) > RadarData._max_buffer_size:
+                RadarData._complex_magnitude_buffer.pop(0)
         
-        return range_bins, magnitude_dB, phase
+        # Average over the buffer if we have data
+        if len(RadarData._complex_magnitude_buffer) > 0:
+            # Stack all magnitude arrays and compute mean
+            stacked_magnitudes = np.stack(RadarData._complex_magnitude_buffer)
+            averaged_magnitude = np.mean(stacked_magnitudes, axis=0)
+        else:
+            averaged_magnitude = magnitude_dB
+        
+        # Create range bins array
+        range_bins = np.arange(len(averaged_magnitude))
+        
+        return range_bins, averaged_magnitude, phase
 
 
 class RadarDataIterator:
