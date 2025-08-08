@@ -469,7 +469,7 @@ class RadarConnection:
             if line.startswith('frameCfg'):
                 self.frame_period = self.radar_params['framePeriod']
                 parts = line.split()
-                parts[5] = str(int(self.frame_period))
+                parts[4] = str(int(self.frame_period))  # Frame period is at index 4
                 line = ' '.join(parts)
 
             if line.startswith('multiObjBeamForming'):

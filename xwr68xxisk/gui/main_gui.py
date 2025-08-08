@@ -11,7 +11,15 @@ import os
 import logging
 import time
 import warnings
+import threading
+import queue
 from datetime import datetime
+from typing import Optional, Dict, Any
+from pathlib import Path
+import sys
+
+# Add the parent directory to the path to import xwr68xxisk modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Suppress Bokeh document warnings
 warnings.filterwarnings("ignore", message=".*Dropping a patch because it contains a previously known reference.*")
@@ -409,9 +417,15 @@ class RadarGUI:
         # Create layout
         self.layout = self.create_layout()
         
-        # Initialize periodic callback (disabled by default)
-        self.periodic_callback = None
+        # Initialize event-driven data processing
+        self.data_thread = None
+        self.data_queue = queue.Queue()
+        self.stop_data_thread = threading.Event()
+        self.radar_data = None
         self.is_running = False
+        
+        # Set up event-driven updates
+        self._setup_event_driven_updates()
         
         # Set initial configuration text
         # self.config_text.value = "# Connect to sensor to load profile" # Old, ProfileConfigView handles its defaults
@@ -672,18 +686,22 @@ class RadarGUI:
             
             self._save_current_config()
             
-            # Instead of periodic callback, schedule the first update
+            # Start event-driven data monitoring
             self.is_running = True
-            pn.state.onload(self.update_plot)
+            self._start_data_monitoring()
             self.start_button.button_type = 'success'
             self.start_button.name = 'Running'
             self.start_button.disabled = True
     
     def _stop_callback(self, event):
-        """Stop periodic updates."""
+        """Stop event-driven updates."""
         if self.is_running:
             self.start_button.disabled = False
             self.stop_button.disabled = True
+            
+            # Stop data monitoring thread
+            self._stop_data_monitoring()
+            
             if self.radar.is_connected():
                 logger.info("Stopping sensor...")
                 self.radar.stop()
@@ -898,35 +916,123 @@ class RadarGUI:
         
         return pn.pane.Bokeh(p)
     
-    def update_plot(self):
+    def _setup_event_driven_updates(self):
         """
-        Update the plot with new radar data.
+        Set up event-driven plot updates using a background thread.
         
-        This method retrieves the next point cloud from the radar,
-        processes it and updates the visualization. It handles clustering
-        and tracking if enabled, and records data if recording is active.
-        
-        The method is called periodically when the radar is running.
-        
-        Returns
-        -------
-        None
-        
-        Notes
-        -----
-        This method schedules itself to run again if the radar is still running.
+        This method replaces the periodic callback approach with a more
+        efficient event-driven system that only updates when new data arrives.
         """
-        if not self.is_running or self.radar_data is None:
+        # Set up a callback that checks the queue periodically
+        def check_data_queue():
+            """Callback that checks for new radar data in the queue."""
+            try:
+                # Process all available data in the queue
+                while not self.data_queue.empty():
+                    radar_data_obj = self.data_queue.get_nowait()
+                    self._process_radar_data(radar_data_obj)
+                
+                # Schedule next check if still running
+                if self.is_running:
+                    pn.state.add_periodic_callback(check_data_queue, period=100, count=1)
+            except Exception as e:
+                logger.error(f"Error in data processing callback: {e}")
+        
+        # Store the callback for later use
+        self._data_callback = check_data_queue
+
+    def _start_data_monitoring(self):
+        """
+        Start the background thread that monitors for new radar data.
+        
+        This thread continuously reads radar data and puts it in a queue
+        for the GUI thread to process. The GUI thread checks the queue
+        periodically using a callback.
+        """
+        if self.data_thread is not None and self.data_thread.is_alive():
+            return
+            
+        self.stop_data_thread.clear()
+        
+        def data_monitor_thread():
+            """
+            Background thread that monitors for new radar data.
+            
+            This thread continuously reads from the radar and puts data
+            in a queue for the GUI thread to process.
+            """
+            logger.info("Starting radar data monitoring thread")
+            
+            try:
+                while not self.stop_data_thread.is_set() and self.is_running:
+                    if self.radar_data is None:
+                        time.sleep(0.01)  # Short sleep if no data source
+                        continue
+                        
+                    try:
+                        # Get next radar data frame
+                        radar_data_obj = next(iter(self.radar_data))
+                        
+                        if radar_data_obj is not None:
+                            # Put data in queue for GUI thread to process
+                            self.data_queue.put(radar_data_obj)
+                        
+                        # Small sleep to prevent excessive CPU usage
+                        time.sleep(0.001)  # 1ms sleep
+                        
+                    except StopIteration:
+                        logger.warning("No more radar data available")
+                        self.stop_data_thread.set()
+                        break
+                    except Exception as e:
+                        logger.error(f"Error in data monitoring thread: {e}")
+                        time.sleep(0.1)  # Longer sleep on error
+                        
+            except Exception as e:
+                logger.error(f"Fatal error in data monitoring thread: {e}")
+            finally:
+                logger.info("Radar data monitoring thread stopped")
+        
+        self.data_thread = threading.Thread(target=data_monitor_thread, daemon=True)
+        self.data_thread.start()
+        
+        # Start the periodic callback to check the queue
+        if self.is_running:
+            pn.state.add_periodic_callback(self._data_callback, period=100, count=1)
+
+    def _stop_data_monitoring(self):
+        """
+        Stop the background thread that monitors for new radar data.
+        """
+        # Stop the background thread
+        if self.data_thread is not None:
+            self.stop_data_thread.set()
+            self.data_thread.join(timeout=1.0)
+            self.data_thread = None
+        
+        # Clear the queue to prevent processing stale data
+        while not self.data_queue.empty():
+            try:
+                self.data_queue.get_nowait()
+            except:
+                pass
+
+    def _process_radar_data(self, radar_data_obj):
+        """
+        Process radar data and update the visualization.
+        
+        This method is called when new radar data is available and
+        handles all the processing and visualization updates.
+        
+        Parameters
+        ----------
+        radar_data_obj : RadarData
+            The radar data object to process
+        """
+        if radar_data_obj is None:
             return
             
         try:
-            radar_data_obj = next(iter(self.radar_data))
-            
-            if radar_data_obj is None:
-                if self.is_running:
-                    pn.state.add_periodic_callback(self.update_plot, period=10, count=1)
-                return
-            
             point_cloud = radar_data_obj.to_point_cloud()
             
             empty_data = {'x': [], 'y': [], 'velocity': [], 'size': []}
@@ -937,9 +1043,6 @@ class RadarGUI:
                 self.data_source.data = empty_data
                 self.cluster_source.data = empty_cluster_data
                 self.track_source.data = empty_track_data
-                
-                if self.is_running:
-                    pn.state.add_periodic_callback(self.update_plot, period=10, count=1)
                 return
                 
             try:
@@ -993,18 +1096,18 @@ class RadarGUI:
                 self.cluster_source.data = empty_cluster_data
                 self.track_source.data = empty_track_data
 
-            if self.is_running:
-                pn.state.add_periodic_callback(self.update_plot, period=10, count=1)
-
-        except StopIteration:
-            logger.warning("No more radar data available")
-            self._stop_callback(None)
         except Exception as e:
-            logger.error(f"Error updating plot: {e}")
-            self.data_source.data = {'x': [], 'y': [], 'velocity': [], 'size': []}
-            self.cluster_source.data = {'x': [], 'y': [], 'size': [], 'cluster_id': []}
-            self.track_source.data = {'x': [], 'y': [], 'track_id': [], 'vx': [], 'vy': [], 'history_x': [], 'history_y': []}
-            self._stop_callback(None)
+            logger.error(f"Error processing radar data: {e}")
+
+    def update_plot(self):
+        """
+        Legacy method for backward compatibility.
+        
+        This method is kept for compatibility but the actual
+        plot updates are now handled by the event-driven system.
+        """
+        # This method is now deprecated in favor of the event-driven approach
+        pass
     
     def _process_clustering_tracking(self, point_cloud):
         """
@@ -1251,6 +1354,13 @@ class RadarGUI:
         each cleanup step independently to ensure maximum cleanup success.
         """
         logger.info("Performing cleanup...")
+        
+        # Stop data monitoring thread if running
+        try:
+            logger.info("Stopping data monitoring...")
+            self._stop_data_monitoring()
+        except Exception as e:
+            logger.error(f"Error stopping data monitoring during cleanup: {e}")
         
         if self.is_running:
             try:
