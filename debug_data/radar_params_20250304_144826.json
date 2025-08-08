@@ -1,0 +1,11 @@
+{
+    "rxAnt": 4,
+    "txAnt": 2,
+    "samples": 256,
+    "sampleRate": 5209,
+    "slope": 70.0,
+    "chirpsPerFrame": 32,
+    "rangeBins": 256,
+    "rangeStep": 0.021801060267857143,
+    "maxRange": 5.581071428571429
+}

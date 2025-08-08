@@ -35,14 +35,6 @@ def start_gui(args):
     )
 
 
-def start_dora(args):
-    """Start the dora-rs node interface."""
-    # Import dora-related modules only when needed
-    from .doranode import start_dora_node
-    # Pass the name parameter to start_dora_node
-    start_dora_node(name=args.name)
-
-
 def validate_serial(value):
     """Validate serial number format (8 hexadecimal characters)."""
     if not re.match(r'^[0-9A-F]{8}$', value):
@@ -78,12 +70,6 @@ def main():
     record_parser.add_argument('--profile', default=os.path.join('configs', 'user_profile.cfg'),
                            help='Path to the radar profile configuration file')
     record_parser.set_defaults(func=lambda args: record_main(args.serial_number, args.profile))
-
-    # Dora subcommand
-    dora_parser = subparsers.add_parser('dora', help='Start the dora-rs node interface')
-    dora_parser.add_argument('--name', type=str, required=True,
-                           help='Name of the dora node')
-    dora_parser.set_defaults(func=start_dora)
 
     args = parser.parse_args()
 

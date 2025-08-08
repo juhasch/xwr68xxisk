@@ -10,7 +10,6 @@ authors = [
 license = { text = "MIT" }
 
 dependencies = [
-    "dora-rs >= 0.3.6",
     "numpy < 2.0.0",
     "pyarrow >= 5.0.0",
     "pydantic>=2.10.6",
@@ -18,7 +17,7 @@ dependencies = [
     "bokeh >= 3.5.0",
     "colorcet >= 3.0.0",
     "holoviews >= 1.16.0",
-    "pypcd >= 0.2.0",
+#    "pypcd >= 0.2.0",
     "opencv-python",
     "scikit-learn",
     "filterpy",

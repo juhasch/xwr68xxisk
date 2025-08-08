@@ -1,0 +1,74 @@
+# test it
+
+#!/usr/bin/env python3
+"""Test script for mmwserial UDP reader."""
+
+"""
+
+{'rxAnt': 4, 'txAnt': 4, 'samples': 256, 'sampleRate': 30000, 'slope': 8.883, 'chirpsPerFrame': 768, 'compMethod': 0, 'compRatio': 0.5, 'rangeBinsPerBlock': 8, 'procChain': 1, 'crcType': 1, 'rangeBins': 128, 'rangeStep': 1.9788500506585613, 'maxRange': 253.29280648429585, 'achievedDcmpratio': 0.5, 'pktsPerChirp': 1, 'pktsPerFrame': 768, 'pktLen': 1024}
+
+"""
+
+import time
+import logging
+import socket
+from mmwserial import UDPReader
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+"""Main test function."""
+# Create UDP socket for sending test data
+interface = "0.0.0.0"
+port = 8080
+frame_size = 1024
+
+
+def getUint32(data):
+    """Convert 4 bytes to a 32-bit unsigned integer."""
+    return (data[0] +
+            data[1]*256 +
+            data[2]*65536 +
+            data[3]*16777216)
+
+# Create reader instance
+logger.info(f"Opening UDP reader on {interface}:{port}")
+
+try:
+    reader = UDPReader(interface, port, frame_size, timeout_ms=1000)
+    logger.info("Successfully created reader")
+    
+    # Send some test frames
+    chirpsPerFrame = 768
+    
+    # Read frames
+    logger.info("Reading frames...")
+
+    chirp_number_old = 0
+
+    for i in range(2):
+        frames = reader.read_frames(chirpsPerFrame)
+        
+        # Print results
+        logger.info(f"\nReceived {len(frames)} frames:")
+        data = frames[0]
+        sequence_number = getUint32(data[0:4])
+        frame_number = getUint32(data[4:8])
+        chirp_number = getUint32(data[8:12])
+        logger.info(f"Sequence number: {sequence_number}")
+        logger.info(f"Frame number: {frame_number}")
+        logger.info(f"Chirp number: {chirp_number}")
+
+        if chirp_number != chirp_number_old:
+            logger.info(f"Chirp number changed: {chirp_number - chirp_number_old}")
+            chirp_number_old = chirp_number
+        
+    # now save the last received frames to a file
+    for i, frame in enumerate(frames):
+        with open(f"last_frames_{i}.bin", "wb") as f:
+            f.write(frame)
+
+except Exception as e:
+    logger.error(f"Error: {e}")
+
