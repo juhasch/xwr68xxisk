@@ -3,6 +3,7 @@ import time
 import numpy as np
 import os
 import logging
+import struct
 from datetime import datetime
 from xwr68xxisk.radar import RadarConnection
 from xwr68xxisk.parse import RadarData
@@ -11,103 +12,159 @@ from xwr68xxisk.parse import RadarData
 logging.basicConfig(level=logging.DEBUG)
 
 class RobustFrameTester:
-    """Test the improved read_frame method with actual frame parsing."""
+    """Test robust frame reading with proper TLV parsing."""
     
-    def __init__(self, output_dir="robust_frame_test"):
-        self.output_dir = output_dir
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Statistics
+    def __init__(self, config_file: str):
+        self.config_file = config_file
+        self.radar = None
         self.frames_received = 0
         self.frames_parsed = 0
         self.frames_failed = 0
-        self.start_time = None
+        self.last_frame_time = None
         
-    def test_robust_frame_reading(self, config_path, serial_number=None):
-        """Test the improved read_frame method."""
-        radar = RadarConnection()
+    def run_test(self, duration: float = 5.0):
+        """Run the robust frame reading test."""
         print("Connecting to radar...")
-        radar.connect(config_path, serial_number=serial_number)
-        print("Configuring and starting radar...")
-        radar.configure_and_start()
-        print("Radar started. Testing robust frame reading...")
-        print(f"Using baudrate: {radar.data_port_baudrate}")
-        
-        self.start_time = time.time()
+        self.radar = RadarConnection()
         
         try:
-            frame_count = 0
-            while frame_count < 500:  # Test 50 frames
-                result = radar.read_frame()
-                if result is not None:
-                    header, payload = result
-                    frame_count += 1
-                    self.frames_received += 1
+            self.radar.connect(self.config_file)
+            print("Configuring and starting radar...")
+            self.radar.configure_and_start()
+            print("Radar started. Testing robust frame reading...")
+            print(f"Using baudrate: {self.radar.data_port_baudrate}")
+            
+            start_time = time.time()
+            last_stats_time = start_time
+            
+            while time.time() - start_time < duration:
+                try:
+                    # Read frame using the robust read_frame method
+                    frame_data = self.radar.read_frame()
                     
-                    print(f"\n📦 Frames received {frame_count}:")
-                    print(f"   Header: {header}")
-                    print(f"   Payload size: {len(payload)} bytes")
-                    #print(f"   First 16 bytes: {bytes(payload[:16]).hex()}")
-                    continue
-                    # Try to parse the frame
-                    try:
-                        radar_data = RadarData()
-                        radar_data.parse_frame(payload)
+                    if frame_data is None:
+                        continue
                         
-                        if radar_data.point_cloud is not None:
-                            print(f"   ✅ Parsed successfully!")
-                            print(f"   Points: {len(radar_data.point_cloud)}")
-                            if len(radar_data.point_cloud) > 0:
-                                first_point = radar_data.point_cloud[0]
-                                print(f"   First point: x={first_point[0]:.2f}m, y={first_point[1]:.2f}m, z={first_point[2]:.2f}m")
-                            self.frames_parsed += 1
-                        else:
-                            print(f"   ⚠️  No point cloud data")
-                            self.frames_failed += 1
-                            
-                    except Exception as e:
-                        print(f"   ❌ Parse error: {e}")
+                    header, payload = frame_data
+                    if header is None or payload is None:
+                        continue
+                    
+                    self.frames_received += 1
+                    current_time = time.time()
+                    
+                    # Calculate time since last frame
+                    if self.last_frame_time is not None:
+                        time_since_last = current_time - self.last_frame_time
+                    else:
+                        time_since_last = 0.0
+                    
+                    self.last_frame_time = current_time
+                    
+                    # Parse the frame using the proper RadarData class
+                    try:
+                        # Create RadarData object with the current frame
+                        radar_data = RadarData()
+                        radar_data.frame_number = header.get('frame_number')
+                        radar_data.num_tlvs = header.get('num_tlvs', 0)
+                        radar_data.config_params = self.radar.radar_params
+                        
+                        # Parse TLV data using the existing parse.py implementation
+                        radar_data._parse_tlv_data(payload)
+                        
+                        # Display frame information
+                        print(f"\n📦 Frames received {self.frames_received}:")
+                        print(f"   Header: {header}")
+                        print(f"   Payload size: {len(payload)} bytes")
+#                        print(f"   Time since last frame: {time_since_last:.3f}s")
+                        
+                        # Display parsed TLV data
+#                        print(f"   ✅ TLV parsing successful!")
+#                        print(f"   Number of TLVs: {radar_data.num_tlvs}")
+                        
+                        # Display point cloud data if available
+                        # if radar_data.pc and len(radar_data.pc[0]) > 0:
+                        #     x, y, z, v = radar_data.pc
+                        #     print(f"   Point cloud: {len(x)} points")
+                        #     if len(x) > 0:
+                        #         print(f"   First 3 points:")
+                        #         for i in range(min(3, len(x))):
+                        #             print(f"     Point {i+1}: x={x[i]:.2f}m, y={y[i]:.2f}m, z={z[i]:.2f}m, v={v[i]:.2f}m/s")
+                        
+                        # Display range profile data if available
+                        if radar_data.adc is not None and len(radar_data.adc) > 0:
+                            print(f"   Range profile: {len(radar_data.adc)} bins")
+                            print(f"   Range values: min={radar_data.adc.min()}, max={radar_data.adc.max()}, mean={radar_data.adc.mean():.2f}")
+                        
+                        # Display stats data if available
+                        if radar_data.stats_data is not None:
+                            print(f"   Stats data available: {len(radar_data.stats_data)} bytes")
+                        
+                        # Display temperature stats if available
+                        if radar_data.temperature_stats_data is not None:
+                            print(f"   Temperature stats available: {len(radar_data.temperature_stats_data)} bytes")
+                        
+                        self.frames_parsed += 1
+                        
+                    except Exception as parse_error:
+                        print(f"   ❌ TLV parse error: {parse_error}")
                         self.frames_failed += 1
                     
-                    print(f"   Statistics: received={self.frames_received}, parsed={self.frames_parsed}, failed={self.frames_failed}")
+                    # Print statistics every 10 seconds
+                    if current_time - last_stats_time >= 10.0:
+                        elapsed = current_time - start_time
+                        frame_rate = self.frames_received / elapsed if elapsed > 0 else 0
+                        success_rate = (self.frames_parsed / self.frames_received * 100) if self.frames_received > 0 else 0
+                        
+                        print(f"\n📊 Statistics: received={self.frames_received}, parsed={self.frames_parsed}, failed={self.frames_failed}")
+                        print(f"   Frame rate: {frame_rate:.1f} Hz, Success rate: {success_rate:.1f}%")
+                        last_stats_time = current_time
                     
-                else:
-                    print(".", end="", flush=True)
-                    time.sleep(0.1)
+                    time.sleep(0.001)  # Small delay to prevent overwhelming
+                    
+                except KeyboardInterrupt:
+                    print("\nTest interrupted by user")
+                    break
+                except Exception as e:
+                    print(f"Error during frame reading: {e}")
+                    continue
             
-            # Print final statistics
-            duration = time.time() - self.start_time
-            print(f"\n\n📊 ROBUST FRAME READING TEST RESULTS:")
-            print(f"   Duration: {duration:.1f}s")
+            # Final statistics
+            elapsed = time.time() - start_time
+            frame_rate = self.frames_received / elapsed if elapsed > 0 else 0
+            success_rate = (self.frames_parsed / self.frames_received * 100) if self.frames_received > 0 else 0
+            
+            print(f"\n📊 ROBUST FRAME READING TEST RESULTS:")
+            print(f"   Duration: {elapsed:.1f}s")
             print(f"   Frames received: {self.frames_received}")
             print(f"   Frames parsed successfully: {self.frames_parsed}")
             print(f"   Frames failed to parse: {self.frames_failed}")
-            print(f"   Success rate: {self.frames_parsed/self.frames_received*100:.1f}%")
-            print(f"   Frame rate: {self.frames_received/duration:.1f} Hz")
+            print(f"   Success rate: {success_rate:.1f}%")
+            print(f"   Frame rate: {frame_rate:.1f} Hz")
             
-            # Radar statistics
             print(f"\n📈 RADAR STATISTICS:")
-            print(f"   Total frames: {radar.total_frames}")
-            print(f"   Missed frames: {radar.missed_frames}")
-            print(f"   Invalid packets: {radar.invalid_packets}")
-            print(f"   Failed reads: {radar.failed_reads}")
+            print(f"   Total frames: {self.radar.total_frames}")
+            print(f"   Missed frames: {self.frames_received - self.radar.total_frames}")
+            print(f"   Invalid packets: {self.frames_failed}")
+            print(f"   Failed reads: {self.frames_received - self.frames_parsed - self.frames_failed}")
             
-        except KeyboardInterrupt:
-            print("\n\nStopping test...")
         finally:
-            radar.stop()
-            print("Sensor stopped.")
+            if self.radar:
+                self.radar.stop()
+                print("Sensor stopped.")
 
-def main(config_path, serial_number=None):
-    tester = RobustFrameTester()
-    tester.test_robust_frame_reading(config_path, serial_number)
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python radar_debug.py <config_file> [serial_number]")
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python radar_debug.py <config_file>")
         sys.exit(1)
     
-    config_path = sys.argv[1]
-    serial_number = sys.argv[2] if len(sys.argv) > 2 else None
+    config_file = sys.argv[1]
     
-    main(config_path, serial_number)
+    if not os.path.exists(config_file):
+        print(f"Config file not found: {config_file}")
+        sys.exit(1)
+    
+    tester = RobustFrameTester(config_file)
+    tester.run_test(duration=12.5)  # Shorter test duration
+
+if __name__ == "__main__":
+    main()

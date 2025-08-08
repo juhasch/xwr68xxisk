@@ -144,6 +144,7 @@ class RadarConnection:
             
         return None, None
 
+
     def _read_cli_response(self):
         """Read and return the complete response from the CLI port."""
         response = []
@@ -494,7 +495,6 @@ class RadarConnection:
         for group in ['init', 'dfe', 'channel', 'adc', 'other']:
             for command in ordered_commands[group]:
                 logger.debug(f"Sending command: {command}")
-                print(f"Sending command: {command}")
                 self.cli_port.write(f"{command}\n".encode())
                 if not ignore_response:
                     response = self._read_cli_response()
@@ -513,13 +513,9 @@ class RadarConnection:
                         else:
                             logger.debug(f"Response: {response}")
         
-        if self._detected_cli_port.startswith('/dev/tty.'):
-            self.baudrate = 460800  # Mac can't handle higher baudrate
-        else:
-            self.baudrate = 921600  # Linux/Windows can handle higher baudrate
-        
-        logger.debug(f"Configuring data port with baudrate: {self.baudrate}")
-        self.cli_port.write(f"configDataPort {self.baudrate} 0\n".encode())
+        baudrate = self.data_port_baudrate
+        logger.debug(f"Configuring data port with baudrate: {baudrate}")
+        self.cli_port.write(f"configDataPort {baudrate} 0\n".encode())
         if not ignore_response:
             response = self._read_cli_response()
             if response:
@@ -527,7 +523,6 @@ class RadarConnection:
                     logger.error(f"Error configuring data port: {response}")
                     raise RadarConnectionError(f"Data port configuration error: {response}")
                 logger.debug(f"Data port configuration response: {response}")
-                print(f"Data port configuration response: {response}")
 
     def _connect_device(self, serial_number: Optional[str] = None) -> None:
         """Connect to the radar device."""
@@ -547,11 +542,7 @@ class RadarConnection:
             )
             logger.debug("CLI port opened successfully")
             
-            if self._detected_cli_port.startswith('/dev/tty.'):  # macOS
-                baudrate = 460800
-            else:  # Windows/Linux
-                baudrate = 921600
-                
+            baudrate = self.data_port_baudrate
             logger.debug(f"Attempting to create reader for data port: {self._detected_data_port}")
             logger.debug(f"Using baudrate: {baudrate}")
 
@@ -603,7 +594,7 @@ class RadarConnection:
             while True:
                 # Count magic words in current buffer
                 magic_count = self._buffer.count(self.MAGIC_WORD)
-                print(f"   Magic words in buffer: {magic_count}")
+                logger.debug(f"Magic words in buffer: {magic_count}")
                 
                 if magic_count >= 2:
                     # We have at least two magic words, can process a frame
@@ -616,35 +607,34 @@ class RadarConnection:
                 
                 # Add the data (including the magic word) to our buffer
                 self._buffer += data
-                print(f"   Added {len(data)} bytes to buffer, total: {len(self._buffer)}")
+                logger.debug(f"Added {len(data)} bytes to buffer, total: {len(self._buffer)}")
             
             # Now we have at least two magic words in the buffer
             # Find the first magic word position
             first_magic_pos = self._buffer.find(self.MAGIC_WORD)
             if first_magic_pos == -1:
-                print(f"No first magic word found in buffer: {self._buffer}")
+                logger.debug(f"No first magic word found in buffer: {self._buffer}")
                 return None
             
             # Find the second magic word position
             second_magic_pos = self._buffer.find(self.MAGIC_WORD, first_magic_pos + 1)
             if second_magic_pos == -1:
-                print(f"No second magic word found in buffer: {self._buffer}")
+                logger.debug(f"No second magic word found in buffer: {self._buffer}")
                 return None
             
             # Extract frame data between the two magic words
             frame_data = self._buffer[first_magic_pos + len(self.MAGIC_WORD):second_magic_pos]
+            logger.debug(f"Length of frame data: {len(frame_data)}")
             
             # Check if we have enough data for header
             if len(frame_data) < 32:
-                print(f"   Not enough data for header: {len(frame_data)} < 32")
+                logger.debug(f"Not enough data for header: {len(frame_data)} < 32")
                 return None
             
             # Parse header
             header_data = frame_data[:32]
             header = self._parse_header(header_data)
-            frame = header['frame_number']
-            print(f"Frame: {frame}")
-            
+            frame = header['frame_number']           
             self.last_frame = frame
             
             # Calculate payload length
@@ -652,23 +642,11 @@ class RadarConnection:
             payload_length = total_packet_len - 32 - self.MAGIC_WORD_LENGTH
             
             if payload_length < 0:
-                print(f"   Invalid payload length: {payload_length}")
+                logger.debug(f"Invalid payload length: {payload_length}")
                 # Invalid packet, remove everything up to second magic word and continue
                 self._buffer = self._buffer[second_magic_pos:]
                 return None
-            
-            # Check if we have enough data for payload
-            # if len(frame_data) < 32 + payload_length:
-            #     missing_bytes = (32 + payload_length) - len(frame_data)
-            #     print(f"   ERROR: Not enough data for payload: {len(frame_data)} < {32 + payload_length}")
-            #     print(f"   Missing {missing_bytes} bytes for complete frame")
-            #     print(f"   Frame appears to be corrupted or incomplete, skipping to next frame")
-            #     # Remove everything up to second magic word and continue
-            #     self._buffer = self._buffer[second_magic_pos:]
-            #     return None
-            
-            print(f"   Processing frame {frame} with payload length {payload_length}")
-            
+                                    
             # Extract payload
             payload_data = frame_data[32:32 + payload_length]
             
@@ -677,8 +655,8 @@ class RadarConnection:
             self._buffer = self._buffer[second_magic_pos:]
             new_buffer_size = len(self._buffer)
             
-            print(f"   Buffer: {old_buffer_size} -> {new_buffer_size} bytes (removed {second_magic_pos})")
-            print(f"   Magic words in buffer after removal: {self._buffer.count(self.MAGIC_WORD)}")
+            logger.debug(f"Buffer: {old_buffer_size} -> {new_buffer_size} bytes (removed {second_magic_pos})")
+            logger.debug(f"Magic words in buffer after removal: {self._buffer.count(self.MAGIC_WORD)}")
             
             self.total_frames += 1
             payload = np.frombuffer(payload_data, dtype=np.uint8)
@@ -736,7 +714,7 @@ class RadarConnection:
         if self._detected_cli_port and self._detected_cli_port.startswith('/dev/tty.'):
             return 460800  # Mac can't handle higher baudrate
         else:
-            return 921600  # Linux/Windows can handle higher baudrate
+            return 460800  # Linux/Windows 
 
 
 def create_radar() -> RadarConnection:
