@@ -145,46 +145,88 @@ class RadarConnection:
         return None, None
 
 
-    def _read_cli_response(self):
-        """Read and return the complete response from the CLI port."""
-        response = []
-        max_attempts = 10
-        attempt = 0
+    def _read_cli_response(self, timeout_ms: float = 100.0):
+        """Read and return the complete response from the CLI port with optimized timing.
         
-        while attempt < max_attempts:
-            if not self.cli_port.in_waiting:
-                time.sleep(0.001)
-                attempt += 1
-                continue
-                
-            while self.cli_port.in_waiting:
-                line = self.cli_port.readline().decode('utf-8').strip()
-                if line:
-                    response.append(line)
-                    if line == "mmwDemo:/>" or "Error" in line:
-                        return response
-            
-            if response:
-                attempt = 0
+        Args:
+            timeout_ms: Maximum time to wait for complete response in milliseconds
+        """
+        response = []
+        start_time = time.time()
+        timeout_seconds = timeout_ms / 1000.0
+        
+        # First, do rapid polling for immediate responses
+        rapid_poll_duration = min(0.01, timeout_seconds / 4)  # Poll rapidly for first 10ms or 1/4 of timeout
+        rapid_poll_end = start_time + rapid_poll_duration
+        
+        while time.time() < rapid_poll_end:
+            if self.cli_port.in_waiting:
+                break
+            time.sleep(0.0001)  # 0.1ms sleep for rapid polling
+        
+        # Now read all available data with normal polling
+        last_data_time = time.time()
+        idle_timeout = 0.005  # 5ms idle timeout between chunks
+        
+        while time.time() - start_time < timeout_seconds:
+            if self.cli_port.in_waiting:
+                # Read all available data
+                while self.cli_port.in_waiting:
+                    try:
+                        line = self.cli_port.readline().decode('utf-8').strip()
+                        if line:
+                            response.append(line)
+                            last_data_time = time.time()
+                            
+                            # Check for command completion
+                            if line == "mmwDemo:/>" or "Error" in line:
+                                return response
+                    except Exception as e:
+                        logger.debug(f"Error reading CLI response: {e}")
+                        break
             else:
-                attempt += 1
+                # No data available - check if we should keep waiting
+                if response and (time.time() - last_data_time > idle_timeout):
+                    # We have some response and haven't seen data for idle_timeout
+                    # Assume response is complete
+                    break
+                    
+                # Short sleep before next check
+                time.sleep(0.0005)  # 0.5ms sleep
                 
         if not response:
-            logger.warning("No response from sensor")
+            logger.warning(f"No response from sensor after {timeout_ms}ms")
+        elif response and response[-1] != "mmwDemo:/>":
+            logger.debug(f"Response may be incomplete (no prompt): {response}")
+            
         return response
 
-    def send_command(self, command: str, ignore_response: bool = False) -> None:
+    def send_command(self, command: str, ignore_response: bool = False, timeout_ms: float = None) -> None:
         """Send a command to the radar and verify responses.
         
         Args:
             command: Command to send to the radar.
             ignore_response: If True, do not wait for a response from the radar.
+            timeout_ms: Timeout in milliseconds. If None, uses adaptive timeout based on command type.
         """
+        # Determine optimal timeout based on command type if not specified
+        if timeout_ms is None:
+            if command.startswith('sensorStart'):
+                timeout_ms = 200.0  # Sensor start can take longer
+            elif command.startswith('sensorStop'):
+                timeout_ms = 100.0  # Sensor stop is usually quick
+            elif command.startswith(('profileCfg', 'frameCfg', 'chirpCfg')):
+                timeout_ms = 150.0  # Configuration commands
+            elif command.startswith(('version', 'get')):
+                timeout_ms = 200.0  # Query commands might take longer
+            else:
+                timeout_ms = 50.0   # Most commands are fast
+        
         self.cli_port.write(f"{command}\n".encode())
-        logger.debug(f"Sent command: {command}")
+        logger.debug(f"Sending command: {command}")
         
         if not ignore_response:
-            response = self._read_cli_response()
+            response = self._read_cli_response(timeout_ms)
             if response:
                 has_error = False
                 for line in response:
@@ -200,6 +242,37 @@ class RadarConnection:
                     logger.error(f"Error in command '{command}': {response}")
                     raise RadarConnectionError(f"Configuration error: {response}")
                 logger.debug(f"Response: {response}")
+
+    def send_commands_batch(self, commands: List[str], timeout_ms_per_command: float = 50.0) -> List[str]:
+        """Send multiple commands with optimized timing.
+        
+        Args:
+            commands: List of commands to send
+            timeout_ms_per_command: Timeout per command in milliseconds
+            
+        Returns:
+            List of responses for each command
+        """
+        responses = []
+        
+        for i, command in enumerate(commands):
+            # Use shorter timeout for batch operations
+            timeout = timeout_ms_per_command
+            
+            # Special handling for certain commands
+            if command.startswith('sensorStart'):
+                timeout = 200.0
+            elif command.startswith('sensorStop'):
+                timeout = 100.0
+                
+            try:
+                self.send_command(command, timeout_ms=timeout)
+                responses.append("Done")
+            except Exception as e:
+                logger.error(f"Failed on command {i+1}/{len(commands)}: {command}")
+                responses.append(f"Error: {str(e)}")
+                
+        return responses
 
     def get_version(self):
         """Get version information from the sensor."""
