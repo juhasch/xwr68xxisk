@@ -15,6 +15,7 @@ from bokeh.models import ColumnDataSource, ColorBar, LinearColorMapper
 from bokeh.layouts import column
 from bokeh.palettes import Viridis256
 from bokeh.transform import linear_cmap
+from scipy.signal import find_peaks
 from ..radar_config_models import RadarConfig
 from ..parse import RadarData
 
@@ -567,6 +568,232 @@ class RangeAzimuthPlot(BasePlot):
             self.data_source.data = {'image': [np.zeros((10, 10))], 'x': [0], 'y': [0], 'dw': [1], 'dh': [1]}
 
 
+class PolarRangePlot(BasePlot):
+    """Polar plot for visualizing the first peak in range profile complex data."""
+    
+    def _setup_plot(self) -> pn.pane.Bokeh:
+        """Set up the polar plot."""
+        p = figure(
+            title='Polar Range Profile - First Peak Complex Data',
+            width=self.display_config.plot_width,
+            height=self.display_config.plot_height,
+            x_range=(-1.2, 1.2),
+            y_range=(-1.2, 1.2),
+            tools='pan,wheel_zoom,box_zoom,reset,save',
+            toolbar_location='above',
+            match_aspect=True
+        )
+        
+        # Data source for polar plot points
+        self.polar_data_source = ColumnDataSource({
+            'x': [],
+            'y': [],
+            'magnitude': [],
+            'range_bin': []
+        })
+        
+        # Data source for magnitude circle
+        self.circle_data_source = ColumnDataSource({
+            'x': [],
+            'y': []
+        })
+        
+        # Data source for range bin labels
+        self.label_data_source = ColumnDataSource({
+            'x': [],
+            'y': [],
+            'text': []
+        })
+        
+        # Create color mapper for magnitude values
+        self.color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=1)
+        
+        # Scatter plot for complex values
+        self.scatter_glyph = p.scatter(
+            x='x',
+            y='y',
+            size=8,
+            fill_color={'field': 'magnitude', 'transform': self.color_mapper},
+            line_color='white',
+            line_width=1,
+            alpha=0.8,
+            source=self.polar_data_source,
+            name='complex_values'
+        )
+        
+        # Circle outline showing magnitude
+        self.circle_line = p.line(
+            x='x',
+            y='y',
+            line_width=2,
+            color='red',
+            alpha=0.7,
+            source=self.circle_data_source,
+            name='magnitude_circle'
+        )
+        
+        # Text labels for range bins
+        from bokeh.models import LabelSet
+        self.labels = LabelSet(
+            x='x', y='y', text='text',
+            x_offset=5, y_offset=5,
+            source=self.label_data_source,
+            text_font_size='8pt',
+            text_color='black'
+        )
+        p.add_layout(self.labels)
+        
+        # Add color bar
+        color_bar = ColorBar(
+            color_mapper=self.color_mapper,
+            title='Magnitude (norm.)',
+            location=(0, 0)
+        )
+        p.add_layout(color_bar, 'right')
+        
+        # Add coordinate system lines
+        p.line([-1.2, 1.2], [0, 0], line_width=1, color='gray', alpha=0.5)  # X-axis
+        p.line([0, 0], [-1.2, 1.2], line_width=1, color='gray', alpha=0.5)  # Y-axis
+        
+        # Add unit circle
+        circle_angles = np.linspace(0, 2*np.pi, 100)
+        circle_x = np.cos(circle_angles)
+        circle_y = np.sin(circle_angles)
+        p.line(circle_x, circle_y, line_width=1, color='gray', alpha=0.3, line_dash='dashed')
+        
+        p.axis.axis_label_text_font_size = '12pt'
+        p.axis.axis_label_text_font_style = 'normal'
+        p.xaxis.axis_label = 'Real Part (normalized)'
+        p.yaxis.axis_label = 'Imaginary Part (normalized)'
+        
+        p.grid.grid_line_alpha = 0.3
+        
+        return pn.pane.Bokeh(p)
+    
+    def update(self, radar_data: RadarData) -> None:
+        """Update the polar plot with new radar data."""
+        if not radar_data:
+            return
+            
+        try:
+            # Check if complex range profile data is available
+            if not hasattr(radar_data, 'adc_complex') or radar_data.adc_complex is None or len(radar_data.adc_complex) == 0:
+                logger.debug("PolarRangePlot: No complex range profile data available")
+                self._clear_plot()
+                return
+            
+            # Get complex range profile data
+            range_bins, magnitude_dB, phase = radar_data.get_complex_range_profile()
+            
+            if len(range_bins) == 0 or len(magnitude_dB) == 0:
+                logger.debug("PolarRangePlot: Empty complex range profile data")
+                self._clear_plot()
+                return
+            
+            # Find the first significant peak (ignore DC component at bin 0)
+            # Use magnitude in linear scale for peak detection
+            magnitude_linear = np.abs(radar_data.adc_complex)
+            
+            # Ignore the first few bins to skip DC and near-DC components
+            start_bin = max(2, int(0.02 * len(magnitude_linear)))  # Skip first 2% of bins or at least 2 bins
+            search_magnitude = magnitude_linear[start_bin:]
+            
+            if len(search_magnitude) == 0:
+                logger.debug("PolarRangePlot: No range bins available after skipping DC")
+                self._clear_plot()
+                return
+            
+            # Find peaks in the magnitude profile
+            peaks, properties = find_peaks(search_magnitude, height=np.max(search_magnitude) * 0.1, distance=5)
+            
+            if len(peaks) == 0:
+                logger.debug("PolarRangePlot: No significant peaks found in range profile")
+                self._clear_plot()
+                return
+            
+            # Get the first peak (relative to the search start)
+            first_peak_idx = peaks[0] + start_bin
+            peak_magnitude = magnitude_linear[first_peak_idx]
+            
+            logger.debug(f"PolarRangePlot: Found first peak at range bin {first_peak_idx} with magnitude {peak_magnitude:.2f}")
+            
+            # Get a window around the peak to show complex behavior
+            window_size = 15  # Show ±15 bins around the peak
+            start_idx = max(0, first_peak_idx - window_size)
+            end_idx = min(len(radar_data.adc_complex), first_peak_idx + window_size + 1)
+            
+            # Extract complex values around the peak
+            complex_values = radar_data.adc_complex[start_idx:end_idx]
+            range_bin_indices = np.arange(start_idx, end_idx)
+            
+            if len(complex_values) == 0:
+                self._clear_plot()
+                return
+            
+            # Normalize complex values for better visualization
+            max_magnitude = np.max(np.abs(complex_values))
+            if max_magnitude > 0:
+                normalized_complex = complex_values / max_magnitude
+            else:
+                normalized_complex = complex_values
+            
+            # Extract real and imaginary parts
+            x_coords = np.real(normalized_complex)
+            y_coords = np.imag(normalized_complex)
+            
+            # Calculate magnitude for color mapping
+            magnitudes = np.abs(normalized_complex)
+            
+            # Update scatter plot data
+            self.polar_data_source.data = {
+                'x': x_coords,
+                'y': y_coords,
+                'magnitude': magnitudes,
+                'range_bin': range_bin_indices
+            }
+            
+            # Update color mapper range
+            if len(magnitudes) > 0:
+                self.color_mapper.low = float(np.min(magnitudes))
+                self.color_mapper.high = float(np.max(magnitudes))
+            
+            # Create magnitude circle for the peak
+            if peak_magnitude > 0:
+                peak_normalized_magnitude = np.abs(normalized_complex[first_peak_idx - start_idx])
+                circle_angles = np.linspace(0, 2*np.pi, 100)
+                circle_x = peak_normalized_magnitude * np.cos(circle_angles)
+                circle_y = peak_normalized_magnitude * np.sin(circle_angles)
+                
+                self.circle_data_source.data = {
+                    'x': circle_x,
+                    'y': circle_y
+                }
+            else:
+                self.circle_data_source.data = {'x': [], 'y': []}
+            
+            # Add labels for some key points
+            label_indices = [0, len(x_coords)//2, len(x_coords)-1] if len(x_coords) > 2 else [0]
+            label_x = [x_coords[i] for i in label_indices if i < len(x_coords)]
+            label_y = [y_coords[i] for i in label_indices if i < len(y_coords)]
+            label_text = [f"R{range_bin_indices[i]}" for i in label_indices if i < len(range_bin_indices)]
+            
+            self.label_data_source.data = {
+                'x': label_x,
+                'y': label_y,
+                'text': label_text
+            }
+            
+        except Exception as e:
+            logger.error(f"Error updating polar range plot: {e}")
+            self._clear_plot()
+    
+    def _clear_plot(self):
+        """Clear all plot data."""
+        self.polar_data_source.data = {'x': [], 'y': [], 'magnitude': [], 'range_bin': []}
+        self.circle_data_source.data = {'x': [], 'y': []}
+        self.label_data_source.data = {'x': [], 'y': [], 'text': []}
+
+
 class PlotManager:
     """Manager for handling multiple visualization tabs in the radar GUI."""
     
@@ -592,6 +819,7 @@ class PlotManager:
         self.range_profile_plot = RangeProfilePlot(scene_config, display_config)
         self.range_doppler_plot = RangeDopplerPlot(scene_config, display_config)
         self.range_azimuth_plot = RangeAzimuthPlot(scene_config, display_config)
+        self.polar_range_plot = PolarRangePlot(scene_config, display_config)
         
         # Create tabs
         tabs = [
@@ -603,6 +831,8 @@ class PlotManager:
             tabs.append(('Range-Doppler', self.range_doppler_plot.view))
         if scene_config.plot_range_azimuth_heat_map:
             tabs.append(('Range-Azimuth', self.range_azimuth_plot.view))
+        # Always add polar plot if complex range profile data is available
+        tabs.append(('Polar Range', self.polar_range_plot.view))
         self.tabs = pn.Tabs(*tabs)
         self.view = self.tabs
     
@@ -652,6 +882,13 @@ class PlotManager:
                     logger.debug("PlotManager: Range-azimuth plot updated successfully")
                 except Exception as e:
                     logger.error(f"PlotManager: Error updating range-azimuth plot: {e}")
+            
+            # Update polar range plot
+            try:
+                self.polar_range_plot.update(radar_data)
+                logger.debug("PlotManager: Polar range plot updated successfully")
+            except Exception as e:
+                logger.error(f"PlotManager: Error updating polar range plot: {e}")
                     
             logger.debug("PlotManager: All plot updates completed")
             

@@ -579,6 +579,31 @@ class RadarConnection:
         }
         return header
 
+    def restart_radar(self) -> bool:
+        """Restart the radar sensor to recover from communication issues."""
+        try:
+            logger.info("Attempting to restart radar due to communication timeout...")
+            
+            # Stop the sensor
+            self.send_command('sensorStop')
+            self.is_running = False
+            time.sleep(0.1)  # Brief pause
+            
+            # Clear the buffer
+            if hasattr(self, '_buffer'):
+                self._buffer = b''
+            
+            # Simply restart the sensor without reconfiguration
+            self.send_command('sensorStart')
+            self.is_running = True
+            
+            logger.info("Radar restarted successfully (fast restart)")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to restart radar: {e}")
+            return False
+
     def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:
         """Read and parse data packets from the radar."""
         if not self.is_running:
@@ -591,7 +616,23 @@ class RadarConnection:
                 self._buffer = b''
             
             # Keep reading until we have at least two magic words in the buffer
+            timeout_start = time.time()
+            max_timeout = 3.0  # Maximum timeout of 3 seconds
+            
             while True:
+                # Check for overall timeout
+                if time.time() - timeout_start > max_timeout:
+                    logger.warning(f"Timeout waiting for radar data after {max_timeout}s - attempting restart")
+                    
+                    # Try to restart the radar
+                    if self.restart_radar():
+                        # Reset timeout and try again
+                        timeout_start = time.time()
+                        continue
+                    else:
+                        logger.error("Failed to restart radar, giving up")
+                        return None
+                
                 # Count magic words in current buffer
                 magic_count = self._buffer.count(self.MAGIC_WORD)
                 logger.debug(f"Magic words in buffer: {magic_count}")
@@ -600,26 +641,54 @@ class RadarConnection:
                     # We have at least two magic words, can process a frame
                     break
                 
-                # Read until we find another magic word
-                data = self.data_port.read_until(self.MAGIC_WORD)
-                if not data:
+                # Try to read more data with shorter timeout
+                try:
+                    # First check if any data is available
+                    if self.data_port.in_waiting == 0:
+                        time.sleep(0.001)  # Short sleep to avoid busy waiting
+                        continue
+                    
+                    # Read available data in chunks instead of waiting for magic word
+                    chunk_size = min(1024, self.data_port.in_waiting)
+                    data = self.data_port.read(chunk_size)
+                    
+                    if not data:
+                        time.sleep(0.001)  # Short sleep before retrying
+                        continue
+                    
+                    # Add the data to our buffer
+                    self._buffer += data
+                    logger.debug(f"Added {len(data)} bytes to buffer, total: {len(self._buffer)}")
+                    
+                    # Limit buffer size to prevent memory issues
+                    if len(self._buffer) > self.MAX_BUFFER_SIZE:
+                        # Keep only the last half of the buffer
+                        keep_size = self.MAX_BUFFER_SIZE // 2
+                        self._buffer = self._buffer[-keep_size:]
+                        logger.warning(f"Buffer size exceeded limit, truncated to {len(self._buffer)} bytes")
+                        
+                except serial.SerialTimeoutException:
+                    # Timeout on individual read, continue the loop
+                    continue
+                except Exception as e:
+                    logger.error(f"Error reading from data port: {e}")
                     return None
-                
-                # Add the data (including the magic word) to our buffer
-                self._buffer += data
-                logger.debug(f"Added {len(data)} bytes to buffer, total: {len(self._buffer)}")
             
             # Now we have at least two magic words in the buffer
             # Find the first magic word position
             first_magic_pos = self._buffer.find(self.MAGIC_WORD)
             if first_magic_pos == -1:
-                logger.debug(f"No first magic word found in buffer: {self._buffer}")
+                logger.debug(f"No first magic word found in buffer, clearing buffer")
+                self._buffer = b''
                 return None
             
             # Find the second magic word position
             second_magic_pos = self._buffer.find(self.MAGIC_WORD, first_magic_pos + 1)
             if second_magic_pos == -1:
-                logger.debug(f"No second magic word found in buffer: {self._buffer}")
+                logger.debug(f"No second magic word found in buffer")
+                # This shouldn't happen since we checked for >= 2 magic words above
+                # But if it does, clear the buffer to recover
+                self._buffer = b''
                 return None
             
             # Extract frame data between the two magic words
@@ -645,6 +714,12 @@ class RadarConnection:
                 logger.debug(f"Invalid payload length: {payload_length}")
                 # Invalid packet, remove everything up to second magic word and continue
                 self._buffer = self._buffer[second_magic_pos:]
+                return None
+            
+            # Check if we actually have enough data for the complete payload
+            if len(frame_data) < 32 + payload_length:
+                logger.debug(f"Incomplete frame data: have {len(frame_data)}, need {32 + payload_length}")
+                # Don't remove from buffer, just return None and try again later
                 return None
                                     
             # Extract payload
