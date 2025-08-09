@@ -708,7 +708,6 @@ class RadarConnection:
                 
                 # Count magic words in current buffer
                 magic_count = self._buffer.count(self.MAGIC_WORD)
-                logger.debug(f"Magic words in buffer: {magic_count}")
                 
                 if magic_count >= 2:
                     # We have at least two magic words, can process a frame
@@ -804,7 +803,6 @@ class RadarConnection:
             new_buffer_size = len(self._buffer)
             
             logger.debug(f"Buffer: {old_buffer_size} -> {new_buffer_size} bytes (removed {second_magic_pos})")
-            logger.debug(f"Magic words in buffer after removal: {self._buffer.count(self.MAGIC_WORD)}")
             
             self.total_frames += 1
             payload = np.frombuffer(payload_data, dtype=np.uint8)
