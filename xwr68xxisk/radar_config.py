@@ -1,5 +1,7 @@
 """ Work in progress """
 from typing import Dict, List, Union, Optional
+from pydantic import BaseModel, Field
+import yaml
 
 class RadarCommand:
     """Base class for radar configuration commands"""
@@ -58,6 +60,7 @@ class RadarCommand:
             'clutterRemoval': ClutterRemovalCommand,
             'calibDcRangeSig': CalibDcRangeSigCommand,
             'aoaFovCfg': AoaFovConfigCommand,
+            'triggerMode': TriggerModeCommand,
         }
         
         if name in command_classes:
@@ -697,69 +700,108 @@ class AoaFovConfigCommand(RadarCommand):
         self.params[4] = value
 
 
-class RadarConfig:
-    """Main class for radar configuration management"""
+class TriggerModeCommand(RadarCommand):
+    """Trigger mode configuration command
+    
+    Format: "triggerMode <mode>"
+    
+    Parameters:
+        mode: Trigger mode selection
+            0 = Timer-based trigger (default)
+            1 = Software trigger  
+            2 = Hardware trigger via GPIO 1
+    """
+    
+    def __init__(self, params: List[Union[int, float, str]]):
+        super().__init__('triggerMode', params)
+    
+    @property
+    def mode(self) -> int:
+        """Get trigger mode
+        0 = Timer-based trigger (default)
+        1 = Software trigger
+        2 = Hardware trigger via GPIO 1
+        """
+        return self.params[0]
+    
+    @mode.setter
+    def mode(self, value: int):
+        """Set trigger mode
+        Args:
+            value: Trigger mode (0: timer-based, 1: software, 2: hardware)
+        """
+        if value not in [0, 1, 2]:
+            raise ValueError("Trigger mode must be 0, 1, or 2")
+        self.params[0] = value
+    
+    @property
+    def is_timer_based(self) -> bool:
+        """Check if timer-based triggering is enabled"""
+        return self.mode == 0
+    
+    @property
+    def is_software_trigger(self) -> bool:
+        """Check if software triggering is enabled"""
+        return self.mode == 1
+    
+    @property
+    def is_hardware_trigger(self) -> bool:
+        """Check if hardware triggering is enabled"""
+        return self.mode == 2
+
+
+class RadarProfile:
+    """Main class for radar profile management"""
     
     def __init__(self, name: str = None):
         self.name = name
         self.commands: List[RadarCommand] = []
         
     @classmethod
-    def from_string(cls, config_str: str, name: str = None) -> 'RadarConfig':
-        """Create a radar configuration from a multiline string"""
-        config = cls(name)
-        
-        # Parse each non-empty line
-        for line in config_str.strip().split('\n'):
+    def from_string(cls, profile_str: str, name: str = None) -> 'RadarProfile':
+        """Create a radar profile from a multiline string"""
+        profile = cls(name)
+        for line in profile_str.strip().split('\n'):
             line = line.strip()
             if line:
-                config.commands.append(RadarCommand.from_string(line))
-        
-        return config
-    
+                profile.commands.append(RadarCommand.from_string(line))
+        return profile
+
     @classmethod
-    def from_file(cls, file_path: str, name: str = None) -> 'RadarConfig':
-        """Create a radar configuration from a .cfg file
-        
+    def from_file(cls, file_path: str, name: str = None) -> 'RadarProfile':
+        """Create a radar profile from a .cfg file (deprecated, will move to YAML)
         Args:
             file_path: Path to the .cfg file
-            name: Optional name for the configuration
-            
+            name: Optional name for the profile
         Returns:
-            RadarConfig object created from the file
+            RadarProfile object created from the file
         """
         with open(file_path, 'r') as f:
-            config_str = f.read()
-        
-        # Use the filename as name if not provided
+            profile_str = f.read()
         if name is None:
             import os
             name = os.path.splitext(os.path.basename(file_path))[0]
-            
-        config = cls.from_string(config_str)
-        config.name = name  # Ensure name is set correctly
-        return config
-    
+        profile = cls.from_string(profile_str)
+        profile.name = name
+        return profile
+
     def to_string(self) -> str:
-        """Convert configuration to a multiline string"""
+        """Convert profile to a multiline string"""
         return '\n'.join(cmd.to_string() for cmd in self.commands)
-    
+
     def to_file(self, file_path: str) -> None:
-        """Save the configuration to a .cfg file
-        
+        """Save the profile to a .cfg file (deprecated, will move to YAML)
         Args:
-            file_path: Path where to save the configuration
+            file_path: Path where to save the profile
         """
         with open(file_path, 'w') as f:
             f.write(self.to_string())
-    
+
     def get_command(self, command_name: str, index: int = 0) -> Optional[RadarCommand]:
         """Get a specific command by name and optional index
-        
         Args:
             command_name: The name of the command to find
             index: If multiple commands with same name exist, get the nth one (0-based)
-        
         Returns:
             The command object if found, otherwise None
         """
@@ -767,29 +809,25 @@ class RadarConfig:
         if index < len(matches):
             return matches[index]
         return None
-    
+
     def get_commands(self, command_name: str) -> List[RadarCommand]:
         """Get all commands with a specific name
-        
         Args:
             command_name: The name of the commands to find
-            
         Returns:
             List of matching command objects
         """
         return [cmd for cmd in self.commands if cmd.name == command_name]
-    
+
     def add_command(self, command: RadarCommand) -> None:
-        """Add a command to the configuration"""
+        """Add a command to the profile"""
         self.commands.append(command)
-    
+
     def remove_command(self, command_name: str, index: int = 0) -> bool:
         """Remove a command by name and optional index
-        
         Args:
             command_name: Name of the command to remove
             index: If multiple commands with same name exist, remove the nth one (0-based)
-            
         Returns:
             True if command was removed, False if not found
         """
@@ -798,73 +836,64 @@ class RadarConfig:
             del self.commands[matches[index]]
             return True
         return False
-    
+
     def update_frame_period(self, period_ms: float) -> bool:
-        """Update the frame period in the configuration
-        
+        """Update the frame period in the profile
         Args:
             period_ms: Frame period in milliseconds
-            
         Returns:
-            True if frame configuration was updated, False if not found
+            True if frame profile was updated, False if not found
         """
         frame_cmd = self.get_command('frameCfg')
         if frame_cmd:
             frame_cmd.params[4] = period_ms
             return True
         return False
-    
+
     def set_tx_antennas(self, tx_antenna_mask: int) -> bool:
         """Set the transmit antenna mask
-        
         Args:
             tx_antenna_mask: Bitmask of TX antennas to enable
-            
         Returns:
-            True if channel config was updated, False if not found
+            True if channel profile was updated, False if not found
         """
         channel_cmd = self.get_command('channelCfg')
         if channel_cmd:
             channel_cmd.params[1] = tx_antenna_mask
             return True
         return False
-    
+
     def set_rx_antennas(self, rx_antenna_mask: int) -> bool:
         """Set the receive antenna mask
-        
         Args:
             rx_antenna_mask: Bitmask of RX antennas to enable
-            
         Returns:
-            True if channel config was updated, False if not found
+            True if channel profile was updated, False if not found
         """
         channel_cmd = self.get_command('channelCfg')
         if channel_cmd:
             channel_cmd.params[0] = rx_antenna_mask
             return True
         return False
-    
+
     def set_profile_parameters(self, start_freq: float = None,
                              idle_time: float = None,
                              freq_slope: float = None,
                              adc_samples: int = None,
                              rx_gain: int = None) -> bool:
-        """Update profile configuration parameters
-        
+        """Update profile parameters
         Args:
             start_freq: Start frequency in GHz
             idle_time: Idle time in μs
             freq_slope: Frequency slope in MHz/μs
             adc_samples: Number of ADC samples 
             rx_gain: RX gain in dB
-            
         Returns:
-            True if profile config was updated, False if not found
+            True if profile was updated, False if not found
         """
         profile_cmd = self.get_command('profileCfg')
         if not profile_cmd:
             return False
-            
         if start_freq is not None:
             profile_cmd.params[1] = start_freq
         if idle_time is not None:
@@ -875,31 +904,66 @@ class RadarConfig:
             profile_cmd.params[9] = adc_samples
         if rx_gain is not None:
             profile_cmd.params[13] = rx_gain
-            
         return True
-    
+
     def set_clutter_removal(self, enabled: bool) -> bool:
         """Enable or disable clutter removal
-        
         Args:
             enabled: True to enable, False to disable
-            
         Returns:
-            True if clutter removal config was updated, False if not found
+            True if clutter removal profile was updated, False if not found
         """
         clutter_cmd = self.get_command('clutterRemoval')
         if clutter_cmd:
             clutter_cmd.params[1] = 1 if enabled else 0
             return True
         return False
-        
-    def clone(self) -> 'RadarConfig':
-        """Create a copy of this configuration
-        
+
+    def set_trigger_mode(self, mode: int) -> bool:
+        """Set the trigger mode for the radar
+        Args:
+            mode: Trigger mode (0: timer-based, 1: software, 2: hardware)
         Returns:
-            A new RadarConfig object with the same commands
+            True if trigger mode was updated, False if not found
+        """
+        trigger_cmd = self.get_command('triggerMode')
+        if trigger_cmd:
+            trigger_cmd.mode = mode
+            return True
+        return False
+
+    def clone(self) -> 'RadarProfile':
+        """Create a copy of this profile
+        Returns:
+            A new RadarProfile object with the same commands
         """
         import copy
-        new_config = RadarConfig(self.name)
-        new_config.commands = copy.deepcopy(self.commands)
-        return new_config
+        new_profile = RadarProfile(self.name)
+        new_profile.commands = copy.deepcopy(self.commands)
+        return new_profile
+
+
+class RadarProfileModel(BaseModel):
+    """Pydantic model for radar operational profile (for YAML serialization)."""
+    profile_id: int = Field(..., description="Profile identifier")
+    start_freq: float = Field(..., description="Start frequency in GHz")
+    idle_time: float = Field(..., description="Idle time in μs")
+    adc_start_time: float = Field(..., description="ADC valid start time in μs")
+    ramp_end_time: float = Field(..., description="Ramp end time in μs")
+    freq_slope_const: float = Field(..., description="Frequency slope in MHz/μs")
+    num_adc_samples: int = Field(..., description="Number of ADC samples")
+    dig_out_sample_rate: int = Field(..., description="ADC sampling frequency in ksps")
+    rx_gain: int = Field(..., description="RX gain in dB")
+    # Add more fields as needed for your radar profile
+
+    @classmethod
+    def from_yaml(cls, path: str) -> "RadarProfileModel":
+        """Load a radar profile from a YAML file."""
+        with open(path, 'r') as f:
+            data = yaml.safe_load(f)
+        return cls(**data)
+
+    def to_yaml(self, path: str) -> None:
+        """Save the radar profile to a YAML file."""
+        with open(path, 'w') as f:
+            yaml.safe_dump(self.dict(), f)

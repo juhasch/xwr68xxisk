@@ -56,3 +56,26 @@ docs/_static/
 
 .idea
 /configs/
+
+# Temporary data files
+*.csv
+*.pcd
+*.json
+*.bin
+*.mp4
+*.npy
+*.arrow
+
+# Recording and debug directories
+recordings/
+debug_data/
+debug_recordings/
+magic_word_debug/
+dora/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+*.ipynb
+
+# Test outputs
+robust_frame_test/

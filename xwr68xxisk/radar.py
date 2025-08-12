@@ -26,11 +26,9 @@ class RadarConnectionError(Exception):
 class RadarConnection:
     """Base class for TI XWR68xx radar sensors."""
     
-    # Silicon Labs CP2105
     CP2105_VENDOR_ID = 0x10C4
     CP2105_PRODUCT_ID = 0xEA70
     
-    # Constants
     MAX_BUFFER_SIZE = 2**15
     MAGIC_WORD = b'\x02\x01\x04\x03\x06\x05\x08\x07'
     MAGIC_WORD_LENGTH = 8
@@ -42,22 +40,20 @@ class RadarConnection:
         self.profile = ""
         self.version_info = None
         self.serial_number = None
-        self.device_type = 'CP2105'  # Only CP2105 is supported
+        self.device_type = 'CP2105'
         self.is_running = False
-        self._clutter_removal = False  # Default value for clutter removal
+        self._clutter_removal = False
 
-        self.mob_enabled = False  # Default value for moving object detection
-        self.mob_threshold = 0.5  # Default value for moving object detection threshold
+        self.mob_enabled = False
+        self.mob_threshold = 0.5
         
-        # Store detected ports
         self._detected_cli_port = None
         self._detected_data_port = None
         
-        # Buffer and statistics
         self.byte_buffer = np.zeros(self.MAX_BUFFER_SIZE, dtype='uint8')
         self.byte_buffer_length = 0
         self.current_index = 0
-        self.radar_params = None  # Work in progress
+        self.radar_params = None
         self.debug_dir = "debug_data"
         os.makedirs(self.debug_dir, exist_ok=True)
         self.reader = None
@@ -111,20 +107,27 @@ class RadarConnection:
                 logger.debug(f"Found CP2105 port: {port.description}")
                 device_path = port.device
                 
-                # Convert cu. to tty. on macOS for more reliable access
-                if device_path.startswith('/dev/cu.'):
-                    device_path = device_path.replace('/dev/cu.', '/dev/tty.')
+                if device_path.startswith('/dev/cu.usbserial'):
+                    device_path = device_path.replace('/dev/cu.usbserial', '/dev/tty.usbserial')
                 
                 # Handle different naming conventions based on OS
-                if "SLAB_USBtoUART" in device_path:  # macOS
+                if "usbserial" in device_path:
+                    if device_path.endswith("0"):
+                        cli_port_path = device_path
+                    elif device_path.endswith("1"):
+                        data_port_path = device_path
+                    else:
+                        cli_port_path = device_path
+                    self.serial_number = port.serial_number
+                elif "SLAB_USBtoUART" in device_path:  # macOS
                     if device_path.endswith('UART'):
                         data_port_path = device_path
                     else:
                         cli_port_path = device_path
                     self.serial_number = port.serial_number
-                elif "Enhanced" in port.description:  # Windows/Linux
+                elif "Enhanced" in port.description:
                     cli_port_path = device_path
-                elif "Standard" in port.description:  # Windows/Linux
+                elif "Standard" in port.description:
                     data_port_path = device_path
                     self.serial_number = port.serial_number
                     
@@ -150,46 +153,89 @@ class RadarConnection:
             
         return None, None
 
-    def _read_cli_response(self):
-        """Read and return the complete response from the CLI port."""
-        response = []
-        max_attempts = 10
-        attempt = 0
+
+    def _read_cli_response(self, timeout_ms: float = 100.0):
+        """Read and return the complete response from the CLI port with optimized timing.
         
-        while attempt < max_attempts:
-            if not self.cli_port.in_waiting:
-                time.sleep(0.001)
-                attempt += 1
-                continue
-                
-            while self.cli_port.in_waiting:
-                line = self.cli_port.readline().decode('utf-8').strip()
-                if line:
-                    response.append(line)
-                    if line == "mmwDemo:/>" or "Error" in line:
-                        return response
-            
-            if response:
-                attempt = 0
+        Args:
+            timeout_ms: Maximum time to wait for complete response in milliseconds
+        """
+        response = []
+        start_time = time.time()
+        timeout_seconds = timeout_ms / 1000.0
+        
+        # First, do rapid polling for immediate responses
+        rapid_poll_duration = min(0.01, timeout_seconds / 4)  # Poll rapidly for first 10ms or 1/4 of timeout
+        rapid_poll_end = start_time + rapid_poll_duration
+        
+        while time.time() < rapid_poll_end:
+            if self.cli_port.in_waiting:
+                break
+            time.sleep(0.0001)  # 0.1ms sleep for rapid polling
+        
+        # Now read all available data with normal polling
+        last_data_time = time.time()
+        idle_timeout = 0.005  # 5ms idle timeout between chunks
+        
+        while time.time() - start_time < timeout_seconds:
+            if self.cli_port.in_waiting:
+                # Read all available data
+                while self.cli_port.in_waiting:
+                    try:
+                        line = self.cli_port.readline().decode('utf-8').strip()
+                        if line:
+                            response.append(line)
+                            last_data_time = time.time()
+                            
+                            # Check for command completion
+                            if line == "mmwDemo:/>" or "Error" in line:
+                                return response
+                    except Exception as e:
+                        logger.debug(f"Error reading CLI response: {e}")
+                        break
             else:
-                attempt += 1
+                # No data available - check if we should keep waiting
+                if response and (time.time() - last_data_time > idle_timeout):
+                    # We have some response and haven't seen data for idle_timeout
+                    # Assume response is complete
+                    break
+                    
+                # Short sleep before next check
+                time.sleep(0.0005)  # 0.5ms sleep
                 
         if not response:
-            logger.warning("No response from sensor")
+            logger.warning(f"No response from sensor after {timeout_ms}ms")
+        elif response and response[-1] != "mmwDemo:/>":
+            logger.debug(f"Response may be incomplete (no prompt): {response}")
+            
         return response
 
-    def send_command(self, command: str, ignore_response: bool = False) -> None:
+    def send_command(self, command: str, ignore_response: bool = False, timeout_ms: float = None) -> None:
         """Send a command to the radar and verify responses.
         
         Args:
             command: Command to send to the radar.
             ignore_response: If True, do not wait for a response from the radar.
+            timeout_ms: Timeout in milliseconds. If None, uses adaptive timeout based on command type.
         """
+        # Determine optimal timeout based on command type if not specified
+        if timeout_ms is None:
+            if command.startswith('sensorStart'):
+                timeout_ms = 200.0  # Sensor start can take longer
+            elif command.startswith('sensorStop'):
+                timeout_ms = 100.0  # Sensor stop is usually quick
+            elif command.startswith(('profileCfg', 'frameCfg', 'chirpCfg')):
+                timeout_ms = 150.0  # Configuration commands
+            elif command.startswith(('version', 'get')):
+                timeout_ms = 200.0  # Query commands might take longer
+            else:
+                timeout_ms = 50.0   # Most commands are fast
+        
         self.cli_port.write(f"{command}\n".encode())
-        logger.debug(f"Sent command: {command}")
+        logger.debug(f"Sending command: {command}")
         
         if not ignore_response:
-            response = self._read_cli_response()
+            response = self._read_cli_response(timeout_ms)
             if response:
                 has_error = False
                 for line in response:
@@ -206,22 +252,57 @@ class RadarConnection:
                     raise RadarConnectionError(f"Configuration error: {response}")
                 logger.debug(f"Response: {response}")
 
+    def send_commands_batch(self, commands: List[str], timeout_ms_per_command: float = 50.0) -> List[str]:
+        """Send multiple commands with optimized timing.
+        
+        Args:
+            commands: List of commands to send
+            timeout_ms_per_command: Timeout per command in milliseconds
+            
+        Returns:
+            List of responses for each command
+        """
+        responses = []
+        
+        for i, command in enumerate(commands):
+            # Use shorter timeout for batch operations
+            timeout = timeout_ms_per_command
+            
+            # Special handling for certain commands
+            if command.startswith('sensorStart'):
+                timeout = 200.0
+            elif command.startswith('sensorStop'):
+                timeout = 100.0
+                
+            try:
+                self.send_command(command, timeout_ms=timeout)
+                responses.append("Done")
+            except Exception as e:
+                logger.error(f"Failed on command {i+1}/{len(commands)}: {command}")
+                responses.append(f"Error: {str(e)}")
+                
+        return responses
+
     def get_version(self):
         """Get version information from the sensor."""
         if not self.is_connected():
             logger.error("Radar not connected")
-            return
+            return None
             
         try:
             self.cli_port.flushInput()
             self.cli_port.write(b'version\n')
             time.sleep(0.05)
-            response = self._read_cli_response()
-            if response and len(response) >= 2:
-                return response[1:-2]
-            return response
+            response_lines = self._read_cli_response()
+            
+            if response_lines:
+                if response_lines[-1] == "mmwDemo:/>":
+                    return response_lines[:-1]
+                return response_lines
+            return None
         except Exception as e:
-            return [f"Error getting version: {e}"]
+            logger.error(f"Error getting version: {e}")
+            return None
 
     def connect(self, config: str, serial_number: Optional[str] = None) -> None:
         """Connect to the radar sensor.
@@ -233,7 +314,6 @@ class RadarConnection:
         try:
             self._connect_device(serial_number)
             
-            # If config is a file path, read it
             if config and os.path.isfile(config):
                 logger.info(f"Reading configuration from file: {config}")
                 with open(config, 'r') as f:
@@ -241,15 +321,26 @@ class RadarConnection:
             else:
                 logger.info("Using supplied configuration")
                 self.profile = config
+            
+            if self.profile:
+                profile_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
+                self.radar_params = self.parse_configuration(profile_lines)
+                logger.info("Parsed radar parameters from loaded profile during connect.")
+            else:
+                logger.warning("No profile content to parse radar parameters from during connect.")
+                self.radar_params = self.parse_configuration([])
+                logger.info("Initialized radar_params with defaults during connect.")
+
             self.version_info = self.get_version()
             
-            if not self.version_info:
-                raise RadarConnectionError("No response from sensor - check connections")
+            if self.version_info is None:
+                logger.warning("No version information received from sensor, but proceeding.")
                 
         except serial.SerialException as e:
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
             
         except Exception as e:
+            logger.exception(f"Unexpected error during radar connection process:")
             raise RadarConnectionError(f"Failed to connect to radar: {str(e)}")
 
     def set_frame_period(self, period_ms: float) -> None:
@@ -278,13 +369,11 @@ class RadarConnection:
         """Parse configuration lines and extract radar parameters."""
         config_params = {}
         
-        # First load default values from YAML if available
         yaml_config_path = 'configs/default_config.yaml'
         if os.path.exists(yaml_config_path):
             try:
                 with open(yaml_config_path, 'r') as f:
                     yaml_config = yaml.safe_load(f)
-                    # Pre-populate with YAML settings
                     config_params['clutterRemoval'] = yaml_config['processing']['clutter_removal']
                     config_params['framePeriod'] = yaml_config['processing']['frame_period_ms']
                     config_params['mobEnabled'] = yaml_config['processing']['mob_enabled']
@@ -309,19 +398,24 @@ class RadarConnection:
                     config_params['txAnt'] = bin(int(args[1])).count("1")
                     
                 elif cmd == 'profileCfg':
-                    config_params['samples'] = int(args[-5])
-                    config_params['sampleRate'] = int(args[-4])
-                    config_params['slope'] = float(args[7])
+                    config_params['samples'] = int(args[9])  # ADC samples at index 9
+                    config_params['sampleRate'] = int(args[10])  # Sample rate at index 10
+                    config_params['slope'] = float(args[7])  # Frequency slope at index 7
                     
                 elif cmd == 'frameCfg':
-                    config_params['chirpsPerFrame'] = (int(args[1]) - int(args[0]) + 1) * int(args[2])
-                    # Only override framePeriod if not set from YAML
+                    start_chirp = int(args[0])
+                    end_chirp = int(args[1])
+                    num_loops = int(args[2])
+                    chirps_per_frame = (end_chirp - start_chirp + 1) * num_loops
+                    config_params['chirpsPerFrame'] = chirps_per_frame
                     if 'framePeriod' not in config_params:
                         config_params['framePeriod'] = float(args[4])
+                    # Set num_doppler_bins based on the number of loops
+                    config_params['num_doppler_bins'] = num_loops
+                    logger.debug(f"FrameCfg: start={start_chirp}, end={end_chirp}, loops={num_loops}, chirpsPerFrame={chirps_per_frame}, num_doppler_bins={config_params['num_doppler_bins']}")
                     
                 elif cmd == 'multiObjBeamForming':
                     if len(args) >= 3:
-                        # Only override if not set from YAML
                         if 'mobEnabled' not in config_params:
                             self.mob_enabled = int(args[1]) == 1
                             self.mob_threshold = float(args[2])
@@ -330,7 +424,6 @@ class RadarConnection:
                         
                 elif cmd == 'clutterRemoval':
                     if len(args) >= 2:
-                        # Only override if not set from YAML
                         if 'clutterRemoval' not in config_params:
                             self._clutter_removal = int(args[1]) == 1
                             config_params['clutterRemoval'] = self._clutter_removal
@@ -338,26 +431,68 @@ class RadarConnection:
                 logger.warning(f"Error parsing configuration line '{line}': {e}")
                 continue
         
-        # Calculate derived parameters
-        if 'samples' in config_params:
-            rangeBins2x = 2 ** (len(bin(config_params['samples'])) - 2)
-            config_params['rangeBins'] = int(rangeBins2x/2)
+        # Parse range resolution from profile comments
+        for line in config_lines:
+            if line.startswith('%') and 'Range resolution' in line and 'm/bin' in line:
+                logger.info(f"Found range resolution line: {line.strip()}")
+                try:
+                    # Extract range resolution value from comment line
+                    # Format: "% Range resolution (meter per 1D-FFT bin)   m/bin    0.044"
+                    parts = line.split()
+                    logger.info(f"Line parts: {parts}")
+                    for i, part in enumerate(parts):
+                        if part == 'm/bin' and i + 1 < len(parts):
+                            range_resolution = float(parts[i + 1])
+                            config_params['rangeStep'] = range_resolution
+                            logger.info(f"Extracted range resolution from profile: {range_resolution} m/bin")
+                            break
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Error parsing range resolution from line '{line}': {e}")
+                break
         
-        # Calculate range resolution
-        if all(k in config_params for k in ['sampleRate', 'slope', 'rangeBins']):
-            config_params['rangeStep'] = (3e8 * config_params['sampleRate'] * 1e3) / (2 * config_params['slope'] * 1e12 * config_params['rangeBins'] * 2)
-            config_params['maxRange'] = config_params['rangeStep'] * config_params['rangeBins']
+        if 'samples' in config_params:
+            # Range bins should equal the number of ADC samples
+            config_params['rangeBins'] = config_params['samples']
+        
+        # Only calculate rangeStep if not already extracted from profile comments
+        if 'rangeStep' not in config_params and all(k in config_params for k in ['sampleRate', 'slope', 'samples']):
+            # For FMCW radar: rangeStep = (c * sampleRate) / (2 * slope * numADCSamples)
+            # All values in MHz or Msps, so units are consistent
+            c = 3e8  # Speed of light in m/s
+            sample_rate_msps = config_params['sampleRate'] * 1e-3 # Convert ksps to Msps
+            slope_mhz_us = config_params['slope']              # MHz/us
             
-        # Apply the parsed configuration to instance variables
+            # Bandwidth = slope * ADC sampling time
+            # ADC sampling time = num_adc_samples / sample_rate
+            adc_sampling_time_us = config_params['samples'] / (config_params['sampleRate'] * 1e-3) # us
+            bandwidth_ghz = slope_mhz_us * adc_sampling_time_us * 1e-3 # GHz
+            
+            # Range resolution = c / (2 * Bandwidth)
+            range_resolution = c / (2 * bandwidth_ghz * 1e9)
+            
+            config_params['rangeStep'] = range_resolution
+            logger.info(f"Bandwidth: {bandwidth_ghz*1e3:.2f} MHz")
+            logger.info(f"Calculated range resolution: {config_params['rangeStep']:.6f} m/bin")
+        
+        if 'rangeStep' in config_params and 'rangeBins' in config_params:
+            config_params['maxRange'] = config_params['rangeStep'] * config_params['rangeBins']
+            logger.info(f"Final rangeStep: {config_params['rangeStep']:.6f} m/bin, maxRange: {config_params['maxRange']:.2f} m")
+        else:
+            logger.warning("rangeStep not found in config_params")
+            # Use default values from profile
+            config_params['rangeStep'] = 0.044  # m/bin (from profile)
+            config_params['maxRange'] = config_params['rangeStep'] * config_params.get('rangeBins', 256)
+            logger.info(f"Using profile rangeStep: {config_params['rangeStep']:.6f} m/bin, maxRange: {config_params['maxRange']:.2f} m")
+        
+        # Set radar instance parameters from config
         if 'clutterRemoval' in config_params:
             self._clutter_removal = config_params['clutterRemoval']
         if 'mobEnabled' in config_params:
             self.mob_enabled = config_params['mobEnabled']
         if 'mobThreshold' in config_params:
             self.mob_threshold = config_params['mobThreshold']
-#        if 'framePeriod' in config_params:
-#            self.frame_period = config_params['framePeriod']
-            
+        
+        logger.info(f"Final radar parameters: {config_params}")
         return config_params
 
     def _format_radar_params(self, params: dict) -> str:
@@ -389,10 +524,8 @@ class RadarConnection:
             
         profile_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
 
-        # Work in progress, parsing leads to nothing right now
         if self.radar_params is None:
             self.radar_params = self.parse_configuration(profile_lines)
-        #logger.info(f"Parsed radar parameters:{self._format_radar_params(self.radar_params)}")
     
         init_commands = [
             'sensorStop',
@@ -411,20 +544,16 @@ class RadarConnection:
             if not line or line.startswith('%') or line.startswith('sensorStart'):
                 continue
 
-            # Temporary fix for clutterRemoval
             if line.startswith('clutterRemoval'):
                 line = 'clutterRemoval -1 ' + ('1' if self.radar_params['clutterRemoval'] else '0') + '\n'
                 self._clutter_removal = self.radar_params['clutterRemoval']
 
-            # Temporary fix for frame period
-            # replace 5th argument with framePeriod
             if line.startswith('frameCfg'):
                 self.frame_period = self.radar_params['framePeriod']
                 parts = line.split()
-                parts[5] = str(int(self.frame_period))
+                parts[4] = str(int(self.frame_period))  # Frame period is at index 4
                 line = ' '.join(parts)
 
-            # Temporary fix for multiObjBeamForming
             if line.startswith('multiObjBeamForming'):
                 line = 'multiObjBeamForming -1 ' + ('1' if self.radar_params['mobEnabled'] else '0') + ' ' + str(self.radar_params['mobThreshold']) + '\n'
                 self.mob_enabled = self.radar_params['mobEnabled']
@@ -452,18 +581,23 @@ class RadarConnection:
                 if not ignore_response:
                     response = self._read_cli_response()
                     if response:
-                        if "Done" not in response:
-                            logger.error(f"Error in command '{command}': {response}")
-                            raise RadarConnectionError(f"Configuration error: {response}")
-                        logger.debug(f"Response: {response}")
+                        # Check if response contains "Done" (success)
+                        response_text = ' '.join(response)
+                        if "Done" not in response_text:
+                            # Check if this is an unsupported command error
+                            if "is not recognized as a CLI command" in response_text:
+                                cmd_name = command.split()[0] if command.split() else "unknown"
+                                logger.warning(f"Command '{cmd_name}' is not supported by this firmware version. Skipping command: {command}")
+                                logger.debug(f"Response: {response}")
+                            else:
+                                logger.error(f"Error in command '{command}': {response}")
+                                raise RadarConnectionError(f"Configuration error: {response}")
+                        else:
+                            logger.debug(f"Response: {response}")
         
-        if self._detected_cli_port.startswith('/dev/tty.'):  # macOS
-            self.baudrate = 460800
-        else:  # Windows/Linux
-            self.baudrate = 921600
-        
-        logger.debug(f"Configuring data port with baudrate: {self.baudrate}")
-        self.cli_port.write(f"configDataPort {self.baudrate} 0\n".encode())
+        baudrate = self.data_port_baudrate
+        logger.debug(f"Configuring data port with baudrate: {baudrate}")
+        self.cli_port.write(f"configDataPort {baudrate} 0\n".encode())
         if not ignore_response:
             response = self._read_cli_response()
             if response:
@@ -490,11 +624,7 @@ class RadarConnection:
             )
             logger.debug("CLI port opened successfully")
             
-            if self._detected_cli_port.startswith('/dev/tty.'):  # macOS
-                baudrate = 460800
-            else:  # Windows/Linux
-                baudrate = 921600
-                
+            baudrate = self.data_port_baudrate
             logger.debug(f"Attempting to create reader for data port: {self._detected_data_port}")
             logger.debug(f"Using baudrate: {baudrate}")
 
@@ -531,6 +661,31 @@ class RadarConnection:
         }
         return header
 
+    def restart_radar(self) -> bool:
+        """Restart the radar sensor to recover from communication issues."""
+        try:
+            logger.info("Attempting to restart radar due to communication timeout...")
+            
+            # Stop the sensor
+            self.send_command('sensorStop')
+            self.is_running = False
+            time.sleep(0.1)  # Brief pause
+            
+            # Clear the buffer
+            if hasattr(self, '_buffer'):
+                self._buffer = b''
+            
+            # Simply restart the sensor without reconfiguration
+            self.send_command('sensorStart')
+            self.is_running = True
+            
+            logger.info("Radar restarted successfully (fast restart)")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to restart radar: {e}")
+            return False
+
     def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:
         """Read and parse data packets from the radar."""
         if not self.is_running:
@@ -538,31 +693,130 @@ class RadarConnection:
             return None
             
         try:
-            if packet := self.data_port.read_until(self.MAGIC_WORD):
-                self.total_frames += 1
-                header = self._parse_header(packet)
-                frame = header['frame_number']
+            # Initialize buffer if not exists
+            if not hasattr(self, '_buffer'):
+                self._buffer = b''
+            
+            # Keep reading until we have at least two magic words in the buffer
+            timeout_start = time.time()
+            max_timeout = 3.0  # Maximum timeout of 3 seconds
+            
+            while True:
+                # Check for overall timeout
+                if time.time() - timeout_start > max_timeout:
+                    logger.warning(f"Timeout waiting for radar data after {max_timeout}s - attempting restart")
+                    
+                    # Try to restart the radar
+                    if self.restart_radar():
+                        # Reset timeout and try again
+                        timeout_start = time.time()
+                        continue
+                    else:
+                        logger.error("Failed to restart radar, giving up")
+                        return None
                 
-                if self.last_frame is not None:
-                    if frame != self.last_frame + 1:
-                        missed = frame - self.last_frame - 1
-                        self.missed_frames += missed
-                        logger.warning(f"Missed {missed} frames between {self.last_frame} and {frame}")
-                    elif frame <= self.last_frame:
-                        logger.error(f"Invalid frame sequence: {self.last_frame} -> {frame}")
-                        self.invalid_packets += 1
+                # Count magic words in current buffer
+                magic_count = self._buffer.count(self.MAGIC_WORD)
                 
-                self.last_frame = frame
-                logger.debug(f"Frame {frame}: {header['num_detected_obj']} objects, "
-                           f"{header['total_packet_len']} bytes")
+                if magic_count >= 2:
+                    # We have at least two magic words, can process a frame
+                    break
                 
-                payload = np.frombuffer(packet[32:], dtype=np.uint8)
-                
-                return header, payload
-            else:
-                self.failed_reads += 1
-                logger.warning("Failed to read packet")
+                # Try to read more data with shorter timeout
+                try:
+                    # First check if any data is available
+                    if self.data_port.in_waiting == 0:
+                        time.sleep(0.001)  # Short sleep to avoid busy waiting
+                        continue
+                    
+                    # Read available data in chunks instead of waiting for magic word
+                    chunk_size = min(1024, self.data_port.in_waiting)
+                    data = self.data_port.read(chunk_size)
+                    
+                    if not data:
+                        time.sleep(0.001)  # Short sleep before retrying
+                        continue
+                    
+                    # Add the data to our buffer
+                    self._buffer += data
+                    logger.debug(f"Added {len(data)} bytes to buffer, total: {len(self._buffer)}")
+                    
+                    # Limit buffer size to prevent memory issues
+                    if len(self._buffer) > self.MAX_BUFFER_SIZE:
+                        # Keep only the last half of the buffer
+                        keep_size = self.MAX_BUFFER_SIZE // 2
+                        self._buffer = self._buffer[-keep_size:]
+                        logger.warning(f"Buffer size exceeded limit, truncated to {len(self._buffer)} bytes")
+                        
+                except serial.SerialTimeoutException:
+                    # Timeout on individual read, continue the loop
+                    continue
+                except Exception as e:
+                    logger.error(f"Error reading from data port: {e}")
+                    return None
+            
+            # Now we have at least two magic words in the buffer
+            # Find the first magic word position
+            first_magic_pos = self._buffer.find(self.MAGIC_WORD)
+            if first_magic_pos == -1:
+                logger.debug(f"No first magic word found in buffer, clearing buffer")
+                self._buffer = b''
                 return None
+            
+            # Find the second magic word position
+            second_magic_pos = self._buffer.find(self.MAGIC_WORD, first_magic_pos + 1)
+            if second_magic_pos == -1:
+                logger.debug(f"No second magic word found in buffer")
+                # This shouldn't happen since we checked for >= 2 magic words above
+                # But if it does, clear the buffer to recover
+                self._buffer = b''
+                return None
+            
+            # Extract frame data between the two magic words
+            frame_data = self._buffer[first_magic_pos + len(self.MAGIC_WORD):second_magic_pos]
+            logger.debug(f"Length of frame data: {len(frame_data)}")
+            
+            # Check if we have enough data for header
+            if len(frame_data) < 32:
+                logger.debug(f"Not enough data for header: {len(frame_data)} < 32")
+                return None
+            
+            # Parse header
+            header_data = frame_data[:32]
+            header = self._parse_header(header_data)
+            frame = header['frame_number']           
+            self.last_frame = frame
+            
+            # Calculate payload length
+            total_packet_len = header['total_packet_len']
+            payload_length = total_packet_len - 32 - self.MAGIC_WORD_LENGTH
+            
+            if payload_length < 0:
+                logger.debug(f"Invalid payload length: {payload_length}")
+                # Invalid packet, remove everything up to second magic word and continue
+                self._buffer = self._buffer[second_magic_pos:]
+                return None
+            
+            # Check if we actually have enough data for the complete payload
+            if len(frame_data) < 32 + payload_length:
+                logger.debug(f"Incomplete frame data: have {len(frame_data)}, need {32 + payload_length}")
+                # Don't remove from buffer, just return None and try again later
+                return None
+                                    
+            # Extract payload
+            payload_data = frame_data[32:32 + payload_length]
+            
+            # Remove the processed frame from buffer (everything up to second magic word)
+            old_buffer_size = len(self._buffer)
+            self._buffer = self._buffer[second_magic_pos:]
+            new_buffer_size = len(self._buffer)
+            
+            logger.debug(f"Buffer: {old_buffer_size} -> {new_buffer_size} bytes (removed {second_magic_pos})")
+            
+            self.total_frames += 1
+            payload = np.frombuffer(payload_data, dtype=np.uint8)
+            
+            return header, payload
                 
         except Exception as e:
             logger.error(f"Error reading frame: {e}")
@@ -570,7 +824,10 @@ class RadarConnection:
 
     def configure_and_start(self) -> None:
         """Configure the radar and start streaming data."""
-        self.send_profile()
+        if not self.is_connected(): 
+            raise RadarConnectionError("Radar not connected")
+            
+        self.send_profile(ignore_response=False)
         self.send_command('sensorStart')
         self.is_running = True
         logger.info("Radar configured and started")
@@ -605,6 +862,14 @@ class RadarConnection:
         """Check if radar is connected."""
         return (self.cli_port is not None and self.cli_port.is_open and 
                 self.data_port is not None and self.data_port.is_open)
+
+    @property
+    def data_port_baudrate(self) -> int:
+        """Get the configured data port baudrate."""
+        if self._detected_cli_port and self._detected_cli_port.startswith('/dev/tty.'):
+            return 460800  # Mac can't handle higher baudrate
+        else:
+            return 460800  # Linux/Windows 
 
 
 def create_radar() -> RadarConnection:

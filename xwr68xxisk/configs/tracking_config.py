@@ -1,9 +1,9 @@
 """Tracking configuration for radar point cloud processing."""
 
-from pydantic import Field, validator
+from pydantic import BaseModel, Field, field_validator
 from .base_config import BaseConfig
 
-class TrackingConfig(BaseConfig):
+class TrackingConfig(BaseModel):
     """Configuration for point cloud tracking."""
     enabled: bool = Field(
         default=False,
@@ -34,11 +34,12 @@ class TrackingConfig(BaseConfig):
         description="Time step between frames (seconds)"
     )
     
-    @validator('max_misses')
-    def max_misses_greater_than_min_hits(cls, v, values):
-        """Validate that max_misses is greater than min_hits."""
-        if 'min_hits' in values and v <= values['min_hits']:
-            raise ValueError("max_misses must be greater than min_hits")
+    @field_validator('max_misses')
+    @classmethod
+    def validate_max_misses(cls, v: int) -> int:
+        """Validate max_misses is positive."""
+        if v < 1:
+            raise ValueError("max_misses must be at least 1")
         return v
     
     def __str__(self) -> str:

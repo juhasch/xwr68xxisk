@@ -1,0 +1,1030 @@
+DEBUG:xwr68xxisk.radar:Found CP2105 port: CP2105 Dual USB to UART Bridge Controller - Standard Com Port
+DEBUG:xwr68xxisk.radar:Found CP2105 port: CP2105 Dual USB to UART Bridge Controller - Enhanced Com Port
+INFO:xwr68xxisk.radar:Found CLI port: /dev/ttyUSB0
+INFO:xwr68xxisk.radar:Found Data port: /dev/ttyUSB1
+INFO:xwr68xxisk.radar:Serial number: 00F48B0C
+DEBUG:xwr68xxisk.radar:Attempting to open CLI port: /dev/ttyUSB0
+DEBUG:xwr68xxisk.radar:CLI port opened successfully
+DEBUG:xwr68xxisk.radar:Attempting to create reader for data port: /dev/ttyUSB1
+DEBUG:xwr68xxisk.radar:Using baudrate: 921600
+DEBUG:xwr68xxisk.radar:Data port opened successfully
+INFO:xwr68xxisk.radar:Reading configuration from file: ../configs/user_profile.cfg
+DEBUG:xwr68xxisk.radar:FrameCfg: start=0, end=1, loops=32, chirpsPerFrame=64, num_doppler_bins=32
+INFO:xwr68xxisk.radar:Bandwidth: 3399.68 MHz
+INFO:xwr68xxisk.radar:Calculated range resolution: 0.044122 m/bin
+INFO:xwr68xxisk.radar:Final rangeStep: 0.044122 m/bin, maxRange: 11.30 m
+INFO:xwr68xxisk.radar:Final radar parameters: {'clutterRemoval': False, 'framePeriod': 100.0, 'mobEnabled': False, 'mobThreshold': 0.5, 'rxAnt': 4, 'txAnt': 2, 'samples': 256, 'sampleRate': 12500, 'slope': 166.0, 'chirpsPerFrame': 64, 'num_doppler_bins': 32, 'rangeBins': 256, 'rangeStep': 0.04412179969879518, 'maxRange': 11.295180722891565}
+INFO:xwr68xxisk.radar:Parsed radar parameters from loaded profile during connect.
+DEBUG:xwr68xxisk.radar:Sending command: sensorStop
+DEBUG:xwr68xxisk.radar:Response: ['sensorStop', 'Ignored: Sensor is already stopped', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: flushCfg
+DEBUG:xwr68xxisk.radar:Response: ['flushCfg', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: dfeDataOutputMode 1
+DEBUG:xwr68xxisk.radar:Response: ['dfeDataOutputMode 1', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: channelCfg 15 5 0
+DEBUG:xwr68xxisk.radar:Response: ['channelCfg 15 5 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: adcCfg 2 1
+DEBUG:xwr68xxisk.radar:Response: ['adcCfg 2 1', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: adcbufCfg -1 0 1 1 1
+DEBUG:xwr68xxisk.radar:Response: ['adcbufCfg -1 0 1 1 1', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: lowPower 0 0
+DEBUG:xwr68xxisk.radar:Response: ['lowPower 0 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: profileCfg 0 60 7 3 24 0 0 166 1 256 12500 0 0 158
+DEBUG:xwr68xxisk.radar:Response: ['profileCfg 0 60 7 3 24 0 0 166 1 256 12500 0 0 158', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: chirpCfg 0 0 0 0 0 0 0 1
+DEBUG:xwr68xxisk.radar:Response: ['chirpCfg 0 0 0 0 0 0 0 1', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: chirpCfg 1 1 0 0 0 0 0 4
+DEBUG:xwr68xxisk.radar:Response: ['chirpCfg 1 1 0 0 0 0 0 4', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: frameCfg 0 1 32 0 100 1 0
+DEBUG:xwr68xxisk.radar:Response: ['frameCfg 0 1 32 0 100 1 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: triggerMode 0
+DEBUG:xwr68xxisk.radar:Response: ['triggerMode 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: guiMonitor -1 1 0 0 0 0 0
+DEBUG:xwr68xxisk.radar:Response: ['guiMonitor -1 1 0 0 0 0 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: multiObjBeamForming -1 0 0.5
+
+DEBUG:xwr68xxisk.radar:Response: ['multiObjBeamForming -1 0 0.5', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: cfarCfg -1 0 2 8 4 3 0 15.0 0
+DEBUG:xwr68xxisk.radar:Response: ['mmwDemo:/>cfarCfg -1 0 2 8 4 3 0 15.0 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: cfarCfg -1 1 0 4 2 3 1 15.0 0
+DEBUG:xwr68xxisk.radar:Response: ['cfarCfg -1 1 0 4 2 3 1 15.0 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: calibDcRangeSig -1 False -5 8 256
+DEBUG:xwr68xxisk.radar:Response: ['calibDcRangeSig -1 False -5 8 256', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: clutterRemoval -1 0
+
+DEBUG:xwr68xxisk.radar:Response: ['clutterRemoval -1 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: compRangeBiasAndRxChanPhase 0.0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0
+DEBUG:xwr68xxisk.radar:Response: ['mmwDemo:/>compRangeBiasAndRxChanPhase 0.0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: measureRangeBiasAndRxChanPhase 0 1.0 0.2
+DEBUG:xwr68xxisk.radar:Response: ['measureRangeBiasAndRxChanPhase 0 1.0 0.2', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: aoaFovCfg -1 -90.0 90.0 -90.0 90.0
+DEBUG:xwr68xxisk.radar:Response: ['aoaFovCfg -1 -90.0 90.0 -90.0 90.0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: cfarFovCfg -1 0 0.25 9.0
+DEBUG:xwr68xxisk.radar:Response: ['cfarFovCfg -1 0 0.25 9.0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: cfarFovCfg -1 1 -20.16 20.16
+DEBUG:xwr68xxisk.radar:Response: ['cfarFovCfg -1 1 -20.16 20.16', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: extendedMaxVelocity -1 0
+DEBUG:xwr68xxisk.radar:Response: ['extendedMaxVelocity -1 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: CQRxSatMonitor 0 3 4 63 0
+DEBUG:xwr68xxisk.radar:Response: ['CQRxSatMonitor 0 3 4 63 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: CQSigImgMonitor 0 127 4
+DEBUG:xwr68xxisk.radar:Response: ['CQSigImgMonitor 0 127 4', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: analogMonitor 0 0
+DEBUG:xwr68xxisk.radar:Response: ['analogMonitor 0 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: lvdsStreamCfg -1 False 0 False
+DEBUG:xwr68xxisk.radar:Response: ['lvdsStreamCfg -1 False 0 False', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: bpmCfg -1 0 0 0
+DEBUG:xwr68xxisk.radar:Response: ['bpmCfg -1 0 0 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sending command: calibData 0 0 0
+DEBUG:xwr68xxisk.radar:Response: ['calibData 0 0 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Configuring data port with baudrate: 921600
+DEBUG:xwr68xxisk.radar:Data port configuration response: ['configDataPort 921600 0', 'Done', 'mmwDemo:/>']
+DEBUG:xwr68xxisk.radar:Sent command: sensorStart
+DEBUG:xwr68xxisk.radar:Response: ['sensorStart', 'sensorStart: GPIO_1 state = 0', 'Done', 'mmwDemo:/>']
+INFO:xwr68xxisk.radar:Radar configured and started
+DEBUG:xwr68xxisk.parse:offset: 293
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=d8030f, length=15008543
+WARNING:root:Insufficient data for TLV type 14156559 with length 15008543, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 14156559 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 14156559 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 311
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 3b 03 fb 00 41 03
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=db030900, length=2550340352
+WARNING:root:Insufficient data for TLV type 3674409216 with length 2550340352, available: 24 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3674409216 with available data: 24 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3674409216 with limited data: 24 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1c00da03, length=3556829443
+WARNING:root:Insufficient data for TLV type 469817859 with length 3556829443, available: 29 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 469817859 with available data: 29 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 469817859 with limited data: 29 bytes available
+DEBUG:xwr68xxisk.parse:offset: 265
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 48 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=288
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 288
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=ea010d02, length=4144046082
+WARNING:root:Insufficient data for TLV type 3925937410 with length 4144046082, available: 16 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3925937410 with available data: 16 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3925937410 with limited data: 16 bytes available
+DEBUG:xwr68xxisk.parse:offset: 266
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 48 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=288
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 288
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=ec010a02, length=4211154178
+WARNING:root:Insufficient data for TLV type 3959491074 with length 4211154178, available: 17 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3959491074 with available data: 17 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3959491074 with limited data: 17 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=e9031b00, length=251843584
+WARNING:root:Insufficient data for TLV type 3909294848 with length 251843584, available: 29 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3909294848 with available data: 29 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3909294848 with limited data: 29 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=db030a00, length=3892517376
+WARNING:root:Insufficient data for TLV type 3674409472 with length 3892517376, available: 30 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3674409472 with available data: 30 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3674409472 with limited data: 30 bytes available
+DEBUG:xwr68xxisk.parse:offset: 297
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=800fa02, length=419486723
+WARNING:root:Insufficient data for TLV type 134281730 with length 419486723, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 134281730 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 134281730 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 268
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 48 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=288
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 288
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=11102e3, length=19268325
+WARNING:root:Insufficient data for TLV type 17892067 with length 19268325, available: 19 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 17892067 with available data: 19 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 17892067 with limited data: 19 bytes available
+DEBUG:xwr68xxisk.parse:offset: 299
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f90301, length=14287625
+WARNING:root:Insufficient data for TLV type 16319233 with length 14287625, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 16319233 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 16319233 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f7030300, length=3624078080
+WARNING:root:Insufficient data for TLV type 4144169728 with length 3624078080, available: 24 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4144169728 with available data: 24 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4144169728 with limited data: 24 bytes available
+DEBUG:xwr68xxisk.parse:offset: 269
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 48 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=288
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 288
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=d500e903, length=3925937154
+WARNING:root:Insufficient data for TLV type 3573606659 with length 3925937154, available: 20 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3573606659 with available data: 20 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3573606659 with limited data: 20 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f8030400, length=3691186688
+WARNING:root:Insufficient data for TLV type 4160947200 with length 3691186688, available: 24 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4160947200 with available data: 24 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4160947200 with limited data: 24 bytes available
+DEBUG:xwr68xxisk.parse:offset: 300
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=30400f3, length=51052792
+WARNING:root:Insufficient data for TLV type 50594035 with length 51052792, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 50594035 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 50594035 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=30200f5, length=51052791
+WARNING:root:Insufficient data for TLV type 50462965 with length 51052791, available: 24 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 50462965 with available data: 24 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 50462965 with limited data: 24 bytes available
+DEBUG:xwr68xxisk.parse:offset: 301
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=500f302, length=218166787
+WARNING:root:Insufficient data for TLV type 83948290 with length 218166787, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 83948290 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 83948290 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 301
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f502f5, length=16188163
+WARNING:root:Insufficient data for TLV type 16057077 with length 16188163, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 16057077 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 16057077 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 317
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=2f40124, length=50397432
+WARNING:root:Insufficient data for TLV type 49545508 with length 50397432, available: 36 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 49545508 with available data: 36 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 49545508 with limited data: 36 bytes available
+DEBUG:xwr68xxisk.parse:offset: 364
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 64 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=400
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 400
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=96031c00, length=2516794624
+WARNING:root:Insufficient data for TLV type 2516786176 with length 2516794624, available: 31 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 2516786176 with available data: 31 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 2516786176 with limited data: 31 bytes available
+DEBUG:xwr68xxisk.parse:offset: 274
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 48 00 03 0e
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=288
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 288
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=5400d803, length=3456167683
+WARNING:root:Insufficient data for TLV type 1409341443 with length 3456167683, available: 24 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1409341443 with available data: 24 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1409341443 with limited data: 24 bytes available
+DEBUG:xwr68xxisk.parse:offset: 304
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=2e8010d, length=49742113
+WARNING:root:Insufficient data for TLV type 48759053 with length 49742113, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 48759053 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 48759053 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 304
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=2f20126, length=50266362
+WARNING:root:Insufficient data for TLV type 49414438 with length 50266362, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 49414438 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 49414438 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 319
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f802f2, length=16384769
+WARNING:root:Insufficient data for TLV type 16253682 with length 16384769, available: 38 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 16253682 with available data: 38 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 16253682 with limited data: 38 bytes available
+DEBUG:xwr68xxisk.parse:offset: 305
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 03
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f3012602, length=16840962
+WARNING:root:Insufficient data for TLV type 4076938754 with length 16840962, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4076938754 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4076938754 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 338
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 5c 00 03 0e
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=368
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 368
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1e00d903, length=1057003011
+WARNING:root:Insufficient data for TLV type 503372035 with length 1057003011, available: 52 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 503372035 with available data: 52 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 503372035 with limited data: 52 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f402fa01, length=4144171008
+WARNING:root:Insufficient data for TLV type 4093835777 with length 4144171008, available: 24 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4093835777 with available data: 24 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4093835777 with limited data: 24 bytes available
+DEBUG:xwr68xxisk.parse:offset: 307
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 46 03
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1f02ea01, length=4093835521
+WARNING:root:Insufficient data for TLV type 520284673 with length 4093835521, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 520284673 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 520284673 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f602f501, length=4177724928
+WARNING:root:Insufficient data for TLV type 4127388929 with length 4177724928, available: 24 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4127388929 with available data: 24 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4127388929 with limited data: 24 bytes available
+DEBUG:xwr68xxisk.parse:offset: 322
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f9011e02, length=100726018
+WARNING:root:Insufficient data for TLV type 4177600002 with length 100726018, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4177600002 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4177600002 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 323
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=e6011202, length=4060161538
+WARNING:root:Insufficient data for TLV type 3858829826 with length 4060161538, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3858829826 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3858829826 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 353
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 60 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=384
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 384
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=900fb03, length=419487235
+WARNING:root:Insufficient data for TLV type 151059203 with length 419487235, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 151059203 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 151059203 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 324
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=2202e901, length=4177720833
+WARNING:root:Insufficient data for TLV type 570616065 with length 4177720833, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 570616065 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 570616065 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 342
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 fb 00 fb 02 11
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=368
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 368
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1d00da03, length=1057003779
+WARNING:root:Insufficient data for TLV type 486595075 with length 1057003779, available: 55 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 486595075 with available data: 55 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 486595075 with limited data: 55 bytes available
+DEBUG:xwr68xxisk.parse:offset: 325
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=2c900f4, length=48627984
+WARNING:root:Insufficient data for TLV type 46727412 with length 48627984, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 46727412 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 46727412 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 356
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 60 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=384
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 384
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f302f901, length=4144170752
+WARNING:root:Insufficient data for TLV type 4077058305 with length 4144170752, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4077058305 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4077058305 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=c02cc00, length=537061889
+WARNING:root:Insufficient data for TLV type 201509888 with length 537061889, available: 27 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 201509888 with available data: 27 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 201509888 with limited data: 27 bytes available
+DEBUG:xwr68xxisk.parse:offset: 326
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=e5011102, length=4093715458
+WARNING:root:Insufficient data for TLV type 3842052354 with length 4093715458, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3842052354 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3842052354 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=2e9010d, length=49807648
+WARNING:root:Insufficient data for TLV type 48824589 with length 49807648, available: 28 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 48824589 with available data: 28 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 48824589 with limited data: 28 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=e5011102, length=4093715458
+WARNING:root:Insufficient data for TLV type 3842052354 with length 4093715458, available: 29 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3842052354 with available data: 29 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3842052354 with limited data: 29 bytes available
+DEBUG:xwr68xxisk.parse:offset: 328
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f30287, length=17236683
+WARNING:root:Insufficient data for TLV type 15925895 with length 17236683, available: 42 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 15925895 with available data: 42 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 15925895 with limited data: 42 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=368
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 368
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f702, length=134281987
+WARNING:root:Insufficient data for TLV type 63234 with length 134281987, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 63234 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 63234 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 329
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=28a0099, length=46989553
+WARNING:root:Insufficient data for TLV type 42598553 with length 46989553, available: 42 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 42598553 with available data: 42 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 42598553 with limited data: 42 bytes available
+DEBUG:xwr68xxisk.parse:offset: 380
+DEBUG:xwr68xxisk.parse:data_bytes: 07 03 f8 00 0c 03 d9 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=368
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 368
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f002fb, length=16253703
+WARNING:root:Insufficient data for TLV type 15729403 with length 16253703, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 15729403 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 15729403 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 330
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=2890098, length=46989552
+WARNING:root:Insufficient data for TLV type 42533016 with length 46989552, available: 43 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 42533016 with available data: 43 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 42533016 with limited data: 43 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=3760096, length=46727411
+WARNING:root:Insufficient data for TLV type 58065046 with length 46727411, available: 46 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 58065046 with available data: 46 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 58065046 with limited data: 46 bytes available
+DEBUG:xwr68xxisk.parse:offset: 314
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=2d300ea, length=48824589
+WARNING:root:Insufficient data for TLV type 47382762 with length 48824589, available: 32 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 47382762 with available data: 32 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 47382762 with limited data: 32 bytes available
+DEBUG:xwr68xxisk.parse:offset: 314
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=d000ee03, length=3942714114
+WARNING:root:Insufficient data for TLV type 3489721859 with length 3942714114, available: 33 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3489721859 with available data: 33 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3489721859 with limited data: 33 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=76009603, length=3573606403
+WARNING:root:Insufficient data for TLV type 1979749891 with length 3573606403, available: 48 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1979749891 with available data: 48 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1979749891 with limited data: 48 bytes available
+DEBUG:xwr68xxisk.parse:offset: 315
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=e7037500, length=167958272
+WARNING:root:Insufficient data for TLV type 3875763456 with length 167958272, available: 34 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3875763456 with available data: 34 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3875763456 with limited data: 34 bytes available
+DEBUG:xwr68xxisk.parse:offset: 316
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=e7037500, length=167958272
+WARNING:root:Insufficient data for TLV type 3875763456 with length 167958272, available: 34 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3875763456 with available data: 34 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3875763456 with limited data: 34 bytes available
+DEBUG:xwr68xxisk.parse:offset: 334
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=75009703, length=2214633475
+WARNING:root:Insufficient data for TLV type 1962972931 with length 2214633475, available: 47 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1962972931 with available data: 47 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1962972931 with limited data: 47 bytes available
+DEBUG:xwr68xxisk.parse:offset: 317
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=ef037500, length=302173952
+WARNING:root:Insufficient data for TLV type 4009981184 with length 302173952, available: 35 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4009981184 with available data: 35 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4009981184 with limited data: 35 bytes available
+DEBUG:xwr68xxisk.parse:offset: 317
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=3750097, length=46858483
+WARNING:root:Insufficient data for TLV type 57999511 with length 46858483, available: 36 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 57999511 with available data: 36 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 57999511 with limited data: 36 bytes available
+DEBUG:xwr68xxisk.parse:offset: 364
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 60 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=384
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 384
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=d1009702, length=3959491330
+WARNING:root:Insufficient data for TLV type 3506476802 with length 3959491330, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3506476802 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3506476802 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=5500d903, length=2281740547
+WARNING:root:Insufficient data for TLV type 1426118915 with length 2281740547, available: 51 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1426118915 with available data: 51 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1426118915 with limited data: 51 bytes available
+DEBUG:xwr68xxisk.parse:offset: 319
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=9f0353, length=15467144
+WARNING:root:Insufficient data for TLV type 10421075 with length 15467144, available: 37 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 10421075 with available data: 37 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 10421075 with limited data: 37 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=dc0343, length=10290004
+WARNING:root:Insufficient data for TLV type 14418755 with length 10290004, available: 53 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 14418755 with available data: 53 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 14418755 with limited data: 53 bytes available
+DEBUG:xwr68xxisk.parse:offset: 350
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 5c 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=368
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 368
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=12802e3, length=16450288
+WARNING:root:Insufficient data for TLV type 19399395 with length 16450288, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 19399395 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 19399395 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 320
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=35600da, length=58130582
+WARNING:root:Insufficient data for TLV type 55967962 with length 58130582, available: 39 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 55967962 with available data: 39 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 55967962 with limited data: 39 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=d9034500, length=2516800768
+WARNING:root:Insufficient data for TLV type 3640870144 with length 2516800768, available: 54 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3640870144 with available data: 54 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3640870144 with limited data: 54 bytes available
+DEBUG:xwr68xxisk.parse:offset: 307
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 4c 40 03 dd
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=dd0340, length=10093394
+WARNING:root:Insufficient data for TLV type 14484288 with length 10093394, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 14484288 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 14484288 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 289
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 48 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=288
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 288
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=400f200, length=570494211
+WARNING:root:Insufficient data for TLV type 67170816 with length 570494211, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 67170816 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 67170816 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 290
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 48 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=288
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 288
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=ec0000, length=17564425
+WARNING:root:Insufficient data for TLV type 15466496 with length 17564425, available: 40 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 15466496 with available data: 40 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 15466496 with limited data: 40 bytes available
+DEBUG:xwr68xxisk.parse:offset: 323
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=5400dc03, length=2013304323
+WARNING:root:Insufficient data for TLV type 1409342467 with length 2013304323, available: 42 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1409342467 with available data: 42 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1409342467 with limited data: 42 bytes available
+DEBUG:xwr68xxisk.parse:offset: 341
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 e5 00 10 03 0b
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=34400fa, length=55902427
+WARNING:root:Insufficient data for TLV type 54788346 with length 55902427, available: 55 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 54788346 with available data: 55 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 54788346 with limited data: 55 bytes available
+DEBUG:xwr68xxisk.parse:offset: 324
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=e1033d01, length=2550353664
+WARNING:root:Insufficient data for TLV type 3775085825 with length 2550353664, available: 43 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3775085825 with available data: 43 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3775085825 with limited data: 43 bytes available
+DEBUG:xwr68xxisk.parse:offset: 342
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 ee 00 08 03 13
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=3c010003, length=1291903235
+WARNING:root:Insufficient data for TLV type 1006698499 with length 1291903235, available: 55 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1006698499 with available data: 55 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1006698499 with limited data: 55 bytes available
+DEBUG:xwr68xxisk.parse:offset: 325
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=e0034100, length=2583908352
+WARNING:root:Insufficient data for TLV type 3758309632 with length 2583908352, available: 44 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3758309632 with available data: 44 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3758309632 with limited data: 44 bytes available
+DEBUG:xwr68xxisk.parse:offset: 325
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=34400f9, length=55836892
+WARNING:root:Insufficient data for TLV type 54788345 with length 55836892, available: 44 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 54788345 with available data: 44 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 54788345 with limited data: 44 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=fa033d00, length=3674424320
+WARNING:root:Insufficient data for TLV type 4194516224 with length 3674424320, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4194516224 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4194516224 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 353
+DEBUG:xwr68xxisk.parse:data_bytes: 07 03 f8 00 0e 03 d8 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=3e00f503, length=1140914691
+WARNING:root:Insufficient data for TLV type 1040250115 with length 1140914691, available: 60 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1040250115 with available data: 60 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1040250115 with limited data: 60 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=3c00f703, length=1124137731
+WARNING:root:Insufficient data for TLV type 1006696195 with length 1124137731, available: 60 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1006696195 with available data: 60 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1006696195 with limited data: 60 bytes available
+DEBUG:xwr68xxisk.parse:offset: 350
+DEBUG:xwr68xxisk.parse:data_bytes: 07 03 fa 00 0c 03 da 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f6032f, length=16384829
+WARNING:root:Insufficient data for TLV type 16122671 with length 16384829, available: 61 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 16122671 with available data: 61 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 16122671 with limited data: 61 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=3e00f403, length=1124137475
+WARNING:root:Insufficient data for TLV type 1040249859 with length 1124137475, available: 59 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1040249859 with available data: 59 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1040249859 with limited data: 59 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=3e00f503, length=1157691395
+WARNING:root:Insufficient data for TLV type 1040250115 with length 1157691395, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1040250115 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1040250115 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 329
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=33c00f6, length=54722810
+WARNING:root:Insufficient data for TLV type 54264054 with length 54722810, available: 48 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 54264054 with available data: 48 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 54264054 with limited data: 48 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f5032f01, length=4160961536
+WARNING:root:Insufficient data for TLV type 4110626561 with length 4160961536, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4110626561 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4110626561 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 312
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=32f0122, length=54395124
+WARNING:root:Insufficient data for TLV type 53412130 with length 54395124, available: 63 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 53412130 with available data: 63 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 53412130 with limited data: 63 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f4033001, length=4144184832
+WARNING:root:Insufficient data for TLV type 4093849601 with length 4144184832, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4093849601 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4093849601 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 313
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=2e012303, length=1023473155
+WARNING:root:Insufficient data for TLV type 771826435 with length 1023473155, available: 64 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 771826435 with available data: 64 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 771826435 with limited data: 64 bytes available
+DEBUG:xwr68xxisk.parse:offset: 314
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1210322, length=15991600
+WARNING:root:Insufficient data for TLV type 18940706 with length 15991600, available: 65 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 18940706 with available data: 65 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 18940706 with limited data: 65 bytes available
+DEBUG:xwr68xxisk.parse:offset: 332
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f5032e01, length=4177738752
+WARNING:root:Insufficient data for TLV type 4110626305 with length 4177738752, available: 51 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 4110626305 with available data: 51 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 4110626305 with limited data: 51 bytes available
+DEBUG:xwr68xxisk.parse:offset: 332
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=32d0124, length=54264053
+WARNING:root:Insufficient data for TLV type 53281060 with length 54264053, available: 51 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 53281060 with available data: 51 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 53281060 with limited data: 51 bytes available
+DEBUG:xwr68xxisk.parse:offset: 296
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 48 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=288
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 288
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=72
+WARNING:root:Insufficient data for TLV type 7 with length 72, available: 52 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 52 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 52 bytes available
+DEBUG:xwr68xxisk.parse:offset: 316
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=320010f, length=53281059
+WARNING:root:Insufficient data for TLV type 52429071 with length 53281059, available: 67 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 52429071 with available data: 67 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 52429071 with limited data: 67 bytes available
+DEBUG:xwr68xxisk.parse:offset: 316
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=31e0111, length=53215525
+WARNING:root:Insufficient data for TLV type 52298001 with length 53215525, available: 67 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 52298001 with available data: 67 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 52298001 with limited data: 67 bytes available
+DEBUG:xwr68xxisk.parse:offset: 317
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1f010f03, length=755049475
+WARNING:root:Insufficient data for TLV type 520163075 with length 755049475, available: 68 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 520163075 with available data: 68 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 520163075 with limited data: 68 bytes available
+DEBUG:xwr68xxisk.parse:offset: 318
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=10f0322, length=19137311
+WARNING:root:Insufficient data for TLV type 17761058 with length 19137311, available: 68 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 17761058 with available data: 68 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 17761058 with limited data: 68 bytes available
+DEBUG:xwr68xxisk.parse:offset: 296
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 48 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=288
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 288
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=72
+WARNING:root:Insufficient data for TLV type 7 with length 72, available: 54 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 54 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 54 bytes available
+DEBUG:xwr68xxisk.parse:offset: 371
+DEBUG:xwr68xxisk.parse:data_bytes: 07 03 de 00 18
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1e011003, length=721495299
+WARNING:root:Insufficient data for TLV type 503386115 with length 721495299, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 503386115 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 503386115 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=10f0309, length=19071776
+WARNING:root:Insufficient data for TLV type 17761033 with length 19071776, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 17761033 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 17761033 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 337
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 0f
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=320010f, length=53281059
+WARNING:root:Insufficient data for TLV type 52429071 with length 53281059, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 52429071 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 52429071 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 349
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1d011203, length=704718339
+WARNING:root:Insufficient data for TLV type 486609411 with length 704718339, available: 68 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 486609411 with available data: 68 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 486609411 with limited data: 68 bytes available
+DEBUG:xwr68xxisk.parse:offset: 367
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 5c 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=368
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 368
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=96035200, length=2701358336
+WARNING:root:Insufficient data for TLV type 2516800000 with length 2701358336, available: 66 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 2516800000 with available data: 66 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 2516800000 with limited data: 66 bytes available
+DEBUG:xwr68xxisk.parse:offset: 321
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1400e300, length=503386371
+WARNING:root:Insufficient data for TLV type 335602432 with length 503386371, available: 72 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 335602432 with available data: 72 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 335602432 with limited data: 72 bytes available
+DEBUG:xwr68xxisk.parse:offset: 339
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 03 14 01
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1b011403, length=687941379
+WARNING:root:Insufficient data for TLV type 453055491 with length 687941379, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 453055491 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 453055491 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 370
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 5c 00 03 de
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=368
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 368
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=5000de03, length=1929418499
+WARNING:root:Insufficient data for TLV type 1342234115 with length 1929418499, available: 68 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1342234115 with available data: 68 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1342234115 with limited data: 68 bytes available
+DEBUG:xwr68xxisk.parse:offset: 340
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 00 0f 03 10
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=10030f00, length=620961537
+WARNING:root:Insufficient data for TLV type 268635904 with length 620961537, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 268635904 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 268635904 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 340
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 e7 00 0f 03
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=30f00e7, length=52363536
+WARNING:root:Insufficient data for TLV type 51314919 with length 52363536, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 51314919 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 51314919 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 341
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 03 03 0f 01
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f030300, length=620961537
+WARNING:root:Insufficient data for TLV type 251855616 with length 620961537, available: 56 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 251855616 with available data: 56 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 251855616 with limited data: 56 bytes available
+DEBUG:xwr68xxisk.parse:offset: 371
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 5c 00 41 03
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=368
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 368
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=dc034100, length=2533577216
+WARNING:root:Insufficient data for TLV type 3691200768 with length 2533577216, available: 70 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3691200768 with available data: 70 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3691200768 with limited data: 70 bytes available
+DEBUG:xwr68xxisk.parse:offset: 354
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=e20000, length=17826580
+WARNING:root:Insufficient data for TLV type 14811136 with length 17826580, available: 72 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 14811136 with available data: 72 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 14811136 with limited data: 72 bytes available
+DEBUG:xwr68xxisk.parse:offset: 342
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 db 00 1b 03 10
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1b00db00, length=520163331
+WARNING:root:Insufficient data for TLV type 453040896 with length 520163331, available: 57 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 453040896 with available data: 57 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 453040896 with limited data: 57 bytes available
+DEBUG:xwr68xxisk.parse:offset: 343
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 d8 00 1e 03 12 01
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=1e00d800, length=486609411
+WARNING:root:Insufficient data for TLV type 503371776 with length 486609411, available: 57 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 503371776 with available data: 57 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 503371776 with limited data: 57 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=4c00, length=503372032
+WARNING:root:Insufficient data for TLV type 19456 with length 503372032, available: 59 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 19456 with available data: 59 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 19456 with limited data: 59 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=de000000, length=268638208
+WARNING:root:Insufficient data for TLV type 3724541952 with length 268638208, available: 57 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 3724541952 with available data: 57 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 3724541952 with limited data: 57 bytes available
+DEBUG:xwr68xxisk.parse:offset: 375
+DEBUG:xwr68xxisk.parse:data_bytes: 07 3a 03 f9 00 42 03 d9
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=368
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 368
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=f9033a, length=14222146
+WARNING:root:Insufficient data for TLV type 16319290 with length 14222146, available: 73 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 16319290 with available data: 73 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 16319290 with limited data: 73 bytes available
+DEBUG:xwr68xxisk.parse:offset: 327
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=50000000, length=3674210304
+WARNING:root:Insufficient data for TLV type 1342177280 with length 3674210304, available: 73 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1342177280 with available data: 73 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1342177280 with limited data: 73 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=4c000000, length=3674210304
+WARNING:root:Insufficient data for TLV type 1275068416 with length 3674210304, available: 61 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1275068416 with available data: 61 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1275068416 with limited data: 61 bytes available
+DEBUG:xwr68xxisk.parse:offset: 328
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=80
+WARNING:root:Insufficient data for TLV type 7 with length 80, available: 74 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 74 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 74 bytes available
+DEBUG:xwr68xxisk.parse:offset: 358
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=580000, length=14286848
+WARNING:root:Insufficient data for TLV type 5767168 with length 14286848, available: 72 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 5767168 with available data: 72 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 5767168 with limited data: 72 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=540000, length=14483456
+WARNING:root:Insufficient data for TLV type 5505024 with length 14483456, available: 61 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 5505024 with available data: 61 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 5505024 with limited data: 61 bytes available
+DEBUG:xwr68xxisk.parse:offset: 312
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 4c 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=76
+WARNING:root:Insufficient data for TLV type 7 with length 76, available: 63 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 63 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 63 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=54000000, length=3808428032
+WARNING:root:Insufficient data for TLV type 1409286144 with length 3808428032, available: 61 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1409286144 with available data: 61 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1409286144 with limited data: 61 bytes available
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=54000000, length=3959422976
+WARNING:root:Insufficient data for TLV type 1409286144 with length 3959422976, available: 62 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 1409286144 with available data: 62 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 1409286144 with limited data: 62 bytes available
+DEBUG:xwr68xxisk.parse:offset: 360
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=88
+WARNING:root:Insufficient data for TLV type 7 with length 88, available: 72 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 72 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 72 bytes available
+DEBUG:xwr68xxisk.parse:offset: 344
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=84
+WARNING:root:Insufficient data for TLV type 7 with length 84, available: 63 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 63 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 63 bytes available
+DEBUG:xwr68xxisk.parse:offset: 328
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=80
+WARNING:root:Insufficient data for TLV type 7 with length 80, available: 79 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 79 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 79 bytes available
+DEBUG:xwr68xxisk.parse:offset: 360
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=88
+WARNING:root:Insufficient data for TLV type 7 with length 88, available: 72 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 72 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 72 bytes available
+DEBUG:xwr68xxisk.parse:offset: 328
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=80
+DEBUG:xwr68xxisk.parse:Parsing side info data with length 80
+DEBUG:xwr68xxisk.parse:offset: 344
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=84
+WARNING:root:Insufficient data for TLV type 7 with length 84, available: 65 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 65 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 65 bytes available
+DEBUG:xwr68xxisk.parse:offset: 344
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 54 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=336
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 336
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=84
+WARNING:root:Insufficient data for TLV type 7 with length 84, available: 65 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 65 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 65 bytes available
+DEBUG:xwr68xxisk.parse:offset: 312
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 4c 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=304
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 304
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=76
+WARNING:root:Insufficient data for TLV type 7 with length 76, available: 69 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 69 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 69 bytes available
+DEBUG:xwr68xxisk.parse:offset: 360
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=88
+WARNING:root:Insufficient data for TLV type 7 with length 88, available: 72 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 72 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 72 bytes available
+DEBUG:xwr68xxisk.parse:offset: 360
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 58 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=352
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 352
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=88
+WARNING:root:Insufficient data for TLV type 7 with length 88, available: 72 bytes
+DEBUG:xwr68xxisk.parse:Attempting to process TLV type 7 with available data: 72 bytes
+WARNING:xwr68xxisk.parse:Processing TLV type 7 with limited data: 72 bytes available
+DEBUG:xwr68xxisk.parse:offset: 328
+DEBUG:xwr68xxisk.parse:data_bytes: 07 00 00 00 50 00 00 00
+DEBUG:xwr68xxisk.parse:TLV 1/2: type=0001, length=320
+DEBUG:xwr68xxisk.parse:Parsing point cloud data with length 320
+DEBUG:xwr68xxisk.parse:TLV 2/2: type=0007, length=80
+DEBUG:xwr68xxisk.parse:Parsing side info data with length 80
+DEBUG:xwr68xxisk.radar:Sent command: sensorStop
+DEBUG:xwr68xxisk.radar:Response: ['sensorStop']

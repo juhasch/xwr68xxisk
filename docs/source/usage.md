@@ -77,4 +77,48 @@ If you have multiple radar sensors, you can specify which one to use:
 xwr68xxisk --serial-number 1234ABCD gui
 ```
 
-The serial number is a unique identifier in hex format that can be found on the USB interface of the sensor. 
+The serial number is a unique identifier in hex format that can be found on the USB interface of the sensor.
+
+## Trigger Mode Configuration
+
+The radar supports three different trigger modes that control when radar frames are generated:
+
+### Available Trigger Modes
+
+1. **Timer-based trigger (mode 0)** - Default mode
+   - Radar operates on internal timer
+   - Automatic frame generation based on configured frame period
+   - Good for continuous monitoring applications
+
+2. **Software trigger (mode 1)**
+   - Radar waits for software command to start frame
+   - Manual control over frame timing
+   - Good for synchronized applications
+
+3. **Hardware trigger (mode 2)**
+   - Radar responds to GPIO 1 signal
+   - External hardware synchronization
+   - Good for multi-sensor systems
+
+### Configuring Trigger Mode
+
+You can configure the trigger mode in your radar profile configuration files:
+
+```bash
+# Timer-based triggering (default)
+triggerMode 0
+
+# Software triggering
+triggerMode 1
+
+# Hardware triggering via GPIO 1
+triggerMode 2
+```
+
+### Usage Scenarios
+
+- **Continuous monitoring**: Use timer-based trigger (mode 0)
+- **Synchronized with other sensors**: Use hardware trigger (mode 2)
+- **Manual control**: Use software trigger (mode 1)
+
+The trigger mode must be configured before starting the sensor. Once the sensor is started, the trigger mode cannot be changed. 

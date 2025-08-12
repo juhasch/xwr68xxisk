@@ -1,6 +1,6 @@
 camera:
   device_id: null
-  enabled: false
+  enabled: true
   fps: 30
   implementation: OpenCV
   resolution:
@@ -9,8 +9,8 @@ camera:
 clustering:
   algorithm: dbscan
   enabled: false
-  eps: 0.7
-  min_samples: 3
+  eps: 0.5
+  min_samples: 5
 display:
   plot_height: 600
   plot_width: 1100
@@ -20,31 +20,122 @@ display:
   - 2.5
   y_range:
   - 0.0
-  - 8.0
+  - 5.0
 processing:
   clutter_removal: false
-  frame_period_ms: 140.0
+  frame_period_ms: 500.0
   mob_enabled: false
   mob_threshold: 0.5
 radar:
-  doppler_resolution: 0.1
-  max_range: 10.0
-  max_velocity: 5.0
-  num_doppler_bins: 16.0
-  num_range_bins: 256
-  range_idx_to_meters: 0.1
-  range_resolution: 0.1
+  adc_buf_cfg:
+    adc_output_fmt: 0
+    chan_interleave: 1
+    chirp_threshold: 4
+    sample_swap: 1
+    subframe_idx: -1
+  adc_cfg:
+    adc_output_fmt: 1
+    num_adc_bits: 2
+  analog_monitor:
+    rx_saturation: false
+    sig_img_band: false
+  antenna_config: 4Rx,2Tx(30 deg)
+  aoa_fov_cfg:
+    max_azimuth_deg: 90.0
+    max_elevation_deg: 90.0
+    min_azimuth_deg: -90.0
+    min_elevation_deg: -90.0
+    subframe_idx: -1
+  bpm_cfg: null
+  calib_data: null
+  calib_dc_range_sig:
+    enabled: false
+    negative_bin_idx: -5
+    num_avg_frames: 256
+    positive_bin_idx: 8
+    subframe_idx: -1
+  cfar_cfg:
+    average_mode: 2
+    cyclic_mode: 0
+    guard_len: 4
+    noise_div: 3
+    peak_grouping_en: false
+    proc_direction: 0
+    subframe_idx: -1
+    threshold_scale: 15.0
+    win_len: 8
+  cfar_cfgs: []
+  cfar_fov_cfgs: []
+  channel_cfg:
+    cascading: 0
+    rx_channel_en: 15
+    tx_channel_en: 7
+  clutter_removal:
+    enabled: false
+    subframe_idx: -1
+  comp_range_bias_and_rx_chan_phase: null
+  cq_rx_sat_monitor: null
+  cq_sig_img_monitor: null
+  dfe_data_output_mode:
+    mode_type: 1
+  extended_max_velocity: null
+  frame_rate_fps: 8.0
+  gui_monitor:
+    detected_objects: 1
+    noise_profile: false
+    range_azimuth_heat_map: false
+    range_doppler_heat_map: false
+    range_profile_enabled: true
+    range_profile_mode: complex
+    stats_info: true
+  lvds_stream_cfg:
+    data_fmt: 0
+    enable_header: false
+    enable_sw: false
+    subframe_idx: -1
+  max_radial_velocity_ms: 1.0
+  max_unambiguous_range_m: 9.02
+  measure_range_bias_and_rx_chan_phase: null
+  multi_obj_beam_forming:
+    enabled: false
+    subframe_idx: -1
+    threshold: 0.5
+  plot_noise_profile: false
+  plot_range_azimuth_heat_map: false
+  plot_range_doppler_heat_map: false
+  plot_range_profile: true
+  plot_scatter: true
+  plot_statistics: false
+  profile_cfg:
+    adc_start_time: 3.0
+    dig_out_sample_rate: 12500
+    freq_slope_const: 166.0
+    hpf_corner_freq1: 0
+    hpf_corner_freq2: 0
+    idle_time: 7.0
+    num_adc_samples: 256
+    profile_id: 0
+    ramp_end_time: 24.0
+    rx_gain: 30.0
+    start_freq: 60.0
+    tx_out_power: 0
+    tx_phase_shifter: 0
+    tx_start_time: 1.0
+  radial_velocity_resolution_ms: 0.13
+  range_profile_mode: complex
+  range_resolution_m: 0.044
+  trigger_mode: 0
 recording:
-  buffer_in_memory: false
+  buffer_size: 1000
   directory: recordings
   enabled: true
   formats:
   - csv
   prefix: radar_data
 tracking:
-  dt: 0.14
+  dt: 0.5
   enabled: false
-  max_distance: 3.5
+  max_distance: 2.0
   max_misses: 5
   min_hits: 3
 version: '1.0'

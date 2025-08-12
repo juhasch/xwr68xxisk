@@ -28,15 +28,14 @@ pip install .
 ```bash
 xwr68xxisk --help
 
-usage: xwr68xxisk [-h] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--serial-number SERIAL_NUMBER] {gui,record,dora} ...
+usage: xwr68xxisk [-h] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--serial-number SERIAL_NUMBER] {gui,record} ...
 
 XWR68XX ISK Radar Tools
 
 positional arguments:
-  {gui,record,dora}     Available commands
+  {gui,record}          Available commands
     gui                 Start the radar GUI
     record              Record radar data to CSV file
-    dora                Start the dora-rs node interface
 
 options:
   -h, --help            show this help message and exit
@@ -93,9 +92,4 @@ Remote operation is possible like this:
 ```bash
 BOKEH_ALLOW_WS_ORIGIN=radarhost:5006 xwr68xxisk gui --remote
 ```
-
-
-### Dora
-
-The [Dora](https://github.com/dora-rs/dora) node is work in progress.
 
