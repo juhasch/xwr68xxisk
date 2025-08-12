@@ -163,14 +163,7 @@ class RadarGUI:
             value=False,  # Will be set when radar is connected
             disabled=True  # Initially disabled until connected
         )
-        self.frame_period_slider = pn.widgets.FloatSlider(
-            name='Frame Period (ms)',
-            start=50,
-            end=1000,
-            value=self.config.processing.frame_period_ms,
-            step=10,
-            disabled=True  # Initially disabled until connected
-        )
+        self.frame_period_slider = None
         self.mob_enabled_checkbox = pn.widgets.Checkbox(
             name='Multi-object Beamforming',
             value=False,  # Will be set when radar is connected
@@ -234,7 +227,6 @@ class RadarGUI:
         self.params_panel = pn.layout.FloatPanel(
             pn.Column(
                 self.clutter_removal_checkbox,
-                self.frame_period_slider,
                 self.mob_enabled_checkbox,
                 self.mob_threshold_slider,
                 pn.layout.Divider(),
@@ -269,7 +261,6 @@ class RadarGUI:
             }
         )
         
-        # --- Updated Configuration Modal ---
         self.original_version_info_display = TextAreaInput(
             name="**Sensor Information**",
             value="Connect to sensor to see version information",
@@ -306,19 +297,7 @@ class RadarGUI:
         # Synchronize frame rate on initialization
         if hasattr(self.profile_config_view_panel, 'config'):
             profile_frame_rate_fps = self.profile_config_view_panel.config.frame_rate_fps
-            profile_frame_period_ms = 1000.0 / profile_frame_rate_fps
-            
-            # Update the main GUI frame period slider to match ProfileConfigView
-            self.frame_period_slider.value = profile_frame_period_ms
-            
-            # Update the processing config using the proper update method
-            self.config = self.config_manager.update_config({
-                'processing': {
-                    'frame_period_ms': profile_frame_period_ms
-                }
-            })
-            
-            logger.info(f"Initialized frame rate synchronization: {profile_frame_rate_fps:.1f} fps = {profile_frame_period_ms:.1f} ms")
+            logger.info(f"Initialized frame rate synchronization: {profile_frame_rate_fps:.1f} fps")
 
         self.config_modal = pn.Column(
             config_modal_header,
@@ -386,7 +365,6 @@ class RadarGUI:
         self.exit_button.on_click(self._exit_callback)
         self.modify_params_checkbox.param.watch(self._toggle_params_panel, 'value')
         self.clutter_removal_checkbox.param.watch(self._clutter_removal_callback, 'value')
-        self.frame_period_slider.param.watch(self._frame_period_callback, 'value_throttled')
         self.mob_enabled_checkbox.param.watch(self._mob_enabled_callback, 'value')
         self.mob_threshold_slider.param.watch(self._mob_threshold_callback, 'value_throttled')
         self.clustering_checkbox.param.watch(self._clustering_callback, 'value')
@@ -426,10 +404,7 @@ class RadarGUI:
         
         # Set up event-driven updates
         self._setup_event_driven_updates()
-        
-        # Set initial configuration text
-        # self.config_text.value = "# Connect to sensor to load profile" # Old, ProfileConfigView handles its defaults
-    
+           
     def _load_config_callback(self, event):
         """Handle loading of radar profile file."""
         if event.new:  # Check if a file was actually uploaded
@@ -460,7 +435,7 @@ class RadarGUI:
                 self.radar_type = self._detect_radar_type()
                 if self.radar_type:
                     logger.info(f"Detected radar type: {self.radar_type}")
-                    self.radar = create_radar() 
+                    # self.radar is initialized in _detect_radar_type to avoid double initialization
                 else:
                     logger.error("Radar type not detected or not supported.")
                     self.connect_button.name = 'Unsupported Radar'
@@ -473,7 +448,7 @@ class RadarGUI:
                 self.connect_button.button_type = 'danger'
                 self.start_button.disabled = False
                 self.clutter_removal_checkbox.disabled = False
-                self.frame_period_slider.disabled = False
+                # no frame period control
                 self.mob_enabled_checkbox.disabled = False
                 self.mob_threshold_slider.disabled = False
                 self.device_info_button.disabled = False
@@ -494,10 +469,7 @@ class RadarGUI:
                     self.clutter_removal_checkbox.value = False
                 
                 # Ensure radar_params is not None before accessing frame_period
-                if self.radar.radar_params: 
-                    self.frame_period_slider.value = self.radar.frame_period
-                else:
-                    logger.warning("Radar params not available after connect to set frame period slider.")
+                # no frame period control
                 
                 if self.radar.mob_enabled:
                     self.mob_enabled_checkbox.value = True
@@ -529,7 +501,7 @@ class RadarGUI:
                 self.stop_button.disabled = True
                 self.record_button.disabled = True
                 self.clutter_removal_checkbox.disabled = True
-                self.frame_period_slider.disabled = True
+                # no frame period control
                 self.mob_enabled_checkbox.disabled = True
                 self.mob_threshold_slider.disabled = True
                 self.original_version_info_display.value = "Connect to sensor to see version information" # Reset original display
@@ -542,7 +514,7 @@ class RadarGUI:
                 self.stop_button.disabled = True
                 self.record_button.disabled = True
                 self.clutter_removal_checkbox.disabled = True
-                self.frame_period_slider.disabled = True
+                # no frame period control
                 self.mob_enabled_checkbox.disabled = True
                 self.mob_threshold_slider.disabled = True
 
@@ -561,7 +533,7 @@ class RadarGUI:
             }
             
             tracking_params = {
-                'dt': self.frame_period_slider.value / 1000.0,  # Convert ms to seconds
+                'dt': 1.0 / self.config.radar.frame_rate_fps,
                 'max_distance': self.track_max_distance_slider.value,
                 'min_hits': self.track_min_hits_slider.value,
                 'max_misses': self.track_max_misses_slider.value
@@ -678,7 +650,7 @@ class RadarGUI:
                 if self.tracking_checkbox.value:
                     self.enable_tracking = True
                     self.tracker = PointCloudTracker(
-                        dt=self.frame_period_slider.value / 1000.0,  # Convert ms to seconds
+                        dt=1.0 / self.config.radar.frame_rate_fps,
                         max_distance=self.track_max_distance_slider.value,
                         min_hits=self.track_min_hits_slider.value,
                         max_misses=self.track_max_misses_slider.value
@@ -750,19 +722,8 @@ class RadarGUI:
         try:
             # Synchronize frame rate between ProfileConfigView and main GUI
             if hasattr(self, 'profile_config_view_panel'):
-                # Update the main GUI frame period based on ProfileConfigView frame rate
+                # Update the main GUI frame rate based on ProfileConfigView frame rate
                 profile_frame_rate_fps = self.profile_config_view_panel.config.frame_rate_fps
-                profile_frame_period_ms = 1000.0 / profile_frame_rate_fps
-                
-                # Update the main GUI frame period slider
-                self.frame_period_slider.value = profile_frame_period_ms
-                
-                # Update the processing config using the proper update method
-                self.config = self.config_manager.update_config({
-                    'processing': {
-                        'frame_period_ms': profile_frame_period_ms
-                    }
-                })
                 
                 # CRITICAL: Update the radar config frame rate to match ProfileConfigView
                 self.config.radar.frame_rate_fps = profile_frame_rate_fps
@@ -779,7 +740,7 @@ class RadarGUI:
                 # CRITICAL: Update the radar config trigger mode to match ProfileConfigView
                 self.config.radar.trigger_mode = self.profile_config_view_panel.config.trigger_mode
                 
-                logger.info(f"Synchronized frame rate: {profile_frame_rate_fps:.1f} fps = {profile_frame_period_ms:.1f} ms")
+                logger.info(f"Synchronized frame rate: {profile_frame_rate_fps:.1f} fps")
                 logger.info(f"Synchronized plot settings: scatter={self.config.radar.plot_scatter}, range_profile={self.config.radar.plot_range_profile}, range_profile_mode={self.config.radar.range_profile_mode}, noise_profile={self.config.radar.plot_noise_profile}, range_azimuth={self.config.radar.plot_range_azimuth_heat_map}, range_doppler={self.config.radar.plot_range_doppler_heat_map}, statistics={self.config.radar.plot_statistics}")
                 logger.info(f"Synchronized trigger mode: {self.config.radar.trigger_mode}")
             
@@ -966,11 +927,10 @@ class RadarGUI:
             try:
                 while not self.stop_data_thread.is_set() and self.is_running:
                     if self.radar_data is None:
-                        time.sleep(0.01)  # Short sleep if no data source
+                        time.sleep(0.1)  # Short sleep if no data source
                         continue
                         
                     try:
-                        # Get next radar data frame
                         radar_data_obj = next(iter(self.radar_data))
                         
                         if radar_data_obj is not None:
@@ -1418,11 +1378,18 @@ class RadarGUI:
         logger.info("Cleanup completed")
 
     def _detect_radar_type(self):
-        """Auto-detect which radar is connected."""
-        # Check serial ports and identify device type
+        """Auto-detect which radar is connected and prepare the radar instance.
+
+        Returns the radar type string if detected, otherwise None.
+        """
         radar_base = RadarConnection()
-        self.radar_type = radar_base.detect_radar_type()
-        return self.radar_type is not None
+        radar_type = radar_base.detect_radar_type()
+        if radar_type:
+            # Preserve detected ports and reuse this instance for connection
+            self.radar = radar_base
+            self.radar_type = radar_type
+            return radar_type
+        return None
 
     def _toggle_params_panel(self, event):
         """Toggle the visibility of the parameters panel."""
@@ -1450,19 +1417,19 @@ class RadarGUI:
             config_text = generate_cfg_from_scene_profile(self.config.radar)
             with open(self.config_file, 'w') as f:
                 f.write(config_text)
-            logger.info(f"Configuration file regenerated with frame period {event.new}ms ({frame_rate_fps:.1f} fps)")
+            logger.info(f"Configuration file regenerated with frame rate {frame_rate_fps:.1f} fps")
         except Exception as e:
             logger.error(f"Error regenerating configuration file: {e}")
         
         if self.radar and self.radar.is_connected():
             try:
-                # Update the radar's frame period
-                self.radar.set_frame_period(event.new)
-                logger.info(f"Frame period set to {event.new}ms ({frame_rate_fps:.1f} fps)")
+                # Update the radar's frame rate (period derives from fps)
+                self.radar.set_frame_period(1000.0 / frame_rate_fps)
+                logger.info(f"Frame rate set to {frame_rate_fps:.1f} fps")
             except Exception as e:
                 logger.error(f"Error setting frame period: {e}")
         else:
-            logger.info(f"Frame period updated to {event.new}ms ({frame_rate_fps:.1f} fps) - radar not connected")
+            logger.info(f"Frame rate updated to {frame_rate_fps:.1f} fps - radar not connected")
     
     def _mob_enabled_callback(self, event):
         """Handle multi-object beamforming enable/disable."""
@@ -1515,7 +1482,7 @@ class RadarGUI:
             # Recreate tracker with new parameters if enabled
             if self.enable_tracking:
                 self.tracker = PointCloudTracker(
-                    dt=self.frame_period_slider.value / 1000.0,  # Convert ms to seconds
+                    dt=1.0 / self.config.radar.frame_rate_fps,
                     max_distance=self.track_max_distance_slider.value,
                     min_hits=self.track_min_hits_slider.value,
                     max_misses=self.track_max_misses_slider.value
@@ -1536,8 +1503,7 @@ class RadarGUI:
             'processing': {
                 'clutter_removal': self.clutter_removal_checkbox.value,
                 'mob_enabled': self.mob_enabled_checkbox.value,
-                'mob_threshold': self.mob_threshold_slider.value,
-                'frame_period_ms': self.frame_period_slider.value
+                'mob_threshold': self.mob_threshold_slider.value
             },
             'clustering': {
                 'enabled': self.clustering_checkbox.value,
@@ -1549,7 +1515,7 @@ class RadarGUI:
                 'max_distance': self.track_max_distance_slider.value,
                 'min_hits': self.track_min_hits_slider.value,
                 'max_misses': self.track_max_misses_slider.value,
-                'dt': self.frame_period_slider.value / 1000.0
+                'dt': 1.0 / self.config.radar.frame_rate_fps
             }
         }
         try:
@@ -1807,7 +1773,7 @@ class RadarGUI:
         if self.radar and self.radar.is_connected() and self.enable_tracking:
             # Recreate tracker with new max_distance value
             self.tracker = PointCloudTracker(
-                dt=self.frame_period_slider.value / 1000.0,
+                dt=1.0 / self.config.radar.frame_rate_fps,
                 max_distance=event.new,
                 min_hits=self.track_min_hits_slider.value,
                 max_misses=self.track_max_misses_slider.value
@@ -1821,7 +1787,7 @@ class RadarGUI:
         if self.radar and self.radar.is_connected() and self.enable_tracking:
             # Recreate tracker with new min_hits value
             self.tracker = PointCloudTracker(
-                dt=self.frame_period_slider.value / 1000.0,
+                dt=1.0 / self.config.radar.frame_rate_fps,
                 max_distance=self.track_max_distance_slider.value,
                 min_hits=event.new,
                 max_misses=self.track_max_misses_slider.value
@@ -1835,7 +1801,7 @@ class RadarGUI:
         if self.radar and self.radar.is_connected() and self.enable_tracking:
             # Recreate tracker with new max_misses value
             self.tracker = PointCloudTracker(
-                dt=self.frame_period_slider.value / 1000.0,
+                dt=1.0 / self.config.radar.frame_rate_fps,
                 max_distance=self.track_max_distance_slider.value,
                 min_hits=self.track_min_hits_slider.value,
                 max_misses=event.new
