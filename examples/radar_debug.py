@@ -37,7 +37,10 @@ class RobustFrameTester:
             start_time = time.time()
             last_stats_time = start_time
             
+            tmp_radar_data = RadarData()
+
             while time.time() - start_time < duration:
+                print(time.time() - start_time < duration)
                 try:
                     # Read frame using the robust read_frame method
                     frame_data = self.radar.read_frame()
@@ -60,10 +63,18 @@ class RobustFrameTester:
                     
                     self.last_frame_time = current_time
                     
+
+                    self.radar.cli_port = None
                     # Parse the frame using the proper RadarData class
                     try:
                         # Create RadarData object with the current frame
-                        radar_data = RadarData()
+                        #radar_data = RadarData()
+                        waiting = self.radar.data_port.in_waiting
+                        print(f"waiting: {waiting}")
+                        tmp_radar_data.radar_connection.data_port.read(waiting)
+                        
+                        continue
+
                         radar_data.frame_number = header.get('frame_number')
                         radar_data.num_tlvs = header.get('num_tlvs', 0)
                         radar_data.config_params = self.radar.radar_params
@@ -110,7 +121,7 @@ class RobustFrameTester:
                         self.frames_failed += 1
                     
                     # Print statistics every 10 seconds
-                    if current_time - last_stats_time >= 10.0:
+                    if current_time - last_stats_time >= 11.0:
                         elapsed = current_time - start_time
                         frame_rate = self.frames_received / elapsed if elapsed > 0 else 0
                         success_rate = (self.frames_parsed / self.frames_received * 100) if self.frames_received > 0 else 0
@@ -164,7 +175,7 @@ def main():
         sys.exit(1)
     
     tester = RobustFrameTester(config_file)
-    tester.run_test(duration=12.5)  # Shorter test duration
+    tester.run_test(duration=120)  # Shorter test duration
 
 if __name__ == "__main__":
     main()

@@ -932,7 +932,6 @@ class RadarGUI:
                         
                     try:
                         radar_data_obj = next(iter(self.radar_data))
-                        
                         if radar_data_obj is not None:
                             # Put data in queue for GUI thread to process
                             self.data_queue.put(radar_data_obj)

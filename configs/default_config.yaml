@@ -78,7 +78,8 @@ radar:
   dfe_data_output_mode:
     mode_type: 1
   extended_max_velocity: null
-  frame_rate_fps: 10.0
+  frame_num_frames: 0
+  frame_rate_fps: 8.0
   gui_monitor:
     detected_objects: 1
     noise_profile: false
@@ -102,7 +103,7 @@ radar:
   plot_noise_profile: false
   plot_range_azimuth_heat_map: false
   plot_range_doppler_heat_map: false
-  plot_range_profile: false
+  plot_range_profile: true
   plot_scatter: true
   plot_statistics: false
   profile_cfg:
@@ -121,7 +122,7 @@ radar:
     tx_phase_shifter: 0
     tx_start_time: 1.0
   radial_velocity_resolution_ms: 0.13
-  range_profile_mode: log_magnitude
+  range_profile_mode: complex
   range_resolution_m: 0.044
   trigger_mode: 0
 recording:
@@ -132,7 +133,7 @@ recording:
   - csv
   prefix: radar_data
 tracking:
-  dt: 0.1
+  dt: 0.125
   enabled: false
   max_distance: 2.0
   max_misses: 5

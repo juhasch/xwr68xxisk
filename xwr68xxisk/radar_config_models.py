@@ -122,6 +122,11 @@ class RadarConfig(BaseModel):
         le=30.0,
         description="Frame Rate in frames per second (fps) for GUI/scene selection. Not sent to radar as a command."
     )
+    frame_num_frames: int = Field(
+        0,
+        ge=0,
+        description="Number of frames to acquire (0 = infinite)."
+    )
     range_resolution_m: float = Field(
         0.044,
         ge=0.039,
