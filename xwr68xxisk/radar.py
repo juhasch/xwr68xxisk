@@ -11,7 +11,6 @@ import time
 from typing import Tuple, Optional, List
 import logging
 import os
-import math
 import yaml
 
 
@@ -54,19 +53,23 @@ class RadarConnection:
         self.byte_buffer_length = 0
         self.current_index = 0
         self.radar_params = None
-        self.debug_dir = "debug_data"
-        os.makedirs(self.debug_dir, exist_ok=True)
         self.reader = None
-        self.last_frame = None
         self.missed_frames = 0
         self.total_frames = 0
         self.invalid_packets = 0
         self.failed_reads = 0
+        # Ground-truth frame rate; everything else derives from this
+        self.frame_rate_fps: float = 10.0
+        
+        # Frame counting and stopping
+        self._num_frames: int = 0  # 0 means infinite frames
+        self.frames_received: int = 0
 
     @property
     def frame_period(self) -> float:
         """Get the frame period in milliseconds."""
-        return self.radar_params['framePeriod']
+        # Ground truth: fps set on the radar (via frameCfg). Period derives from fps.
+        return 1000.0 / self.frame_rate_fps if self.frame_rate_fps > 0 else 0.0
 
     @frame_period.setter
     def frame_period(self, value: float) -> None:
@@ -95,6 +98,37 @@ class RadarConnection:
         threshold = max(0.0, min(1.0, threshold))
         self.send_command(f'multiObjBeamForming -1 1 {threshold:.2f}\n')
         self.mob_threshold = threshold
+
+    def set_num_frames(self, num_frames: int) -> None:
+        """Deprecated: use the num_frames property instead."""
+        self.num_frames = num_frames
+
+    @property
+    def num_frames(self) -> int:
+        """Number of frames to receive before stopping (0 = infinite)."""
+        return self._num_frames
+
+    @num_frames.setter
+    def num_frames(self, value: int) -> None:
+        if value is None:
+            value = 0
+        if value < 0:
+            raise ValueError("Number of frames must be non-negative")
+        self._num_frames = int(value)
+        if isinstance(self.radar_params, dict):
+            self.radar_params['num_frames'] = self._num_frames
+        if self._num_frames > 0:
+            logger.info(f"Configured to receive {self._num_frames} frames before stopping")
+        else:
+            logger.info("Configured for infinite frame reception")
+
+    def reset_frame_count(self) -> None:
+        """Reset the received frames counter."""
+        self.frames_received = 0
+
+    def should_stop_for_frame_count(self) -> bool:
+        """Return True if the acquisition should stop based on num_frames."""
+        return self.num_frames > 0 and self.frames_received >= self.num_frames
 
     def find_serial_ports(self, serial_number: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
         """Find the radar ports for Silicon Labs CP2105 device."""
@@ -288,7 +322,6 @@ class RadarConnection:
         if not self.is_connected():
             logger.error("Radar not connected")
             return None
-            
         try:
             self.cli_port.flushInput()
             self.cli_port.write(b'version\n')
@@ -374,10 +407,16 @@ class RadarConnection:
             try:
                 with open(yaml_config_path, 'r') as f:
                     yaml_config = yaml.safe_load(f)
-                    config_params['clutterRemoval'] = yaml_config['processing']['clutter_removal']
-                    config_params['framePeriod'] = yaml_config['processing']['frame_period_ms']
-                    config_params['mobEnabled'] = yaml_config['processing']['mob_enabled']
-                    config_params['mobThreshold'] = yaml_config['processing']['mob_threshold']
+                    processing_cfg = yaml_config.get('processing', {}) if yaml_config else {}
+                    config_params['clutterRemoval'] = processing_cfg.get('clutter_removal', False)
+                    # Single source of truth: frame_rate_fps. Default to 10 if not present.
+                    fps = processing_cfg.get('frame_rate_fps', 10.0)
+                    self.frame_rate_fps = float(fps)
+                    # Keep a copy in params for consumers expecting framePeriod
+                    config_params['framePeriod'] = 1000.0 / self.frame_rate_fps if self.frame_rate_fps > 0 else 0.0
+                    # Other processing flags
+                    config_params['mobEnabled'] = processing_cfg.get('mob_enabled', False)
+                    config_params['mobThreshold'] = processing_cfg.get('mob_threshold', 0.5)
             except Exception as e:
                 logger.warning(f"Failed to load YAML config: {e}")
         
@@ -406,13 +445,17 @@ class RadarConnection:
                     start_chirp = int(args[0])
                     end_chirp = int(args[1])
                     num_loops = int(args[2])
+                    num_frames = int(args[3])  # Number of frames (0 for infinite)
                     chirps_per_frame = (end_chirp - start_chirp + 1) * num_loops
                     config_params['chirpsPerFrame'] = chirps_per_frame
-                    if 'framePeriod' not in config_params:
-                        config_params['framePeriod'] = float(args[4])
+                    config_params['num_frames'] = num_frames  # Store for frame counting
+                    # Update fps from profile's frame period so ground truth matches sensor
+                    period_from_cfg = float(args[4])
+                    self.frame_rate_fps = 1000.0 / period_from_cfg if period_from_cfg > 0 else self.frame_rate_fps
+                    config_params['framePeriod'] = period_from_cfg
                     # Set num_doppler_bins based on the number of loops
                     config_params['num_doppler_bins'] = num_loops
-                    logger.debug(f"FrameCfg: start={start_chirp}, end={end_chirp}, loops={num_loops}, chirpsPerFrame={chirps_per_frame}, num_doppler_bins={config_params['num_doppler_bins']}")
+                    logger.debug(f"FrameCfg: start={start_chirp}, end={end_chirp}, loops={num_loops}, num_frames={num_frames}, chirpsPerFrame={chirps_per_frame}, num_doppler_bins={config_params['num_doppler_bins']}")
                     
                 elif cmd == 'multiObjBeamForming':
                     if len(args) >= 3:
@@ -492,6 +535,11 @@ class RadarConnection:
         if 'mobThreshold' in config_params:
             self.mob_threshold = config_params['mobThreshold']
         
+        # Set number of frames from configuration if present
+        cfg_num_frames = config_params.get('num_frames')
+        if isinstance(cfg_num_frames, (int, float)):
+            self.num_frames = int(cfg_num_frames)
+        
         logger.info(f"Final radar parameters: {config_params}")
         return config_params
 
@@ -549,9 +597,16 @@ class RadarConnection:
                 self._clutter_removal = self.radar_params['clutterRemoval']
 
             if line.startswith('frameCfg'):
-                self.frame_period = self.radar_params['framePeriod']
+                # Use configured num_frames and ground-truth fps to set frameCfg
+                # frameCfg <start_idx> <end_idx> <num_loops> <num_frames> <period_ms> <trigger_sel> <trigger_delay_ms>
                 parts = line.split()
-                parts[4] = str(int(self.frame_period))  # Frame period is at index 4
+                # Set num_frames at parts[4]
+                if len(parts) > 4:
+                    parts[4] = str(int(self.num_frames))
+                # Set period at parts[5]
+                if len(parts) > 5:
+                    desired_period_ms = int(round(1000.0 / self.frame_rate_fps)) if self.frame_rate_fps > 0 else int(float(parts[5]))
+                    parts[5] = str(desired_period_ms)
                 line = ' '.join(parts)
 
             if line.startswith('multiObjBeamForming'):
@@ -687,137 +742,69 @@ class RadarConnection:
             return False
 
     def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:
-        """Read and parse data packets from the radar."""
+        """Read one frame using a single read_until per call and a rolling buffer.
+
+        Approach:
+        - Call read_until(MAGIC) once per invocation; append to an internal buffer
+        - Find the last two MAGIC markers and parse the frame between them
+        - If only one MAGIC is present, return None and wait for next call
+        """
         if not self.is_running:
             logger.error("Radar is not running. Please start the radar first.")
             return None
-            
+
         try:
-            # Initialize buffer if not exists
+            # Ensure rolling buffer exists
             if not hasattr(self, '_buffer'):
                 self._buffer = b''
-            
-            # Keep reading until we have at least two magic words in the buffer
-            timeout_start = time.time()
-            max_timeout = 3.0  # Maximum timeout of 3 seconds
-            
-            while True:
-                # Check for overall timeout
-                if time.time() - timeout_start > max_timeout:
-                    logger.warning(f"Timeout waiting for radar data after {max_timeout}s - attempting restart")
-                    
-                    # Try to restart the radar
-                    if self.restart_radar():
-                        # Reset timeout and try again
-                        timeout_start = time.time()
-                        continue
-                    else:
-                        logger.error("Failed to restart radar, giving up")
-                        return None
-                
-                # Count magic words in current buffer
-                magic_count = self._buffer.count(self.MAGIC_WORD)
-                
-                if magic_count >= 2:
-                    # We have at least two magic words, can process a frame
-                    break
-                
-                # Try to read more data with shorter timeout
-                try:
-                    # First check if any data is available
-                    if self.data_port.in_waiting == 0:
-                        time.sleep(0.001)  # Short sleep to avoid busy waiting
-                        continue
-                    
-                    # Read available data in chunks instead of waiting for magic word
-                    chunk_size = min(1024, self.data_port.in_waiting)
-                    data = self.data_port.read(chunk_size)
-                    
-                    if not data:
-                        time.sleep(0.001)  # Short sleep before retrying
-                        continue
-                    
-                    # Add the data to our buffer
-                    self._buffer += data
-                    logger.debug(f"Added {len(data)} bytes to buffer, total: {len(self._buffer)}")
-                    
-                    # Limit buffer size to prevent memory issues
-                    if len(self._buffer) > self.MAX_BUFFER_SIZE:
-                        # Keep only the last half of the buffer
-                        keep_size = self.MAX_BUFFER_SIZE // 2
-                        self._buffer = self._buffer[-keep_size:]
-                        logger.warning(f"Buffer size exceeded limit, truncated to {len(self._buffer)} bytes")
-                        
-                except serial.SerialTimeoutException:
-                    # Timeout on individual read, continue the loop
-                    continue
-                except Exception as e:
-                    logger.error(f"Error reading from data port: {e}")
-                    return None
-            
-            # Now we have at least two magic words in the buffer
-            # Find the first magic word position
-            first_magic_pos = self._buffer.find(self.MAGIC_WORD)
-            if first_magic_pos == -1:
-                logger.debug(f"No first magic word found in buffer, clearing buffer")
-                self._buffer = b''
+
+            # Single read_until per call; append whatever arrived
+            try:
+                chunk = self.data_port.read_until(self.MAGIC_WORD)
+            except serial.SerialTimeoutException:
                 return None
-            
-            # Find the second magic word position
-            second_magic_pos = self._buffer.find(self.MAGIC_WORD, first_magic_pos + 1)
-            if second_magic_pos == -1:
-                logger.debug(f"No second magic word found in buffer")
-                # This shouldn't happen since we checked for >= 2 magic words above
-                # But if it does, clear the buffer to recover
-                self._buffer = b''
+            if chunk:
+                self._buffer += chunk
+                # Trim buffer to cap growth
+                if len(self._buffer) > self.MAX_BUFFER_SIZE:
+                    self._buffer = self._buffer[-self.MAX_BUFFER_SIZE:]
+
+            # Find last two MAGIC positions
+            last = self._buffer.rfind(self.MAGIC_WORD)
+            if last == -1:
                 return None
-            
-            # Extract frame data between the two magic words
-            frame_data = self._buffer[first_magic_pos + len(self.MAGIC_WORD):second_magic_pos]
-            logger.debug(f"Length of frame data: {len(frame_data)}")
-            
-            # Check if we have enough data for header
+            prev = self._buffer.rfind(self.MAGIC_WORD, 0, last)
+            if prev == -1:
+                # Keep only from last magic to minimize buffer
+                if last > 0:
+                    self._buffer = self._buffer[last:]
+                return None
+
+            # We have two markers: parse frame between them
+            frame_data = self._buffer[prev + self.MAGIC_WORD_LENGTH:last]
             if len(frame_data) < 32:
-                logger.debug(f"Not enough data for header: {len(frame_data)} < 32")
                 return None
-            
-            # Parse header
-            header_data = frame_data[:32]
-            header = self._parse_header(header_data)
-            frame = header['frame_number']           
-            self.last_frame = frame
-            
-            # Calculate payload length
+            header = self._parse_header(frame_data[:32])
             total_packet_len = header['total_packet_len']
-            payload_length = total_packet_len - 32 - self.MAGIC_WORD_LENGTH
-            
-            if payload_length < 0:
-                logger.debug(f"Invalid payload length: {payload_length}")
-                # Invalid packet, remove everything up to second magic word and continue
-                self._buffer = self._buffer[second_magic_pos:]
+            # Between magics should contain (total - MAGIC) bytes
+            payload_len = total_packet_len - self.MAGIC_WORD_LENGTH - 32
+            if payload_len < 0 or len(frame_data) < 32 + payload_len:
                 return None
-            
-            # Check if we actually have enough data for the complete payload
-            if len(frame_data) < 32 + payload_length:
-                logger.debug(f"Incomplete frame data: have {len(frame_data)}, need {32 + payload_length}")
-                # Don't remove from buffer, just return None and try again later
-                return None
-                                    
-            # Extract payload
-            payload_data = frame_data[32:32 + payload_length]
-            
-            # Remove the processed frame from buffer (everything up to second magic word)
-            old_buffer_size = len(self._buffer)
-            self._buffer = self._buffer[second_magic_pos:]
-            new_buffer_size = len(self._buffer)
-            
-            logger.debug(f"Buffer: {old_buffer_size} -> {new_buffer_size} bytes (removed {second_magic_pos})")
-            
+
+            payload_bytes = frame_data[32:32 + payload_len]
+            # Advance buffer to start at last magic for next call
+            self._buffer = self._buffer[last:]
             self.total_frames += 1
-            payload = np.frombuffer(payload_data, dtype=np.uint8)
+            self.frames_received += 1
             
-            return header, payload
-                
+            # Check if we've reached the configured number of frames
+            if self.should_stop_for_frame_count():
+                logger.info(f"Received the configured number of frames ({self.num_frames}), stopping measurement")
+                self.stop()
+                return None
+            
+            return header, np.frombuffer(payload_bytes, dtype=np.uint8)
+
         except Exception as e:
             logger.error(f"Error reading frame: {e}")
             return None
@@ -828,6 +815,7 @@ class RadarConnection:
             raise RadarConnectionError("Radar not connected")
             
         self.send_profile(ignore_response=False)
+        self.reset_frame_count()  # Reset frame counter when starting
         self.send_command('sensorStart')
         self.is_running = True
         logger.info("Radar configured and started")

@@ -57,18 +57,12 @@ class ProcessingConfig(BaseConfig):
         le=1,
         description="Multi-object beamforming threshold"
     )
-    frame_period_ms: float = Field(
-        default=100,
-        ge=50,
-        le=1000,
-        description="Frame period in milliseconds"
-    )
+    # Frame period is derived from sensor frame rate; remove from GUI config
     
     def __str__(self) -> str:
         """Return human-readable string representation."""
         return (
             f"ProcessingConfig(clutter_removal={self.clutter_removal}, "
             f"mob_enabled={self.mob_enabled}, "
-            f"mob_threshold={self.mob_threshold:.2f}, "
-            f"frame_period={self.frame_period_ms:.1f}ms)"
+            f"mob_threshold={self.mob_threshold:.2f})"
         ) 

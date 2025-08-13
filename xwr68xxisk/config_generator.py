@@ -73,10 +73,6 @@ def generate_cfg_from_scene_profile(scene_config: RadarConfig) -> str:
         f"{frame_periodicity_ms:.2f} {trigger_select} {trigger_delay_ms}"
     )
 
-    # Trigger mode configuration
-    trigger_mode = getattr(scene_config, 'trigger_mode', 0)  # Default to timer-based (0)
-    cfg_lines.append(f"triggerMode {trigger_mode}")
-
     # guiMonitor
     detected_objects = 1 if getattr(scene_config, 'plot_scatter', True) else 0
     

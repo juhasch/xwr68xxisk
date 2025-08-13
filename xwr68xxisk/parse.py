@@ -92,6 +92,7 @@ class RadarData:
             header, payload = frame_data
             if header is not None and payload is not None:
                 self.frame_number = header.get('frame_number')
+                print(f"frame_number from sensor: {self.frame_number}")
                 self.num_tlvs = header.get('num_tlvs', 0)  # Changed from num_detected_obj to num_tlvs
                 
                 # Ensure we have valid payload data
