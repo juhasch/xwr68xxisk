@@ -282,16 +282,15 @@ class RangeProfilePlot(BasePlot):
                     self.range_data_source.data = {'range': [], 'magnitude': []}
                     
             elif has_regular_data:
-                # Use regular range profile data
-                magnitude_data = radar_data.adc.astype(np.float32) # Test to see if this works
-                #magnitude_data = 20 * np.log10(np.abs(radar_data.adc.astype(np.float32)) + 1e-9)
-                range_axis = self._get_range_axis(radar_data, len(magnitude_data))
+                # Use regular range profile data (sensor provides log magnitude in 0.1 dB units)
+                magnitude_db = radar_data.adc.astype(np.float32) / 100.0
+                range_axis = self._get_range_axis(radar_data, len(magnitude_db))
                 
-                if len(range_axis) > 0 and len(magnitude_data) > 0:
-                    min_len = min(len(magnitude_data), len(range_axis))
+                if len(range_axis) > 0 and len(magnitude_db) > 0:
+                    min_len = min(len(magnitude_db), len(range_axis))
                     self.range_data_source.data = {
                         'range': range_axis[:min_len],
-                        'magnitude': magnitude_data[:min_len]
+                        'magnitude': magnitude_db[:min_len]
                     }
                 else:
                     self.range_data_source.data = {'range': [], 'magnitude': []}

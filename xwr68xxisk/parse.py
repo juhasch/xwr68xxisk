@@ -844,8 +844,8 @@ class RadarData:
         if self.noise_profile is None:
             return np.array([]), np.array([])
         
-        # Convert to dB scale (similar to range profile)
-        noise_dB = 20 * np.log10(self.noise_profile.astype(np.float32) + 1e-10)
+        # Sensor provides noise profile as log magnitude in 0.1 dB units
+        noise_dB = self.noise_profile.astype(np.float32) / 100.0
         range_bins = np.arange(len(noise_dB))
         
         return range_bins, noise_dB
