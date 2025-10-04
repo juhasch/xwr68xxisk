@@ -1,9 +1,7 @@
 import pytest
-from pathlib import Path
-from pydantic import ValidationError
 from xwr68xxisk.config import (
     RadarConfigParser, ProfileConfig, FrameConfig, 
-    RadarConfig, parse_config_file
+    LegacyRadarConfig, parse_config_file
 )
 
 @pytest.fixture
@@ -52,7 +50,7 @@ def test_frame_config():
 
 def test_parse_config_file(sample_config_path):
     config = RadarConfigParser.parse_config_file(sample_config_path)
-    assert isinstance(config, RadarConfig)
+    assert isinstance(config, LegacyRadarConfig)
     
     # Test that all values are positive
     assert all(v > 0 for v in config.model_dump().values())

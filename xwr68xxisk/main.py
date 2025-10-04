@@ -4,6 +4,7 @@ import logging
 import re
 
 from .record import main as record_main
+from .radar import DEFAULT_BRIDGE_CONTROL_ENDPOINT, DEFAULT_BRIDGE_DATA_ENDPOINT
 
 RUNNER_CI = True if os.getenv("CI") == "true" else False
 
@@ -12,7 +13,11 @@ def start_gui(args):
     # Import panel and RadarGUI only when needed
     import panel as pn
     from .gui import RadarGUI
-    radar_gui = RadarGUI()
+    radar_gui = RadarGUI(
+        transport=args.transport,
+        control_endpoint=args.bridge_control,
+        data_endpoint=args.bridge_data,
+    )
     
     # Configure origins for websocket connections
     origins = [f'localhost:{args.port}']
@@ -51,6 +56,22 @@ def main():
     parser.add_argument('--serial-number',
                        type=validate_serial,
                        help='Radar serial number in hex format "1234ABCD"')
+    parser.add_argument(
+        '--transport',
+        choices=['auto', 'serial', 'network'],
+        default='auto',
+        help='Select connection transport (auto=prefer serial, fallback to network bridge)'
+    )
+    parser.add_argument(
+        '--bridge-control',
+        default=DEFAULT_BRIDGE_CONTROL_ENDPOINT,
+        help='Radar bridge ZeroMQ control endpoint (when using network transport)'
+    )
+    parser.add_argument(
+        '--bridge-data',
+        default=DEFAULT_BRIDGE_DATA_ENDPOINT,
+        help='Radar bridge ZeroMQ data endpoint (when using network transport)'
+    )
 
     
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
@@ -69,7 +90,15 @@ def main():
     record_parser = subparsers.add_parser('record', help='Record radar data to CSV file')
     record_parser.add_argument('--profile', default=os.path.join('configs', 'user_profile.cfg'),
                            help='Path to the radar profile configuration file')
-    record_parser.set_defaults(func=lambda args: record_main(args.serial_number, args.profile))
+    record_parser.set_defaults(
+        func=lambda args: record_main(
+            args.serial_number,
+            args.profile,
+            args.transport,
+            args.bridge_control,
+            args.bridge_data,
+        )
+    )
 
     args = parser.parse_args()
 

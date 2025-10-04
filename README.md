@@ -28,7 +28,7 @@ pip install .
 ```bash
 xwr68xxisk --help
 
-usage: xwr68xxisk [-h] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--serial-number SERIAL_NUMBER] {gui,record} ...
+usage: xwr68xxisk [-h] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--serial-number SERIAL_NUMBER] [--transport {auto,serial,network}] [--bridge-control BRIDGE_CONTROL] [--bridge-data BRIDGE_DATA] {gui,record} ...
 
 XWR68XX ISK Radar Tools
 
@@ -43,10 +43,19 @@ options:
                         Set the logging level (default: INFO)
   --serial-number SERIAL_NUMBER
                         Radar serial number in hex format "1234ABCD"
+  --transport {auto,serial,network}
+                        Select connection transport (auto=prefer serial, fallback to network bridge)
+  --bridge-control BRIDGE_CONTROL
+                        Radar bridge ZeroMQ control endpoint (network transport)
+  --bridge-data BRIDGE_DATA
+                        Radar bridge ZeroMQ data endpoint (network transport)
 
 ```
 
 The serial number is unique and read from the USB interface of the sensor.
+Use the network transport when the radar is attached to a different PC via the
+radar bridge service. The default endpoints (`tcp://127.0.0.1:5557` control,
+`tcp://127.0.0.1:5556` data) match `radarbridge_client.py`.
 
 ### Configuration
 
@@ -76,6 +85,15 @@ Frame: 12, Points: 15    ^C
 
 ```
 
+To operate via the network bridge instead of a local serial connection:
+
+```bash
+$ xwr68xxisk --transport network --bridge-control tcp://radarhost:5557 --bridge-data tcp://radarhost:5556 gui
+```
+
+The helper script `radarbridge_client.py` shows the raw ZeroMQ interaction if
+you need to debug the bridge endpoints.
+
 ### GUI usage
 
 The GUI is used to display the radar point cloud in realtime (100ms update rate).
@@ -88,8 +106,14 @@ $ xwr68xxisk gui
 ![GUI](output.gif)
 
 
+To run the GUI against the bridge, provide the same transport parameters:
+
+```bash
+$ xwr68xxisk gui --transport network --bridge-control tcp://radarhost:5557 --bridge-data tcp://radarhost:5556
+```
+
+
 Remote operation is possible like this:
 ```bash
 BOKEH_ALLOW_WS_ORIGIN=radarhost:5006 xwr68xxisk gui --remote
 ```
-

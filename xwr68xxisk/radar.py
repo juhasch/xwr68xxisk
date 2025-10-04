@@ -8,13 +8,23 @@ import serial
 import serial.tools.list_ports
 import numpy as np
 import time
+from collections import deque
 from typing import Tuple, Optional, List
 import logging
 import os
+import threading
 import yaml
+
+try:  # Lazily used when operating over the network bridge
+    import zmq  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    zmq = None
 
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_BRIDGE_CONTROL_ENDPOINT = "tcp://127.0.0.1:5557"
+DEFAULT_BRIDGE_DATA_ENDPOINT = "tcp://127.0.0.1:5556"
 
 
 class RadarConnectionError(Exception):
@@ -31,11 +41,13 @@ class RadarConnection:
     MAX_BUFFER_SIZE = 2**15
     MAGIC_WORD = b'\x02\x01\x04\x03\x06\x05\x08\x07'
     MAGIC_WORD_LENGTH = 8
+    CLI_PROMPTS = {"mmwDemo:/>"}
     
     def __init__(self):
         """Initialize RadarConnection instance."""
         self.cli_port: Optional[serial.Serial] = None
         self.data_port: Optional[serial.Serial] = None
+        self.transport: str = 'serial'
         self.profile = ""
         self.version_info = None
         self.serial_number = None
@@ -64,6 +76,19 @@ class RadarConnection:
         # Frame counting and stopping
         self._num_frames: int = 0  # 0 means infinite frames
         self.frames_received: int = 0
+
+        # Serialize CLI access across threads to avoid interleaved command/response pairs
+        self._cli_lock = threading.RLock()
+
+    def _normalize_response_lines(self, response: List[str]) -> List[str]:
+        return [line.strip() for line in response if line and line.strip()]
+
+    def _response_contains_done(self, response: List[str]) -> bool:
+        return any(line.lower() == 'done' for line in self._normalize_response_lines(response))
+
+    def _response_prompt_only(self, response: List[str]) -> bool:
+        lines = self._normalize_response_lines(response)
+        return len(lines) == 1 and lines[0] in self.CLI_PROMPTS
 
     @property
     def frame_period(self) -> float:
@@ -265,26 +290,27 @@ class RadarConnection:
             else:
                 timeout_ms = 50.0   # Most commands are fast
         
-        self.cli_port.write(f"{command}\n".encode())
-        logger.debug(f"Sending command: {command}")
-        
-        if not ignore_response:
-            response = self._read_cli_response(timeout_ms)
-            if response:
-                has_error = False
-                for line in response:
-                    if "Error" in line and not (
-                        "Debug:" in line or
-                        "PHY" in line or
-                        "Ignored:" in line
-                    ):
-                        has_error = True
-                        break
-                
-                if has_error:
-                    logger.error(f"Error in command '{command}': {response}")
-                    raise RadarConnectionError(f"Configuration error: {response}")
-                logger.debug(f"Response: {response}")
+        with self._cli_lock:
+            self.cli_port.write(f"{command}\n".encode())
+            logger.debug(f"Sending command: {command}")
+            
+            if not ignore_response:
+                response = self._read_cli_response(timeout_ms)
+                if response:
+                    has_error = False
+                    for line in response:
+                        if "Error" in line and not (
+                            "Debug:" in line or
+                            "PHY" in line or
+                            "Ignored:" in line
+                        ):
+                            has_error = True
+                            break
+                    
+                    if has_error:
+                        logger.error(f"Error in command '{command}': {response}")
+                        raise RadarConnectionError(f"Configuration error: {response}")
+                    logger.debug(f"Response: {response}")
 
     def send_commands_batch(self, commands: List[str], timeout_ms_per_command: float = 50.0) -> List[str]:
         """Send multiple commands with optimized timing.
@@ -323,10 +349,11 @@ class RadarConnection:
             logger.error("Radar not connected")
             return None
         try:
-            self.cli_port.flushInput()
-            self.cli_port.write(b'version\n')
-            time.sleep(0.05)
-            response_lines = self._read_cli_response()
+            with self._cli_lock:
+                self.cli_port.flushInput()
+                self.cli_port.write(b'version\n')
+                time.sleep(0.05)
+                response_lines = self._read_cli_response()
             
             if response_lines:
                 if response_lines[-1] == "mmwDemo:/>":
@@ -565,101 +592,116 @@ class RadarConnection:
 
     def send_profile(self, ignore_response: bool = False) -> None:
         """Send the profile to the radar efficiently."""
-        self.cli_port.flushInput()
-        
-        if self.profile is None:
-            raise RadarConnectionError("No radar profile available. Please load a profile before sending.")
+        with self._cli_lock:
+            self.cli_port.flushInput()
             
-        profile_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
-
-        if self.radar_params is None:
-            self.radar_params = self.parse_configuration(profile_lines)
-    
-        init_commands = [
-            'sensorStop',
-            'flushCfg'
-        ]
-        
-        ordered_commands = {
-            'init': init_commands,
-            'dfe': [],
-            'channel': [],
-            'adc': [],
-            'other': []
-        }
-        
-        for line in profile_lines:
-            if not line or line.startswith('%') or line.startswith('sensorStart'):
-                continue
-
-            if line.startswith('clutterRemoval'):
-                line = 'clutterRemoval -1 ' + ('1' if self.radar_params['clutterRemoval'] else '0') + '\n'
-                self._clutter_removal = self.radar_params['clutterRemoval']
-
-            if line.startswith('frameCfg'):
-                # Use configured num_frames and ground-truth fps to set frameCfg
-                # frameCfg <start_idx> <end_idx> <num_loops> <num_frames> <period_ms> <trigger_sel> <trigger_delay_ms>
-                parts = line.split()
-                # Set num_frames at parts[4]
-                if len(parts) > 4:
-                    parts[4] = str(int(self.num_frames))
-                # Set period at parts[5]
-                if len(parts) > 5:
-                    desired_period_ms = int(round(1000.0 / self.frame_rate_fps)) if self.frame_rate_fps > 0 else int(float(parts[5]))
-                    parts[5] = str(desired_period_ms)
-                line = ' '.join(parts)
-
-            if line.startswith('multiObjBeamForming'):
-                line = 'multiObjBeamForming -1 ' + ('1' if self.radar_params['mobEnabled'] else '0') + ' ' + str(self.radar_params['mobThreshold']) + '\n'
-                self.mob_enabled = self.radar_params['mobEnabled']
-                self.mob_threshold = self.radar_params['mobThreshold']
-
-            parts = line.split()
-            if not parts:
-                continue
+            if self.profile is None:
+                raise RadarConnectionError("No radar profile available. Please load a profile before sending.")
                 
-            cmd_type = parts[0]
-            
-            if cmd_type == 'dfeDataOutputMode':
-                ordered_commands['dfe'].append(line)
-            elif cmd_type == 'channelCfg':
-                ordered_commands['channel'].append(line)
-            elif cmd_type == 'adcCfg':
-                ordered_commands['adc'].append(line)
-            elif cmd_type not in ['sensorStop', 'flushCfg']:
-                ordered_commands['other'].append(line)
+            profile_lines = [line.strip() for line in self.profile.split('\n') if line.strip()]
+
+            if self.radar_params is None:
+                self.radar_params = self.parse_configuration(profile_lines)
         
-        for group in ['init', 'dfe', 'channel', 'adc', 'other']:
-            for command in ordered_commands[group]:
-                logger.debug(f"Sending command: {command}")
-                self.cli_port.write(f"{command}\n".encode())
-                if not ignore_response:
-                    response = self._read_cli_response()
-                    if response:
-                        # Check if response contains "Done" (success)
-                        response_text = ' '.join(response)
-                        if "Done" not in response_text:
+            init_commands = [
+                'sensorStop',
+                'flushCfg'
+            ]
+            
+            ordered_commands = {
+                'init': init_commands,
+                'dfe': [],
+                'channel': [],
+                'adc': [],
+                'other': []
+            }
+            
+            for line in profile_lines:
+                if not line or line.startswith('%') or line.startswith('sensorStart'):
+                    continue
+
+                if line.startswith('clutterRemoval'):
+                    line = 'clutterRemoval -1 ' + ('1' if self.radar_params['clutterRemoval'] else '0') + '\n'
+                    self._clutter_removal = self.radar_params['clutterRemoval']
+
+                if line.startswith('frameCfg'):
+                    # Use configured num_frames and ground-truth fps to set frameCfg
+                    # frameCfg <start_idx> <end_idx> <num_loops> <num_frames> <period_ms> <trigger_sel> <trigger_delay_ms>
+                    parts = line.split()
+                    # Set num_frames at parts[4]
+                    if len(parts) > 4:
+                        parts[4] = str(int(self.num_frames))
+                    # Set period at parts[5]
+                    if len(parts) > 5:
+                        desired_period_ms = int(round(1000.0 / self.frame_rate_fps)) if self.frame_rate_fps > 0 else int(float(parts[5]))
+                        parts[5] = str(desired_period_ms)
+                    line = ' '.join(parts)
+
+                if line.startswith('multiObjBeamForming'):
+                    line = 'multiObjBeamForming -1 ' + ('1' if self.radar_params['mobEnabled'] else '0') + ' ' + str(self.radar_params['mobThreshold']) + '\n'
+                    self.mob_enabled = self.radar_params['mobEnabled']
+                    self.mob_threshold = self.radar_params['mobThreshold']
+
+                parts = line.split()
+                if not parts:
+                    continue
+                    
+                cmd_type = parts[0]
+                
+                if cmd_type == 'dfeDataOutputMode':
+                    ordered_commands['dfe'].append(line)
+                elif cmd_type == 'channelCfg':
+                    ordered_commands['channel'].append(line)
+                elif cmd_type == 'adcCfg':
+                    ordered_commands['adc'].append(line)
+                elif cmd_type not in ['sensorStop', 'flushCfg']:
+                    ordered_commands['other'].append(line)
+            
+            for group in ['init', 'dfe', 'channel', 'adc', 'other']:
+                for command in ordered_commands[group]:
+                    logger.debug(f"Sending command: {command}")
+                    self.cli_port.write(f"{command}\n".encode())
+                    if not ignore_response:
+                        response = self._read_cli_response()
+                        if response:
+                            if self._response_contains_done(response):
+                                logger.debug(f"Response: {response}")
+                                continue
+
+                            if self._response_prompt_only(response):
+                                logger.debug(
+                                    "Command '%s' returned prompt only; treating as success",
+                                    command,
+                                )
+                                continue
+
+                            response_text = ' '.join(response)
                             # Check if this is an unsupported command error
                             if "is not recognized as a CLI command" in response_text:
                                 cmd_name = command.split()[0] if command.split() else "unknown"
-                                logger.warning(f"Command '{cmd_name}' is not supported by this firmware version. Skipping command: {command}")
+                                logger.warning(
+                                    "Command '%s' is not supported by this firmware version. Skipping command: %s",
+                                    cmd_name,
+                                    command,
+                                )
                                 logger.debug(f"Response: {response}")
                             else:
                                 logger.error(f"Error in command '{command}': {response}")
                                 raise RadarConnectionError(f"Configuration error: {response}")
-                        else:
-                            logger.debug(f"Response: {response}")
-        
-        baudrate = self.data_port_baudrate
-        logger.debug(f"Configuring data port with baudrate: {baudrate}")
-        self.cli_port.write(f"configDataPort {baudrate} 0\n".encode())
-        if not ignore_response:
-            response = self._read_cli_response()
-            if response:
-                if "Done" not in response:
-                    logger.error(f"Error configuring data port: {response}")
-                    raise RadarConnectionError(f"Data port configuration error: {response}")
-                logger.debug(f"Data port configuration response: {response}")
+            
+            baudrate = self.data_port_baudrate
+            logger.debug(f"Configuring data port with baudrate: {baudrate}")
+            self.cli_port.write(f"configDataPort {baudrate} 0\n".encode())
+            if not ignore_response:
+                response = self._read_cli_response()
+                if response:
+                    if self._response_contains_done(response):
+                        logger.debug(f"Data port configuration response: {response}")
+                    elif self._response_prompt_only(response):
+                        logger.debug("Data port config returned prompt only; treating as success")
+                    else:
+                        logger.error(f"Error configuring data port: {response}")
+                        raise RadarConnectionError(f"Data port configuration error: {response}")
 
     def _connect_device(self, serial_number: Optional[str] = None) -> None:
         """Connect to the radar device."""
@@ -860,7 +902,261 @@ class RadarConnection:
             return 460800  # Linux/Windows 
 
 
-def create_radar() -> RadarConnection:
-    """Factory function to create a radar instance."""
-    return RadarConnection()
+class _BridgeCliAdapter:
+    """Minimal serial-like adapter for the radar bridge control channel."""
 
+    def __init__(self, socket: "zmq.Socket"):
+        self._socket = socket
+        self._lines: deque[bytes] = deque()
+        self._open = True
+
+    def write(self, data: bytes) -> None:
+        if not self._open:
+            raise RadarConnectionError("CLI control channel is closed")
+
+        payload = data or b""
+        if not payload.endswith(b"\n"):
+            payload += b"\n"
+
+        try:
+            self._socket.send(payload, flags=0)
+            reply = self._socket.recv(flags=0)
+        except zmq.Again as exc:
+            raise RadarConnectionError("Timeout communicating with radar bridge control channel") from exc
+        except zmq.ZMQError as exc:  # pragma: no cover - depends on runtime environment
+            raise RadarConnectionError("Failed to communicate with radar bridge control channel") from exc
+
+        normalized = reply.replace(b"\r\n", b"\n")
+        if normalized and not normalized.endswith(b"\n"):
+            normalized += b"\n"
+
+        self._lines.clear()
+        if normalized:
+            for line in normalized.split(b"\n"):
+                if not line:
+                    continue
+                self._lines.append(line + b"\n")
+
+    def readline(self) -> bytes:
+        if not self._lines:
+            return b""
+        return self._lines.popleft()
+
+    @property
+    def in_waiting(self) -> int:
+        return sum(len(line) for line in self._lines)
+
+    def flushInput(self) -> None:
+        self._lines.clear()
+
+    def close(self) -> None:
+        self._open = False
+
+    @property
+    def is_open(self) -> bool:
+        return self._open
+
+
+class _BridgeDataAdapter:
+    """Wrapper providing a serial-like interface for the data channel."""
+
+    def __init__(self, socket: "zmq.Socket"):
+        self._socket = socket
+        self._open = True
+
+    def recv(self) -> Optional[bytes]:
+        if not self._open:
+            return None
+        try:
+            return self._socket.recv(flags=0)
+        except zmq.Again:
+            return None
+        except zmq.ZMQError as exc:  # pragma: no cover - depends on runtime environment
+            raise RadarConnectionError("Failed to receive data from radar bridge") from exc
+
+    def close(self) -> None:
+        self._open = False
+
+    @property
+    def is_open(self) -> bool:
+        return self._open
+
+
+class RadarBridgeConnection(RadarConnection):
+    """Radar connection backed by the radar bridge ZeroMQ interface."""
+
+    def __init__(
+        self,
+        control_endpoint: str = DEFAULT_BRIDGE_CONTROL_ENDPOINT,
+        data_endpoint: str = DEFAULT_BRIDGE_DATA_ENDPOINT,
+        control_timeout_ms: int = 1_000,
+        data_timeout_ms: int = 1_000,
+    ) -> None:
+        if zmq is None:  # pragma: no cover - handled at runtime when dependency missing
+            raise RadarConnectionError(
+                "pyzmq is required for network transport. Install the optional dependency to use the radar bridge."
+            )
+
+        super().__init__()
+        self.transport = 'network'
+        self.control_endpoint = control_endpoint
+        self.data_endpoint = data_endpoint
+        self.control_timeout_ms = control_timeout_ms
+        self.data_timeout_ms = data_timeout_ms
+
+        self._context: Optional["zmq.Context"] = None
+        self._control_socket: Optional["zmq.Socket"] = None
+        self._data_socket: Optional["zmq.Socket"] = None
+        self._buffer = b""
+
+    def _connect_device(self, serial_number: Optional[str] = None) -> None:  # noqa: ARG002 - signature compatibility
+        try:
+            self._context = zmq.Context.instance()
+
+            self._control_socket = self._context.socket(zmq.REQ)
+            self._control_socket.setsockopt(zmq.LINGER, 0)
+            self._control_socket.setsockopt(zmq.RCVTIMEO, self.control_timeout_ms)
+            self._control_socket.setsockopt(zmq.SNDTIMEO, self.control_timeout_ms)
+            self._control_socket.connect(self.control_endpoint)
+            self.cli_port = _BridgeCliAdapter(self._control_socket)
+
+            self._data_socket = self._context.socket(zmq.PULL)
+            self._data_socket.setsockopt(zmq.LINGER, 0)
+            self._data_socket.setsockopt(zmq.RCVTIMEO, self.data_timeout_ms)
+            self._data_socket.connect(self.data_endpoint)
+            self.data_port = _BridgeDataAdapter(self._data_socket)
+        except zmq.ZMQError as exc:
+            self._teardown_sockets()
+            raise RadarConnectionError(f"Failed to connect to radar bridge: {exc}") from exc
+
+    def _teardown_sockets(self) -> None:
+        if self._control_socket is not None:
+            try:
+                self._control_socket.close(0)
+            finally:
+                self._control_socket = None
+        if self._data_socket is not None:
+            try:
+                self._data_socket.close(0)
+            finally:
+                self._data_socket = None
+        self._context = None
+        self.cli_port = None
+        self.data_port = None
+
+    def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:  # noqa: D401
+        """Read and decode a frame from the radar bridge."""
+        if not self.is_running:
+            logger.error("Radar is not running. Please start the radar first.")
+            return None
+
+        if not self.data_port:
+            logger.error("Data channel is not available")
+            return None
+
+        try:
+            chunk = self.data_port.recv()
+        except RadarConnectionError as exc:
+            logger.error(str(exc))
+            self.failed_reads += 1
+            return None
+
+        if not chunk:
+            return None
+
+        # Maintain a rolling buffer in case multiple frames arrive in one chunk
+        self._buffer += chunk
+        if len(self._buffer) > self.MAX_BUFFER_SIZE:
+            self._buffer = self._buffer[-self.MAX_BUFFER_SIZE:]
+
+        # Align to the first magic word
+        start = self._buffer.find(self.MAGIC_WORD)
+        if start == -1:
+            # No magic word found, discard stale data
+            if len(self._buffer) > self.MAGIC_WORD_LENGTH:
+                self._buffer = self._buffer[-self.MAGIC_WORD_LENGTH:]
+            return None
+        if start > 0:
+            self._buffer = self._buffer[start:]
+            start = 0
+
+        # Ensure we have enough data for header
+        required_header_len = self.MAGIC_WORD_LENGTH + 32
+        if len(self._buffer) < required_header_len:
+            return None
+
+        header_bytes = self._buffer[self.MAGIC_WORD_LENGTH:self.MAGIC_WORD_LENGTH + 32]
+        header = self._parse_header(header_bytes)
+        total_packet_len = header.get('total_packet_len', 0)
+        if total_packet_len <= 0:
+            self.invalid_packets += 1
+            # Drop the magic word to avoid livelock
+            self._buffer = self._buffer[self.MAGIC_WORD_LENGTH:]
+            return None
+
+        if len(self._buffer) < total_packet_len:
+            # Wait for more data to arrive
+            return None
+
+        frame_bytes = self._buffer[self.MAGIC_WORD_LENGTH:total_packet_len]
+        self._buffer = self._buffer[total_packet_len:]
+
+        if len(frame_bytes) < 32:
+            self.invalid_packets += 1
+            return None
+
+        payload_len = total_packet_len - self.MAGIC_WORD_LENGTH - 32
+        if payload_len < 0 or len(frame_bytes) < 32 + payload_len:
+            self.invalid_packets += 1
+            return None
+
+        payload_bytes = frame_bytes[32:32 + payload_len]
+
+        self.total_frames += 1
+        self.frames_received += 1
+
+        if self.should_stop_for_frame_count():
+            logger.info(
+                f"Received the configured number of frames ({self.num_frames}), stopping measurement"
+            )
+            self.stop()
+            return None
+
+        return header, np.frombuffer(payload_bytes, dtype=np.uint8)
+
+    def close(self) -> None:
+        super().close()
+        self._teardown_sockets()
+        self._buffer = b""
+
+
+def create_radar(
+    transport: str = "auto",
+    control_endpoint: str = DEFAULT_BRIDGE_CONTROL_ENDPOINT,
+    data_endpoint: str = DEFAULT_BRIDGE_DATA_ENDPOINT,
+) -> RadarConnection:
+    """Factory function to create a radar instance for the requested transport."""
+
+    normalized = (transport or "auto").lower()
+    if normalized not in {"auto", "serial", "network"}:
+        raise ValueError(f"Unsupported transport '{transport}'. Expected 'auto', 'serial', or 'network'.")
+
+    if normalized == "serial":
+        return RadarConnection()
+
+    if normalized == "network":
+        return RadarBridgeConnection(control_endpoint=control_endpoint, data_endpoint=data_endpoint)
+
+    # Auto-detect: prefer a locally attached sensor and fall back to the bridge.
+    serial_candidate = RadarConnection()
+    try:
+        detected = serial_candidate.detect_radar_type()
+    except Exception:
+        detected = None
+
+    if isinstance(detected, str) and detected:
+        logger.info("Using serial transport for radar connection")
+        return serial_candidate
+
+    logger.info("No serial radar detected. Falling back to radar bridge network transport")
+    return RadarBridgeConnection(control_endpoint=control_endpoint, data_endpoint=data_endpoint)
