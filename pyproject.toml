@@ -22,6 +22,7 @@ dependencies = [
     "scikit-learn",
     "scipy",
     "filterpy",
+    "pyzmq >= 25.0.0",
 ]
 
 [dependency-groups]

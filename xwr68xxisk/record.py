@@ -9,7 +9,12 @@ from datetime import datetime
 import pypcd
 from dataclasses import dataclass, field
 
-from xwr68xxisk.radar import RadarConnection, create_radar, RadarConnectionError
+from xwr68xxisk.radar import (
+    DEFAULT_BRIDGE_CONTROL_ENDPOINT,
+    DEFAULT_BRIDGE_DATA_ENDPOINT,
+    RadarConnectionError,
+    create_radar,
+)
 from xwr68xxisk.parse import RadarData
 from xwr68xxisk.point_cloud import RadarPointCloud
 from xwr68xxisk.clustering import Cluster
@@ -463,7 +468,13 @@ class PointCloudRecorder:
             logger.error(f"Error closing recorder: {e}")
 
 
-def main(serial_number: Optional[str] = None, profile: str = os.path.join('configs', 'user_profile.cfg')):
+def main(
+    serial_number: Optional[str] = None,
+    profile: str = os.path.join('configs', 'user_profile.cfg'),
+    transport: str = "auto",
+    control_endpoint: Optional[str] = None,
+    data_endpoint: Optional[str] = None,
+):
     """Record radar data from the sensor.
     
     Args:
@@ -545,18 +556,29 @@ def main(serial_number: Optional[str] = None, profile: str = os.path.join('confi
         logger.info("Tracking enabled with parameters: " + str(config.tracking))
     logger.info(f"Recording enabled with parameters: {recording_config}")
 
-    radar_base = RadarConnection()
-    radar_type = radar_base.detect_radar_type()
-    if not radar_type:
-        logger.error("No supported radar detected")
-        raise RadarConnectionError("No supported radar detected")
-    
-    logger.info(f"Creating {radar_type} radar instance")
-    radar = create_radar()
-    
+    control_endpoint = control_endpoint or DEFAULT_BRIDGE_CONTROL_ENDPOINT
+    data_endpoint = data_endpoint or DEFAULT_BRIDGE_DATA_ENDPOINT
+
+    try:
+        radar = create_radar(
+            transport=transport,
+            control_endpoint=control_endpoint,
+            data_endpoint=data_endpoint,
+        )
+    except (RadarConnectionError, ValueError) as exc:
+        logger.error(f"Unable to create radar connection: {exc}")
+        raise
+
+    logger.info(f"Creating radar instance using transport='{radar.transport}'")
+    if radar.transport == 'network':
+        logger.info(
+            "Using radar bridge endpoints: "
+            f"control={control_endpoint} data={data_endpoint}"
+        )
+
     # Connect using the specified profile
     logger.info(f"Using radar profile: {profile}")
-    radar.connect(profile)
+    radar.connect(profile, serial_number=serial_number)
 
     if radar.version_info:
         formatted_info = '\n'.join(str(line) for line in radar.version_info)

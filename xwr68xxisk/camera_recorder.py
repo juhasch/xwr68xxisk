@@ -9,10 +9,9 @@ precise timestamp synchronization. The recordings are stored as:
 
 import os
 import csv
-import time
 import cv2
 import numpy as np
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from datetime import datetime
 from dataclasses import dataclass
 from threading import Thread, Event, Lock
@@ -171,7 +170,25 @@ class CameraRecorder:
                 )
                 
                 # Write frame to video file
-                self.video_writers[camera_id].write(frame_data['image'])
+                # Convert frame to uint8 BGR format for OpenCV VideoWriter
+                image = frame_data['image']
+                if image.dtype == np.uint32:
+                    # Convert uint32 RGBA back to uint8 BGR for OpenCV
+                    # The uint32 data is packed RGBA, so we need to unpack it
+                    rgba_frame = np.frombuffer(image, dtype=np.uint8).reshape(image.shape + (4,))
+                    # Convert RGBA to BGR (OpenCV format)
+                    bgr_frame = cv2.cvtColor(rgba_frame, cv2.COLOR_RGBA2BGR)
+                    self.video_writers[camera_id].write(bgr_frame)
+                elif image.dtype == np.uint8 and len(image.shape) == 3:
+                    # Already uint8, but might need BGR conversion
+                    if image.shape[2] == 3:
+                        # RGB to BGR conversion
+                        bgr_frame = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                        self.video_writers[camera_id].write(bgr_frame)
+                    else:
+                        self.video_writers[camera_id].write(image)
+                else:
+                    self.video_writers[camera_id].write(image)
                 
                 # Write metadata to CSV
                 self.csv_writers[camera_id].writerow({

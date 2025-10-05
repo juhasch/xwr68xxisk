@@ -34,7 +34,12 @@ from bokeh.models import ColorBar, LinearColorMapper, ColumnDataSource, LabelSet
 from panel.widgets import TextAreaInput, Button
 
 # Local imports
-from xwr68xxisk.radar import RadarConnection, create_radar, RadarConnectionError
+from xwr68xxisk.radar import (
+    DEFAULT_BRIDGE_CONTROL_ENDPOINT,
+    DEFAULT_BRIDGE_DATA_ENDPOINT,
+    RadarConnectionError,
+    create_radar,
+)
 from xwr68xxisk.parse import RadarData, RadarDataIterator
 from xwr68xxisk.clustering import PointCloudClustering
 from xwr68xxisk.tracking import PointCloudTracker
@@ -75,8 +80,8 @@ class RadarGUI:
     ----------
     config_manager : ConfigManager
         Manager for handling radar configuration
-    radar : RadarConnection
-        Connection to the radar sensor
+    radar : object
+        Connection to the radar sensor (serial or network bridge)
     camera : BaseCamera, optional
         Connection to the camera, if enabled
     is_running : bool
@@ -93,11 +98,26 @@ class RadarGUI:
     The GUI initializes in a disconnected state. The user must first connect
     to the radar sensor before starting visualization and recording.
     """
-    def __init__(self):
+    def __init__(
+        self,
+        transport: str = "auto",
+        control_endpoint: str = DEFAULT_BRIDGE_CONTROL_ENDPOINT,
+        data_endpoint: str = DEFAULT_BRIDGE_DATA_ENDPOINT,
+    ):
         # Initialize configuration
         self.config_manager = ConfigManager()
         self.config = self.config_manager.load_config()
         
+        self.transport_choice = (transport or "auto").lower()
+        if self.transport_choice not in {"auto", "serial", "network"}:
+            logger.warning(
+                "Unsupported transport '%s' requested in GUI. Falling back to 'auto' mode.",
+                transport,
+            )
+            self.transport_choice = "auto"
+        self.control_endpoint = control_endpoint or DEFAULT_BRIDGE_CONTROL_ENDPOINT
+        self.data_endpoint = data_endpoint or DEFAULT_BRIDGE_DATA_ENDPOINT
+
         # Initialize radar connection
         self.radar = None
         self.radar_type = None
@@ -1377,18 +1397,36 @@ class RadarGUI:
         logger.info("Cleanup completed")
 
     def _detect_radar_type(self):
-        """Auto-detect which radar is connected and prepare the radar instance.
+        """Prepare the radar connection using the configured transport."""
+        try:
+            radar = create_radar(
+                transport=self.transport_choice,
+                control_endpoint=self.control_endpoint,
+                data_endpoint=self.data_endpoint,
+            )
+        except (RadarConnectionError, ValueError) as exc:
+            logger.error(f"Failed to prepare radar connection: {exc}")
+            return None
 
-        Returns the radar type string if detected, otherwise None.
-        """
-        radar_base = RadarConnection()
-        radar_type = radar_base.detect_radar_type()
-        if radar_type:
-            # Preserve detected ports and reuse this instance for connection
-            self.radar = radar_base
-            self.radar_type = radar_type
-            return radar_type
-        return None
+        self.radar = radar
+
+        if radar.transport == 'serial':
+            detected_type = radar.detect_radar_type()
+            if isinstance(detected_type, str) and detected_type:
+                self.radar_type = detected_type
+                return detected_type
+            logger.error("No supported serial radar detected")
+            self.radar = None
+            return None
+
+        # Network transport
+        self.radar_type = 'radarbridge'
+        logger.info(
+            "Prepared radar bridge connection (control=%s, data=%s)",
+            self.control_endpoint,
+            self.data_endpoint,
+        )
+        return self.radar_type
 
     def _toggle_params_panel(self, event):
         """Toggle the visibility of the parameters panel."""

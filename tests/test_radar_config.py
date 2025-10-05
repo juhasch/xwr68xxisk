@@ -6,9 +6,11 @@ Unit tests for radar_config.py
 import unittest
 import os
 import tempfile
+import pytest
 from xwr68xxisk.radar_config import (
-    RadarCommand, RadarConfig, 
-    DfeDataOutputModeCommand, ChannelConfigCommand, ProfileConfigCommand
+    RadarCommand, RadarProfile, 
+    DfeDataOutputModeCommand, ChannelConfigCommand, ProfileConfigCommand,
+    TriggerModeCommand
 )
 
 
@@ -80,8 +82,8 @@ class TestRadarCommand(unittest.TestCase):
             cmd.freq_slope_const = 0  # Should be > 0
 
 
-class TestRadarConfig(unittest.TestCase):
-    """Tests for the RadarConfig class"""
+class TestRadarProfile(unittest.TestCase):
+    """Tests for the RadarProfile class"""
     
     def test_from_string(self):
         """Test creating a config from a multiline string"""
@@ -93,7 +95,7 @@ class TestRadarConfig(unittest.TestCase):
         profileCfg 0 77 100 6 60 0 0 80 1 512 6000 0 0 160
         """
         
-        config = RadarConfig.from_string(config_str, "test_config")
+        config = RadarProfile.from_string(config_str, "test_config")
         self.assertEqual(config.name, "test_config")
         self.assertEqual(len(config.commands), 5)
         self.assertEqual(config.commands[0].name, "sensorStop")
@@ -101,7 +103,7 @@ class TestRadarConfig(unittest.TestCase):
     
     def test_to_string(self):
         """Test converting a config to a string"""
-        config = RadarConfig("test")
+        config = RadarProfile("test")
         config.add_command(RadarCommand("cmd1", [1, 2]))
         config.add_command(RadarCommand("cmd2", [3, 4.5]))
         
@@ -110,7 +112,7 @@ class TestRadarConfig(unittest.TestCase):
     
     def test_file_io(self):
         """Test saving and loading from file"""
-        config = RadarConfig("test_file_io")
+        config = RadarProfile("test_file_io")
         config.add_command(RadarCommand("sensorStop", []))
         config.add_command(RadarCommand("dfeDataOutputMode", [1]))
         config.add_command(RadarCommand("channelCfg", [15, 5, 0]))
@@ -125,7 +127,7 @@ class TestRadarConfig(unittest.TestCase):
             self.assertTrue(os.path.exists(temp_path))
             
             # Test loading
-            loaded_config = RadarConfig.from_file(temp_path, "test_file_io")
+            loaded_config = RadarProfile.from_file(temp_path, "test_file_io")
             self.assertEqual(loaded_config.name, "test_file_io")
             self.assertEqual(len(loaded_config.commands), 3)
             self.assertEqual(loaded_config.commands[0].name, "sensorStop")
@@ -139,7 +141,7 @@ class TestRadarConfig(unittest.TestCase):
     
     def test_get_command(self):
         """Test retrieving commands by name"""
-        config = RadarConfig()
+        config = RadarProfile()
         config.add_command(RadarCommand("cmd1", [1]))
         config.add_command(RadarCommand("cmd2", [2]))
         config.add_command(RadarCommand("cmd1", [3]))  # Second cmd1
@@ -157,7 +159,7 @@ class TestRadarConfig(unittest.TestCase):
     
     def test_get_commands(self):
         """Test getting multiple commands with the same name"""
-        config = RadarConfig()
+        config = RadarProfile()
         config.add_command(RadarCommand("chirpCfg", [0, 0, 0, 0, 0, 0, 0, 1]))
         config.add_command(RadarCommand("chirpCfg", [1, 1, 0, 0, 0, 0, 0, 2]))
         
@@ -168,7 +170,7 @@ class TestRadarConfig(unittest.TestCase):
     
     def test_remove_command(self):
         """Test removing a command"""
-        config = RadarConfig()
+        config = RadarProfile()
         config.add_command(RadarCommand("cmd1", [1]))
         config.add_command(RadarCommand("cmd2", [2]))
         config.add_command(RadarCommand("cmd1", [3]))
@@ -188,7 +190,7 @@ class TestRadarConfig(unittest.TestCase):
     
     def test_clone(self):
         """Test cloning a configuration"""
-        config = RadarConfig("original")
+        config = RadarProfile("original")
         config.add_command(RadarCommand("cmd1", [1, 2]))
         config.add_command(RadarCommand("cmd2", [3, 4]))
         
@@ -206,7 +208,7 @@ class TestRadarConfig(unittest.TestCase):
     
     def test_helper_methods(self):
         """Test the helper methods for common configuration changes"""
-        config = RadarConfig()
+        config = RadarProfile()
         
         # Add frameCfg
         config.add_command(RadarCommand("frameCfg", [0, 1, 16, 0, 100, 1, 0]))
@@ -257,7 +259,7 @@ class TestRadarConfig(unittest.TestCase):
         self.assertEqual(config.get_command("clutterRemoval").params[1], 1)
         
         # Test with nonexistent commands
-        config_empty = RadarConfig()
+        config_empty = RadarProfile()
         self.assertFalse(config_empty.update_frame_period(100))
         self.assertFalse(config_empty.set_tx_antennas(1))
         self.assertFalse(config_empty.set_rx_antennas(1))
@@ -266,9 +268,6 @@ class TestRadarConfig(unittest.TestCase):
 
 
 """Test radar configuration trigger mode functionality"""
-
-import pytest
-from xwr68xxisk.radar_config import TriggerModeCommand, RadarProfile
 
 
 class TestTriggerModeCommand:
