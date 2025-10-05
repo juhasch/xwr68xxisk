@@ -157,6 +157,7 @@ class RadarConfig(BaseModel):
     )
     plot_scatter: bool = Field(True, description="Enable Scatter Plot in GUI (not sent to radar)")
     plot_range_profile: bool = Field(True, description="Enable Range Profile plot in GUI (not sent to radar)")
+    plot_range_waterfall: bool = Field(False, description="Enable Range Profile Waterfall plot in GUI (not sent to radar)")
     range_profile_mode: str = Field("log_magnitude", description="Range profile mode: 'log_magnitude' or 'complex'")
     plot_noise_profile: bool = Field(False, description="Enable Noise Profile plot in GUI (not sent to radar)")
     plot_range_azimuth_heat_map: bool = Field(False, description="Enable Range Azimuth Heat Map in GUI (not sent to radar)")

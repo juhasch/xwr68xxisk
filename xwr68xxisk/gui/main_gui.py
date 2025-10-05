@@ -751,6 +751,7 @@ class RadarGUI:
                 # CRITICAL: Update the radar config plot settings to match ProfileConfigView
                 self.config.radar.plot_scatter = self.profile_config_view_panel.config.plot_scatter
                 self.config.radar.plot_range_profile = self.profile_config_view_panel.config.plot_range_profile
+                self.config.radar.plot_range_waterfall = getattr(self.profile_config_view_panel.config, 'plot_range_waterfall', False)
                 self.config.radar.range_profile_mode = self.profile_config_view_panel.config.range_profile_mode
                 self.config.radar.plot_noise_profile = self.profile_config_view_panel.config.plot_noise_profile
                 self.config.radar.plot_range_azimuth_heat_map = self.profile_config_view_panel.config.plot_range_azimuth_heat_map
@@ -761,7 +762,18 @@ class RadarGUI:
                 self.config.radar.trigger_mode = self.profile_config_view_panel.config.trigger_mode
                 
                 logger.info(f"Synchronized frame rate: {profile_frame_rate_fps:.1f} fps")
-                logger.info(f"Synchronized plot settings: scatter={self.config.radar.plot_scatter}, range_profile={self.config.radar.plot_range_profile}, range_profile_mode={self.config.radar.range_profile_mode}, noise_profile={self.config.radar.plot_noise_profile}, range_azimuth={self.config.radar.plot_range_azimuth_heat_map}, range_doppler={self.config.radar.plot_range_doppler_heat_map}, statistics={self.config.radar.plot_statistics}")
+                logger.info(
+                    "Synchronized plot settings: scatter=%s, range_profile=%s, range_waterfall=%s, range_profile_mode=%s, "
+                    "noise_profile=%s, range_azimuth=%s, range_doppler=%s, statistics=%s",
+                    self.config.radar.plot_scatter,
+                    self.config.radar.plot_range_profile,
+                    getattr(self.config.radar, 'plot_range_waterfall', False),
+                    self.config.radar.range_profile_mode,
+                    self.config.radar.plot_noise_profile,
+                    self.config.radar.plot_range_azimuth_heat_map,
+                    self.config.radar.plot_range_doppler_heat_map,
+                    self.config.radar.plot_statistics
+                )
                 logger.info(f"Synchronized trigger mode: {self.config.radar.trigger_mode}")
             
             # Generate the CFG string from the SceneProfileConfig model

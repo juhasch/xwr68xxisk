@@ -6,12 +6,13 @@ for radar data, including scatter plots and range profiles.
 """
 
 import logging
+from collections import deque
 import numpy as np
 import panel as pn
 import holoviews as hv
 import param
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, ColorBar, LinearColorMapper
+from bokeh.models import ColumnDataSource, ColorBar, LinearColorMapper, Range1d
 from bokeh.layouts import column
 from bokeh.palettes import Viridis256
 from bokeh.transform import linear_cmap
@@ -335,6 +336,331 @@ class RangeProfilePlot(BasePlot):
         
         return np.array([])
 
+
+class RangeWaterfallPlot(BasePlot):
+    """Waterfall visualization for range profile history with fixed axes."""
+
+    def __init__(self, scene_config: RadarConfig, display_config: 'DisplayConfig'):
+        self.max_history = 200
+        self.history = deque(maxlen=self.max_history)
+        self.range_axis = np.array([])
+        self.num_bins = 0
+        self.range_step = 1.0
+        self.time_step: float | None = None
+        self.x_start = 0.0
+        self.x_end = 1.0
+        self._figure = None
+        self.image_source: ColumnDataSource | None = None
+        self.color_mapper: LinearColorMapper | None = None
+        self.color_bar: ColorBar | None = None
+        super().__init__(scene_config, display_config)
+
+    def _setup_plot(self) -> pn.pane.Bokeh:
+        """Set up the range waterfall plot."""
+        p = figure(
+            title='Range Profile Waterfall',
+            width=self.display_config.plot_width,
+            height=self.display_config.plot_height,
+            x_axis_label='Range (m)',
+            y_axis_label='Time (s)',
+            tools='pan,wheel_zoom,box_zoom,reset,save',
+            toolbar_location='above',
+            x_range=Range1d(self.x_start, self.x_end),
+            y_range=Range1d(0, self.max_history)
+        )
+
+        self.color_mapper = LinearColorMapper(palette=Viridis256, low=0.0, high=1.0, nan_color='rgba(0,0,0,0)')
+        initial_image = np.full((self.max_history, 1), np.nan, dtype=np.float32)
+        self.image_source = ColumnDataSource({
+            'image': [initial_image],
+            'x': [self.x_start],
+            'y': [0.0],
+            'dw': [self.x_end - self.x_start],
+            'dh': [self.max_history]
+        })
+
+        p.image(
+            image='image',
+            x='x',
+            y='y',
+            dw='dw',
+            dh='dh',
+            source=self.image_source,
+            color_mapper=self.color_mapper,
+            name='range_waterfall'
+        )
+
+        self.color_bar = ColorBar(
+            color_mapper=self.color_mapper,
+            title='Magnitude (dB)',
+            location=(0, 0)
+        )
+        p.add_layout(self.color_bar, 'right')
+
+        p.grid.grid_line_alpha = 0.3
+        self._figure = p
+        return pn.pane.Bokeh(p)
+
+    def update(self, radar_data: RadarData) -> None:
+        """Update the range waterfall plot with new radar data."""
+        if not radar_data:
+            logger.debug("RangeWaterfallPlot.update: radar_data is None or empty")
+            self._clear_plot()
+            return
+
+        try:
+            amplitude_db, range_axis = self._extract_range_profile(radar_data)
+
+            if amplitude_db.size == 0 or range_axis.size == 0:
+                logger.debug("RangeWaterfallPlot: No valid range profile data available")
+                self._clear_plot()
+                return
+
+            if (self.num_bins == 0 or
+                len(range_axis) != self.num_bins or
+                not np.allclose(range_axis, self.range_axis)):
+                self._initialize_axes(range_axis, radar_data)
+
+            if self.num_bins == 0:
+                return
+
+            amplitude_trimmed = amplitude_db.astype(np.float32)
+            if amplitude_trimmed.size > self.num_bins:
+                amplitude_trimmed = amplitude_trimmed[:self.num_bins]
+            elif amplitude_trimmed.size < self.num_bins:
+                padded = np.full(self.num_bins, np.nan, dtype=np.float32)
+                padded[:amplitude_trimmed.size] = amplitude_trimmed
+                amplitude_trimmed = padded
+
+            self.history.append(amplitude_trimmed)
+
+            if not self.history:
+                self._clear_plot()
+                return
+
+            candidate_time_step = self._get_time_step(radar_data)
+            if candidate_time_step > 0 and self.time_step is None:
+                self.time_step = candidate_time_step
+                self._update_time_axis()
+
+            data_matrix = self._assemble_history_matrix()
+            time_span = self._get_time_span()
+
+            if self.image_source is not None:
+                self.image_source.data = {
+                    'image': [data_matrix],
+                    'x': [self.x_start],
+                    'y': [0.0],
+                    'dw': [self.x_end - self.x_start],
+                    'dh': [time_span]
+                }
+
+            if self._figure is not None:
+                self._figure.x_range.start = self.x_start
+                self._figure.x_range.end = self.x_end
+                self._figure.y_range.start = 0.0
+                self._figure.y_range.end = time_span
+
+            if self.color_mapper is not None:
+                valid_data = data_matrix[np.isfinite(data_matrix)]
+                if valid_data.size == 0:
+                    vmin, vmax = 0.0, 1.0
+                else:
+                    vmin = float(valid_data.min())
+                    vmax = float(valid_data.max())
+                    if vmin == vmax:
+                        vmax = vmin + 1.0
+                self.color_mapper.low = vmin
+                self.color_mapper.high = vmax
+
+        except Exception as e:
+            logger.error(f"Error updating range waterfall plot: {e}")
+            self._clear_plot()
+
+    def _initialize_axes(self, range_axis: np.ndarray, radar_data: RadarData) -> None:
+        """Initialize or reset axis metadata based on the incoming range axis."""
+        if range_axis.size == 0:
+            return
+
+        self.range_axis = range_axis.astype(np.float32)
+        self.num_bins = len(self.range_axis)
+        self.history = deque(maxlen=self.max_history)
+
+        step = self._get_range_step(radar_data)
+        if step <= 0 and self.num_bins > 1:
+            step = float(self.range_axis[1] - self.range_axis[0])
+        if step <= 0:
+            step = 1.0
+        self.range_step = step
+
+        self.x_start = float(self.range_axis[0])
+        self.x_end = self.x_start + self.range_step * max(self.num_bins, 1)
+        if self.x_end <= self.x_start:
+            self.x_end = self.x_start + self.range_step
+
+        if self._figure is not None:
+            self._figure.x_range.start = self.x_start
+            self._figure.x_range.end = self.x_end
+
+        self._refresh_empty_image()
+
+    def _assemble_history_matrix(self) -> np.ndarray:
+        """Create a fixed-size matrix representing the history buffer."""
+        num_cols = max(self.num_bins, 1)
+        matrix = np.full((self.max_history, num_cols), np.nan, dtype=np.float32)
+
+        if not self.history:
+            return matrix
+
+        history_array = np.array(self.history, dtype=np.float32)
+        rows = history_array.shape[0]
+        cols = min(history_array.shape[1], num_cols)
+        matrix[-rows:, :cols] = history_array[:, :cols]
+        return matrix
+
+    def _refresh_empty_image(self) -> None:
+        """Populate the data source with an empty matrix matching current axes."""
+        if self.image_source is None:
+            return
+
+        num_cols = max(self.num_bins, 1)
+        empty_matrix = np.full((self.max_history, num_cols), np.nan, dtype=np.float32)
+        self.image_source.data = {
+            'image': [empty_matrix],
+            'x': [self.x_start],
+            'y': [0.0],
+            'dw': [self.x_end - self.x_start],
+            'dh': [self._get_time_span()]
+        }
+
+    def _extract_range_profile(self, radar_data: RadarData) -> tuple[np.ndarray, np.ndarray]:
+        """Extract magnitude (dB) range profile and range axis."""
+        has_complex = getattr(radar_data, 'adc_complex', None) is not None and len(radar_data.adc_complex) > 0
+        has_regular = getattr(radar_data, 'adc', None) is not None and len(radar_data.adc) > 0
+
+        use_complex = (
+            getattr(self.scene_config, 'range_profile_mode', 'log_magnitude') == 'complex' and
+            has_complex
+        )
+
+        amplitude_db = np.array([])
+        range_bins = np.array([])
+
+        try:
+            if use_complex:
+                range_bins, magnitude_db, _ = radar_data.get_complex_range_profile()
+                amplitude_db = magnitude_db
+            elif has_regular:
+                magnitude_db = radar_data.adc.astype(np.float32) / 100.0
+                range_bins = np.arange(len(magnitude_db))
+                amplitude_db = magnitude_db
+            elif has_complex:
+                range_bins, magnitude_db, _ = radar_data.get_complex_range_profile()
+                amplitude_db = magnitude_db
+        except Exception as e:
+            logger.error(f"RangeWaterfallPlot: Error extracting range profile data: {e}")
+            return np.array([]), np.array([])
+
+        if amplitude_db.size == 0:
+            return np.array([]), np.array([])
+
+        amplitude_db = np.asarray(amplitude_db, dtype=np.float32)
+        amplitude_db = np.nan_to_num(amplitude_db, nan=np.nan, posinf=np.nan, neginf=np.nan)
+
+        range_axis = self._get_range_axis(radar_data, len(amplitude_db))
+        if range_axis.size == 0:
+            range_axis = np.asarray(range_bins, dtype=np.float32)
+
+        min_len = min(len(amplitude_db), len(range_axis))
+        return amplitude_db[:min_len], range_axis[:min_len]
+
+    def _get_range_axis(self, radar_data: RadarData, data_length: int) -> np.ndarray:
+        """Compute range axis in meters if possible."""
+        if radar_data.config_params:
+            range_step = radar_data.config_params.get('rangeStep')
+            if range_step is not None:
+                try:
+                    step_value = float(range_step)
+                    return np.arange(data_length, dtype=np.float32) * step_value
+                except (TypeError, ValueError):
+                    logger.warning("RangeWaterfallPlot: Invalid rangeStep value %s", range_step)
+        return np.array([])
+
+    def _get_range_step(self, radar_data: RadarData) -> float:
+        """Best-effort extraction of range step size in meters."""
+        if radar_data.config_params:
+            range_step = radar_data.config_params.get('rangeStep')
+            if range_step is not None:
+                try:
+                    step_value = float(range_step)
+                    if step_value > 0:
+                        return step_value
+                except (TypeError, ValueError):
+                    logger.warning("RangeWaterfallPlot: Failed to parse rangeStep %s", range_step)
+        fallback = getattr(self.scene_config, 'range_resolution_m', 0.1)
+        try:
+            fallback = float(fallback)
+        except (TypeError, ValueError):
+            fallback = 0.1
+        return fallback if fallback > 0 else 0.1
+
+    def _get_time_step(self, radar_data: RadarData) -> float:
+        """Return frame period in seconds, falling back to frame rate if needed."""
+        period_ms = None
+        if radar_data.config_params:
+            period_ms = (radar_data.config_params.get('framePeriod') or
+                         radar_data.config_params.get('frame_period') or
+                         radar_data.config_params.get('framePeriodicity'))
+        if period_ms is not None:
+            try:
+                period_value = float(period_ms)
+                if period_value > 0:
+                    return period_value / 1000.0
+            except (TypeError, ValueError):
+                logger.warning("RangeWaterfallPlot: Unable to parse frame period %s", period_ms)
+
+        frame_rate = getattr(self.scene_config, 'frame_rate_fps', None)
+        if frame_rate:
+            try:
+                frame_rate = float(frame_rate)
+                if frame_rate > 0:
+                    return 1.0 / frame_rate
+            except (TypeError, ValueError):
+                logger.warning("RangeWaterfallPlot: Invalid frame_rate_fps %s", frame_rate)
+
+        return 0.1
+
+    def _update_time_axis(self) -> None:
+        """Update the y-axis to reflect the configured time step."""
+        if self._figure is not None and self.time_step:
+            span = self._get_time_span()
+            self._figure.y_range.start = 0.0
+            self._figure.y_range.end = span
+            self._figure.yaxis.axis_label = 'Time (s)'
+
+    def _get_time_span(self) -> float:
+        """Return the total time span represented by the waterfall plot."""
+        step = self.time_step if self.time_step and self.time_step > 0 else 1.0
+        return step * self.max_history
+
+    def _clear_plot(self) -> None:
+        """Reset the plot to its baseline state without collapsing the axes."""
+        self.history.clear()
+
+        if self.image_source is not None:
+            num_cols = max(self.num_bins, 1)
+            empty_matrix = np.full((self.max_history, num_cols), np.nan, dtype=np.float32)
+            self.image_source.data = {
+                'image': [empty_matrix],
+                'x': [self.x_start],
+                'y': [0.0],
+                'dw': [self.x_end - self.x_start],
+                'dh': [self._get_time_span()]
+            }
+
+        if self.color_mapper is not None:
+            self.color_mapper.low = 0.0
+            self.color_mapper.high = 1.0
 
 class RangeDopplerPlot(BasePlot):
     """Range-Doppler heatmap plot."""
@@ -817,6 +1143,7 @@ class PlotManager:
         # Initialize plots
         self.scatter_plot = ScatterPlot(scene_config, display_config)
         self.range_profile_plot = RangeProfilePlot(scene_config, display_config)
+        self.range_waterfall_plot = RangeWaterfallPlot(scene_config, display_config) if getattr(scene_config, 'plot_range_waterfall', False) else None
         self.range_doppler_plot = RangeDopplerPlot(scene_config, display_config)
         self.range_azimuth_plot = RangeAzimuthPlot(scene_config, display_config)
         self.polar_range_plot = PolarRangePlot(scene_config, display_config)
@@ -827,6 +1154,8 @@ class PlotManager:
         ]
         if scene_config.plot_range_profile:
             tabs.append(('Range Profile', self.range_profile_plot.view))
+        if getattr(scene_config, 'plot_range_waterfall', False) and self.range_waterfall_plot is not None:
+            tabs.append(('Range Waterfall', self.range_waterfall_plot.view))
         if scene_config.plot_range_doppler_heat_map:
             tabs.append(('Range-Doppler', self.range_doppler_plot.view))
         if scene_config.plot_range_azimuth_heat_map:
@@ -866,6 +1195,13 @@ class PlotManager:
                     logger.debug("PlotManager: Range profile plot updated successfully")
                 except Exception as e:
                     logger.error(f"PlotManager: Error updating range profile plot: {e}")
+
+            if getattr(self.scene_config, 'plot_range_waterfall', False) and self.range_waterfall_plot is not None:
+                try:
+                    self.range_waterfall_plot.update(radar_data)
+                    logger.debug("PlotManager: Range waterfall plot updated successfully")
+                except Exception as e:
+                    logger.error(f"PlotManager: Error updating range waterfall plot: {e}")
             
             # Update range-Doppler plot if enabled
             if self.scene_config.plot_range_doppler_heat_map:
