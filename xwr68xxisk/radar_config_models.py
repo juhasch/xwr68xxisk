@@ -214,6 +214,8 @@ class DisplayConfig(BaseModel):
     plot_height: int = 600
     x_range: tuple[float, float] = (-5.0, 5.0)
     y_range: tuple[float, float] = (0.0, 10.0)
+    waterfall_subtract_average: bool = Field(False, description="Enable average subtraction in waterfall plot")
+    waterfall_average_window: int = Field(30, ge=1, description="Number of frames to average when computing waterfall baseline")
 
 # Example usage (optional, can be removed or kept for testing)
 if __name__ == "__main__":

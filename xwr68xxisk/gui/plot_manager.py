@@ -349,6 +349,16 @@ class RangeWaterfallPlot(BasePlot):
         self.time_step: float | None = None
         self.x_start = 0.0
         self.x_end = 1.0
+        self.subtract_average = bool(getattr(display_config, 'waterfall_subtract_average', False))
+        window_cfg = getattr(display_config, 'waterfall_average_window', 30)
+        try:
+            window_value = int(window_cfg)
+        except (TypeError, ValueError):
+            window_value = 30
+        if window_value < 1:
+            window_value = 1
+        self.average_window = window_value
+        self.baseline_buffer = deque(maxlen=min(self.average_window, self.max_history))
         self._figure = None
         self.image_source: ColumnDataSource | None = None
         self.color_mapper: LinearColorMapper | None = None
@@ -432,11 +442,13 @@ class RangeWaterfallPlot(BasePlot):
                 padded[:amplitude_trimmed.size] = amplitude_trimmed
                 amplitude_trimmed = padded
 
-            self.history.append(amplitude_trimmed)
+            self._refresh_config_settings()
 
-            if not self.history:
-                self._clear_plot()
-                return
+            baseline = self._compute_baseline() if self.subtract_average else None
+            display_vector = amplitude_trimmed - baseline if baseline is not None else amplitude_trimmed
+
+            self.history.append(display_vector)
+            self._append_baseline(amplitude_trimmed)
 
             candidate_time_step = self._get_time_step(radar_data)
             if candidate_time_step > 0 and self.time_step is None:
@@ -485,6 +497,7 @@ class RangeWaterfallPlot(BasePlot):
         self.range_axis = range_axis.astype(np.float32)
         self.num_bins = len(self.range_axis)
         self.history = deque(maxlen=self.max_history)
+        self._reset_baseline()
 
         step = self._get_range_step(radar_data)
         if step <= 0 and self.num_bins > 1:
@@ -503,6 +516,60 @@ class RangeWaterfallPlot(BasePlot):
             self._figure.x_range.end = self.x_end
 
         self._refresh_empty_image()
+
+    def _refresh_config_settings(self) -> None:
+        """Pick up any runtime changes to waterfall configuration."""
+        subtract_cfg = bool(getattr(self.display_config, 'waterfall_subtract_average', self.subtract_average))
+        window_cfg = getattr(self.display_config, 'waterfall_average_window', self.average_window)
+
+        try:
+            window_value = int(window_cfg)
+        except (TypeError, ValueError):
+            window_value = self.average_window
+
+        if window_value < 1:
+            window_value = 1
+
+        if window_value != self.average_window:
+            self.average_window = window_value
+            self._reset_baseline()
+
+        if subtract_cfg != self.subtract_average:
+            self.subtract_average = subtract_cfg
+
+    def _baseline_maxlen(self) -> int:
+        return max(1, min(self.average_window, self.max_history))
+
+    def _reset_baseline(self) -> None:
+        self.baseline_buffer = deque(maxlen=self._baseline_maxlen())
+
+    def _append_baseline(self, amplitude: np.ndarray) -> None:
+        target_len = self._baseline_maxlen()
+        if self.baseline_buffer.maxlen != target_len:
+            recent = list(self.baseline_buffer)[-target_len:]
+            self.baseline_buffer = deque(recent, maxlen=target_len)
+
+        self.baseline_buffer.append(np.array(amplitude, copy=True, dtype=np.float32))
+
+    def _compute_baseline(self) -> np.ndarray:
+        if not self.baseline_buffer:
+            return np.zeros(self.num_bins, dtype=np.float32)
+
+        buffer_array = np.array(self.baseline_buffer, dtype=np.float32)
+        if buffer_array.ndim == 1:
+            buffer_array = buffer_array[np.newaxis, :]
+
+        with np.errstate(invalid='ignore'):
+            baseline = np.nanmean(buffer_array, axis=0)
+
+        baseline = np.where(np.isfinite(baseline), baseline, 0.0).astype(np.float32, copy=False)
+
+        if baseline.size < self.num_bins:
+            baseline = np.pad(baseline, (0, self.num_bins - baseline.size), constant_values=0.0)
+        elif baseline.size > self.num_bins:
+            baseline = baseline[:self.num_bins]
+
+        return baseline
 
     def _assemble_history_matrix(self) -> np.ndarray:
         """Create a fixed-size matrix representing the history buffer."""
@@ -565,7 +632,7 @@ class RangeWaterfallPlot(BasePlot):
             return np.array([]), np.array([])
 
         amplitude_db = np.asarray(amplitude_db, dtype=np.float32)
-        amplitude_db = np.nan_to_num(amplitude_db, nan=np.nan, posinf=np.nan, neginf=np.nan)
+        amplitude_db[~np.isfinite(amplitude_db)] = np.nan
 
         range_axis = self._get_range_axis(radar_data, len(amplitude_db))
         if range_axis.size == 0:
@@ -646,6 +713,7 @@ class RangeWaterfallPlot(BasePlot):
     def _clear_plot(self) -> None:
         """Reset the plot to its baseline state without collapsing the axes."""
         self.history.clear()
+        self._reset_baseline()
 
         if self.image_source is not None:
             num_cols = max(self.num_bins, 1)
