@@ -14,11 +14,7 @@ import logging
 import os
 import threading
 import yaml
-
-try:  # Lazily used when operating over the network bridge
-    import zmq  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    zmq = None
+import zmq  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -1023,6 +1019,7 @@ class RadarBridgeConnection(RadarConnection):
             self._data_socket = self._context.socket(zmq.PULL)
             self._data_socket.setsockopt(zmq.LINGER, 0)
             self._data_socket.setsockopt(zmq.RCVTIMEO, self.data_timeout_ms)
+            self._data_socket.setsockopt(zmq.RCVHWM, 10_000)
             self._data_socket.connect(self.data_endpoint)
             self.data_port = _BridgeDataAdapter(self._data_socket)
         except zmq.ZMQError as exc:
@@ -1044,26 +1041,60 @@ class RadarBridgeConnection(RadarConnection):
         self.cli_port = None
         self.data_port = None
 
-    def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:  # noqa: D401
-        """Read and decode a frame from the radar bridge."""
-        if not self.is_running:
-            logger.error("Radar is not running. Please start the radar first.")
+    def _drain_latest_frame(self, max_drain: int = 50) -> Optional[Tuple[dict, np.ndarray]]:
+        """Drain up to max_drain messages and return the latest valid frame.
+        
+        This function helps prevent buffer buildup by discarding older frames
+        and returning only the most recent valid frame data.
+        
+        Args:
+            max_drain: Maximum number of messages to drain from the socket
+            
+        Returns:
+            Tuple of (header, payload) for the latest valid frame, or None if no valid frame found
+        """
+        if not self._data_socket:
             return None
+            
+        latest_frame = None
+        drained = 0
+        
+        # Create a poller for non-blocking checks
+        poller = zmq.Poller()
+        poller.register(self._data_socket, zmq.POLLIN)
+        
+        while drained < max_drain:
+            events = dict(poller.poll(timeout=0))
+            if self._data_socket not in events:
+                break
+                
+            try:
+                chunk = self._data_socket.recv(flags=zmq.NOBLOCK)
+            except zmq.Again:
+                break
+                
+            if not chunk:
+                drained += 1
+                continue
+                
+            # Process this chunk to extract frame data
+            frame_data = self._process_chunk_for_frame(chunk)
+            if frame_data is not None:
+                latest_frame = frame_data
+                
+            drained += 1
+            
+        return latest_frame
 
-        if not self.data_port:
-            logger.error("Data channel is not available")
-            return None
-
-        try:
-            chunk = self.data_port.recv()
-        except RadarConnectionError as exc:
-            logger.error(str(exc))
-            self.failed_reads += 1
-            return None
-
-        if not chunk:
-            return None
-
+    def _process_chunk_for_frame(self, chunk: bytes) -> Optional[Tuple[dict, np.ndarray]]:
+        """Process a chunk of data to extract frame information.
+        
+        Args:
+            chunk: Raw data chunk from the socket
+            
+        Returns:
+            Tuple of (header, payload) if a valid frame is found, None otherwise
+        """
         # Maintain a rolling buffer in case multiple frames arrive in one chunk
         self._buffer += chunk
         if len(self._buffer) > self.MAX_BUFFER_SIZE:
@@ -1111,6 +1142,34 @@ class RadarBridgeConnection(RadarConnection):
             return None
 
         payload_bytes = frame_bytes[32:32 + payload_len]
+        return header, np.frombuffer(payload_bytes, dtype=np.uint8)
+
+    def read_frame(self) -> Optional[Tuple[dict, np.ndarray]]:  # noqa: D401
+        """Read and decode a frame from the radar bridge."""
+        if not self.is_running:
+            logger.error("Radar is not running. Please start the radar first.")
+            return None
+
+        if not self.data_port:
+            logger.error("Data channel is not available")
+            return None
+
+        try:
+            chunk = self.data_port.recv()
+        except RadarConnectionError as exc:
+            logger.error(str(exc))
+            self.failed_reads += 1
+            return None
+
+        if not chunk:
+            return None
+
+        # Process the chunk to extract frame data
+        frame_data = self._process_chunk_for_frame(chunk)
+        if frame_data is None:
+            return None
+            
+        header, payload_bytes = frame_data
 
         self.total_frames += 1
         self.frames_received += 1
@@ -1122,7 +1181,7 @@ class RadarBridgeConnection(RadarConnection):
             self.stop()
             return None
 
-        return header, np.frombuffer(payload_bytes, dtype=np.uint8)
+        return header, payload_bytes
 
     def close(self) -> None:
         super().close()
