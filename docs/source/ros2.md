@@ -1,6 +1,6 @@
 # ROS2 Radar Point Cloud Publisher
 
-This document describes the ROS2 integration for the TI mmWave radar sensors (XWR68xx series).
+This section describes the ROS2 integration for the TI mmWave radar sensors (XWR68xx series).
 
 ## Overview
 

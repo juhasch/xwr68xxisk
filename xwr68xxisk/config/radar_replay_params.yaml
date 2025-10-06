@@ -1,0 +1,36 @@
+/**:
+  ros__parameters:
+    # Recording file parameters
+    recording_directory: "/Users/juhasch/git/xwr68xxisk/recordings"
+    base_filename: "radar_data_20250517_134646"
+    
+    # Topic names
+    point_cloud_topic: "radar_point_cloud"
+    radar_info_topic: "radar_info"
+    
+    # Frame configuration
+    frame_id: "radar_link"
+    
+    # Replay timing parameters
+    replay_rate_hz: 10.0                    # Replay rate in Hz
+    loop_replay: true                       # Loop replay continuously
+    use_original_timestamps: false          # Use original timestamps from recording
+    time_scale_factor: 1.0                  # Time scale factor (1.0 = real-time)
+    
+    # Example configurations for different replay modes:
+    # 
+    # Real-time replay with original timing:
+    # use_original_timestamps: true
+    # time_scale_factor: 1.0
+    #
+    # Slow motion replay (half speed):
+    # use_original_timestamps: true
+    # time_scale_factor: 0.5
+    #
+    # Fast replay (double speed):
+    # use_original_timestamps: true
+    # time_scale_factor: 2.0
+    #
+    # Fixed rate replay (ignore original timing):
+    # use_original_timestamps: false
+    # replay_rate_hz: 20.0 

@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>xwr68xxisk</name>
+  <version>0.1.0</version>
+  <description>ROS2 package for TI mmWave radar sensors (XWR68xx series)</description>
+  
+  <maintainer email="your.email@example.com">Your Name</maintainer>
+  
+  <license>MIT</license>
+  
+  <url type="website">https://github.com/juhasch/xwr68xxisk</url>
+  <url type="bugtracker">https://github.com/juhasch/xwr68xxisk/issues</url>
+  <url type="repository">https://github.com/juhasch/xwr68xxisk</url>
+  
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  
+  <build_depend>rosidl_default_generators</build_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  
+  <depend>rclcpp</depend>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+  
+  <member_of_group>rosidl_interface_packages</member_of_group>
+</package> 

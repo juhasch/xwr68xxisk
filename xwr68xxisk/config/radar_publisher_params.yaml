@@ -1,0 +1,19 @@
+/**:
+  ros__parameters:
+    # Radar configuration
+    radar_profile: ""  # Path to radar profile file (leave empty for default)
+    frame_id: "radar_link"  # TF frame ID for the radar sensor
+    publish_rate: 10.0  # Point cloud publishing rate in Hz
+    auto_connect: true  # Automatically connect to radar on startup
+    
+    # Topic configuration
+    radar_info_topic: "radar_info"  # Topic for radar configuration/info messages
+    radar_info_publish_rate: 1.0   # Radar info publishing rate in Hz
+    
+    # Node configuration
+    use_sim_time: false  # Use simulation time
+    
+    # QoS settings (advanced)
+    qos_depth: 10  # Queue depth for publishers
+    qos_reliability: "reliable"  # "reliable" or "best_effort"
+    qos_durability: "volatile"  # "volatile" or "transient_local" 
