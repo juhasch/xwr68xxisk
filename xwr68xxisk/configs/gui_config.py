@@ -1,6 +1,6 @@
 """GUI configuration for radar visualization."""
 
-from typing import Tuple, Optional
+from typing import Tuple
 from pydantic import Field, field_validator
 from .base_config import BaseConfig
 
@@ -31,6 +31,16 @@ class DisplayConfig(BaseConfig):
         ge=10,
         le=100,
         description="Plot update period in milliseconds"
+    )
+    waterfall_subtract_average: bool = Field(
+        default=False,
+        description="Whether to subtract an averaged baseline from the waterfall plot"
+    )
+    waterfall_average_window: int = Field(
+        default=30,
+        ge=1,
+        le=500,
+        description="Number of frames used to compute the waterfall baseline average"
     )
     
     @field_validator('x_range', 'y_range')

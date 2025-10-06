@@ -157,6 +157,7 @@ class RadarConfig(BaseModel):
     )
     plot_scatter: bool = Field(True, description="Enable Scatter Plot in GUI (not sent to radar)")
     plot_range_profile: bool = Field(True, description="Enable Range Profile plot in GUI (not sent to radar)")
+    plot_range_waterfall: bool = Field(False, description="Enable Range Profile Waterfall plot in GUI (not sent to radar)")
     range_profile_mode: str = Field("log_magnitude", description="Range profile mode: 'log_magnitude' or 'complex'")
     plot_noise_profile: bool = Field(False, description="Enable Noise Profile plot in GUI (not sent to radar)")
     plot_range_azimuth_heat_map: bool = Field(False, description="Enable Range Azimuth Heat Map in GUI (not sent to radar)")
@@ -213,6 +214,8 @@ class DisplayConfig(BaseModel):
     plot_height: int = 600
     x_range: tuple[float, float] = (-5.0, 5.0)
     y_range: tuple[float, float] = (0.0, 10.0)
+    waterfall_subtract_average: bool = Field(False, description="Enable average subtraction in waterfall plot")
+    waterfall_average_window: int = Field(30, ge=1, description="Number of frames to average when computing waterfall baseline")
 
 # Example usage (optional, can be removed or kept for testing)
 if __name__ == "__main__":

@@ -53,6 +53,7 @@ class ProfileConfigView(param.Parameterized):
     # --- Plot Selection Widgets ---
     plot_scatter_cb = param.ClassSelector(class_=Checkbox)
     plot_range_profile_cb = param.ClassSelector(class_=Checkbox)
+    plot_range_waterfall_cb = param.ClassSelector(class_=Checkbox)
     plot_noise_profile_cb = param.ClassSelector(class_=Checkbox)
     plot_range_azimuth_cb = param.ClassSelector(class_=Checkbox)
     plot_range_doppler_cb = param.ClassSelector(class_=Checkbox)
@@ -207,6 +208,7 @@ class ProfileConfigView(param.Parameterized):
         # Plot Selection
         self.plot_scatter_cb = Checkbox(name="Scatter Plot", value=self.config.plot_scatter)
         self.plot_range_profile_cb = Checkbox(name="Range Profile", value=self.config.plot_range_profile)
+        self.plot_range_waterfall_cb = Checkbox(name="Range Waterfall", value=getattr(self.config, 'plot_range_waterfall', False))
         self.plot_noise_profile_cb = Checkbox(name="Noise Profile", value=self.config.plot_noise_profile)
         self.plot_range_azimuth_cb = Checkbox(name="Range Azimuth Heat Map", value=self.config.plot_range_azimuth_heat_map)
         self.plot_range_doppler_cb = Checkbox(name="Range Doppler Heat Map", value=self.config.plot_range_doppler_heat_map)
@@ -303,6 +305,7 @@ class ProfileConfigView(param.Parameterized):
         # Link Plot Selection checkboxes
         self.plot_scatter_cb.param.watch(lambda event: setattr(self.config, 'plot_scatter', event.new), 'value')
         self.plot_range_profile_cb.param.watch(lambda event: setattr(self.config, 'plot_range_profile', event.new), 'value')
+        self.plot_range_waterfall_cb.param.watch(lambda event: setattr(self.config, 'plot_range_waterfall', event.new), 'value')
         self.plot_noise_profile_cb.param.watch(lambda event: setattr(self.config, 'plot_noise_profile', event.new), 'value')
         self.plot_range_azimuth_cb.param.watch(lambda event: setattr(self.config, 'plot_range_azimuth_heat_map', event.new), 'value')
         self.plot_range_doppler_cb.param.watch(lambda event: setattr(self.config, 'plot_range_doppler_heat_map', event.new), 'value')
@@ -566,7 +569,12 @@ class ProfileConfigView(param.Parameterized):
         return pn.Column(
             StaticText(value="<h2>Plot Selection</h2>"),
             pn.Row(
-                pn.Column(self.plot_scatter_cb, self.plot_range_profile_cb, self.plot_noise_profile_cb),
+                pn.Column(
+                    self.plot_scatter_cb,
+                    self.plot_range_profile_cb,
+                    self.plot_range_waterfall_cb,
+                    self.plot_noise_profile_cb
+                ),
                 pn.Column(self.plot_range_azimuth_cb, self.plot_range_doppler_cb, self.plot_statistics_cb)
             )
         )

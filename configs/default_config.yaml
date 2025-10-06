@@ -15,6 +15,8 @@ display:
   plot_height: 600
   plot_width: 1100
   update_period_ms: 10
+  waterfall_average_window: 30
+  waterfall_subtract_average: true
   x_range:
   - -2.5
   - 2.5
@@ -104,6 +106,7 @@ radar:
   plot_range_azimuth_heat_map: false
   plot_range_doppler_heat_map: false
   plot_range_profile: true
+  plot_range_waterfall: true
   plot_scatter: true
   plot_statistics: false
   profile_cfg:
