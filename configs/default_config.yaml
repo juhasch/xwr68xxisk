@@ -108,7 +108,7 @@ radar:
   plot_range_profile: true
   plot_range_waterfall: true
   plot_scatter: true
-  plot_statistics: false
+  plot_statistics: true
   profile_cfg:
     adc_start_time: 3.0
     dig_out_sample_rate: 12500
