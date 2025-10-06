@@ -20,7 +20,7 @@ def generate_launch_description():
     # Define launch arguments
     radar_profile_arg = DeclareLaunchArgument(
         'radar_profile',
-        default_value='',
+        default_value='profiles/profile_2d.cfg',
         description='Path to radar profile configuration file (.cfg)'
     )
     
@@ -88,6 +88,7 @@ def generate_launch_description():
         LogInfo(
             msg=['Starting radar publisher node with:',
                  ' - Frame ID: ', LaunchConfiguration('frame_id'),
+                 ' - Radar profile: ', LaunchConfiguration('radar_profile'),
                  ' - Point cloud rate: ', LaunchConfiguration('publish_rate'), ' Hz',
                  ' - Radar info rate: ', LaunchConfiguration('radar_info_publish_rate'), ' Hz',
                  ' - Auto connect: ', LaunchConfiguration('auto_connect')]

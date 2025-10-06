@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 ROS2 node to publish radar point cloud data from TI mmWave sensors.
 
@@ -41,7 +42,7 @@ class RadarPublisherNode(Node):
         super().__init__('radar_publisher_node')
         
         # Declare parameters
-        self.declare_parameter('radar_profile', '')
+        self.declare_parameter('radar_profile', 'profiles/profile_2d.cfg')
         self.declare_parameter('frame_id', 'radar_link')
         self.declare_parameter('publish_rate', 10.0)
         self.declare_parameter('auto_connect', True)
@@ -120,9 +121,10 @@ class RadarPublisherNode(Node):
                 self.get_logger().info(f'Using radar profile: {self.radar_profile}')
                 self.radar.connect(self.radar_profile)
             else:
-                self.get_logger().info('Using default radar configuration')
-                # Use empty string for default configuration
-                self.radar.connect("")
+                # Fall back to default profile if none specified
+                default_profile = 'profiles/profile_2d.cfg'
+                self.get_logger().info(f'No profile specified, using default: {default_profile}')
+                self.radar.connect(default_profile)
             
             # Connection was successful if no exception was raised
             self.get_logger().info('Successfully connected to radar')
