@@ -483,8 +483,22 @@ class RadarConnection:
                 elif cmd == 'multiObjBeamForming':
                     if len(args) >= 3:
                         if 'mobEnabled' not in config_params:
-                            self.mob_enabled = int(args[1]) == 1
-                            self.mob_threshold = float(args[2])
+                            # args[1] may be 1/0 or True/False (string)
+                            raw_enabled = args[1]
+                            if isinstance(raw_enabled, str):
+                                lowered = raw_enabled.strip().lower()
+                                if lowered in {'true', 'false'}:
+                                    enabled = lowered == 'true'
+                                else:
+                                    enabled = int(raw_enabled) == 1
+                            else:
+                                enabled = bool(raw_enabled)
+                            try:
+                                threshold = float(args[2])
+                            except (ValueError, TypeError):
+                                threshold = 0.5
+                            self.mob_enabled = enabled
+                            self.mob_threshold = threshold
                             config_params['mobEnabled'] = self.mob_enabled
                             config_params['mobThreshold'] = self.mob_threshold
                         

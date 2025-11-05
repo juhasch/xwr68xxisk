@@ -15,8 +15,6 @@ display:
   plot_height: 600
   plot_width: 1100
   update_period_ms: 10
-  waterfall_average_window: 30
-  waterfall_subtract_average: true
   x_range:
   - -2.5
   - 2.5
@@ -40,7 +38,7 @@ radar:
   analog_monitor:
     rx_saturation: false
     sig_img_band: false
-  antenna_config: 4Rx,2Tx(30 deg)
+  antenna_config: 4Rx,3Tx(15 deg + Elevation)
   aoa_fov_cfg:
     max_azimuth_deg: 90.0
     max_elevation_deg: 90.0
@@ -81,14 +79,14 @@ radar:
     mode_type: 1
   extended_max_velocity: null
   frame_num_frames: 0
-  frame_rate_fps: 8.0
+  frame_rate_fps: 10.0
   gui_monitor:
     detected_objects: 1
     noise_profile: false
     range_azimuth_heat_map: false
     range_doppler_heat_map: false
     range_profile_enabled: true
-    range_profile_mode: complex
+    range_profile_mode: log_magnitude
     stats_info: true
   lvds_stream_cfg:
     data_fmt: 0
@@ -106,7 +104,6 @@ radar:
   plot_range_azimuth_heat_map: false
   plot_range_doppler_heat_map: false
   plot_range_profile: true
-  plot_range_waterfall: true
   plot_scatter: true
   plot_statistics: false
   profile_cfg:
@@ -125,7 +122,7 @@ radar:
     tx_phase_shifter: 0
     tx_start_time: 1.0
   radial_velocity_resolution_ms: 0.13
-  range_profile_mode: complex
+  range_profile_mode: log_magnitude
   range_resolution_m: 0.044
   trigger_mode: 0
 recording:
@@ -136,7 +133,7 @@ recording:
   - csv
   prefix: radar_data
 tracking:
-  dt: 0.125
+  dt: 0.1
   enabled: false
   max_distance: 2.0
   max_misses: 5
