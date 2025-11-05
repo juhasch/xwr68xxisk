@@ -405,3 +405,74 @@ ros2 topic info /radar_info
 ## License
 
 This package is licensed under the MIT License. 
+
+
+## Example
+
+(ros2_kilted) juhasch@macbook ros2_ws % ros2 topic list
+/parameter_events
+/radar_info
+/radar_point_cloud
+/rosout
+(ros2_kilted) juhasch@macbook ros2_ws % ros2 topic echo /radar_info --once
+header:
+  stamp:
+    sec: 1759743537
+    nanosec: 801574000
+  frame_id: radar_link
+sensor_model: XWR68xx
+firmware_version: ''
+serial_number: ''
+sensor_status: 0
+sensor_info: 'Connected: True, Streaming: True'
+is_connected: true
+is_streaming: true
+carrier_frequency_ghz: 60.0
+bandwidth_mhz: 3999.679931640625
+frame_period_ms: 125.0
+num_tx_antennas: 2
+num_rx_antennas: 4
+num_adc_samples: 256
+adc_sampling_rate_msps: 12500.0
+range_resolution: 0.04399999976158142
+velocity_resolution: 1.2599999904632568
+azimuth_resolution: 0.017000000923871994
+elevation_resolution: 0.017000000923871994
+max_range: 9.039999961853027
+max_velocity: 20.15999984741211
+min_range: 0.10000000149011612
+min_velocity: 0.10000000149011612
+azimuth_fov_min: -1.5700000524520874
+azimuth_fov_max: 1.5700000524520874
+elevation_fov_min: -0.7900000214576721
+elevation_fov_max: 0.7900000214576721
+clutter_removal_enabled: false
+multi_object_beamforming: false
+cfar_threshold: 15.0
+range_fft_size: 256
+doppler_fft_size: 32
+config_file_path: configs/user_profile.cfg
+config_file_content: ''
+config_timestamp:
+  sec: 1759743537
+  nanosec: 801592000
+---
+
+(ros2_kilted) juhasch@macbook ros2_ws % ros2 topic hz /radar_point_cloud
+average rate: 7.980
+	min: 0.123s max: 0.130s std dev: 0.00212s window: 7
+
+(ros2_kilted) juhasch@macbook ros2_ws % ros2 topic echo /radar_point_cloud --once
+header:
+  stamp:
+    sec: 1759743627
+    nanosec: 430452000
+  frame_id: radar_link
+frame_number: 1200
+num_points: 55
+x:
+- -0.48538124561309814
+- -0.5157175660133362
+- -0.5460538864135742
+- -0.6025897860527039
+...

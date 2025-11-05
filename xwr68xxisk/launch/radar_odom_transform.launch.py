@@ -93,6 +93,25 @@ def generate_launch_description():
         description='Point cloud publishing rate in Hz'
     )
     
+    # Network transport arguments
+    transport_arg = DeclareLaunchArgument(
+        'transport',
+        default_value='auto',
+        description='Transport type: auto, serial, or network'
+    )
+    
+    bridge_control_endpoint_arg = DeclareLaunchArgument(
+        'bridge_control_endpoint',
+        default_value='tcp://127.0.0.1:5557',
+        description='Bridge control endpoint for network transport'
+    )
+    
+    bridge_data_endpoint_arg = DeclareLaunchArgument(
+        'bridge_data_endpoint',
+        default_value='tcp://127.0.0.1:5556',
+        description='Bridge data endpoint for network transport'
+    )
+    
     # Radar publisher node
     radar_publisher_node = Node(
         package='xwr68xxisk',
@@ -107,6 +126,9 @@ def generate_launch_description():
                 'auto_connect': True,
                 'radar_info_topic': 'radar_info',
                 'radar_info_publish_rate': 1.0,
+                'transport': LaunchConfiguration('transport'),
+                'bridge_control_endpoint': LaunchConfiguration('bridge_control_endpoint'),
+                'bridge_data_endpoint': LaunchConfiguration('bridge_data_endpoint'),
             }
         ]
     )
@@ -175,11 +197,17 @@ def generate_launch_description():
         radar_yaw_arg,
         enable_pointcloud2_arg,
         publish_rate_arg,
+        transport_arg,
+        bridge_control_endpoint_arg,
+        bridge_data_endpoint_arg,
         
         # Information
         LogInfo(
             msg=['Starting radar with odom transformation:',
                  ' - Radar profile: ', LaunchConfiguration('radar_profile'),
+                 ' - Transport: ', LaunchConfiguration('transport'),
+                 ' - Control endpoint: ', LaunchConfiguration('bridge_control_endpoint'),
+                 ' - Data endpoint: ', LaunchConfiguration('bridge_data_endpoint'),
                  ' - Base frame: ', LaunchConfiguration('base_frame'),
                  ' - Target frame: ', LaunchConfiguration('target_frame'),
                  ' - Radar position: (', LaunchConfiguration('radar_x'), ', ',

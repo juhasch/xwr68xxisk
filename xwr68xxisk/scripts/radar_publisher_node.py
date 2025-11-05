@@ -18,6 +18,7 @@ import threading
 import time
 from typing import Optional, Dict, Any
 import logging
+from ament_index_python.packages import get_package_share_directory
 
 # Add the parent directory to the path to import xwr68xxisk modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -42,12 +43,17 @@ class RadarPublisherNode(Node):
         super().__init__('radar_publisher_node')
         
         # Declare parameters
-        self.declare_parameter('radar_profile', 'profiles/profile_2d.cfg')
+        self.declare_parameter('radar_profile', 'configs/user_profile.cfg')
         self.declare_parameter('frame_id', 'radar_link')
         self.declare_parameter('publish_rate', 10.0)
         self.declare_parameter('auto_connect', True)
         self.declare_parameter('radar_info_topic', 'radar_info')
         self.declare_parameter('radar_info_publish_rate', 1.0)  # Publish info less frequently
+        
+        # Network transport parameters
+        self.declare_parameter('transport', 'auto')  # 'auto', 'serial', 'network'
+        self.declare_parameter('bridge_control_endpoint', 'tcp://127.0.0.1:5557')
+        self.declare_parameter('bridge_data_endpoint', 'tcp://127.0.0.1:5556')
         
         # Get parameters
         self.radar_profile = self.get_parameter('radar_profile').value
@@ -56,6 +62,11 @@ class RadarPublisherNode(Node):
         self.auto_connect = self.get_parameter('auto_connect').value
         self.radar_info_topic = self.get_parameter('radar_info_topic').value
         self.radar_info_publish_rate = self.get_parameter('radar_info_publish_rate').value
+        
+        # Network transport parameters
+        self.transport = self.get_parameter('transport').value
+        self.bridge_control_endpoint = self.get_parameter('bridge_control_endpoint').value
+        self.bridge_data_endpoint = self.get_parameter('bridge_data_endpoint').value
         
         # Initialize variables
         self.radar: Optional[RadarConnection] = None
@@ -104,6 +115,49 @@ class RadarPublisherNode(Node):
         self.get_logger().info(f'Point cloud publish rate: {self.publish_rate} Hz')
         self.get_logger().info(f'Radar info publish rate: {self.radar_info_publish_rate} Hz')
     
+    def _resolve_profile_path(self, profile_path: str) -> str:
+        """
+        Resolve profile path relative to the package directory.
+        
+        Args:
+            profile_path: Path to the profile file (relative or absolute)
+            
+        Returns:
+            str: Resolved absolute path to the profile file
+        """
+        if os.path.isabs(profile_path):
+            return profile_path
+            
+        # Get the directory where this script is located (package directory)
+        package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Try relative to package directory first
+        package_relative_path = os.path.join(package_dir, profile_path)
+        if os.path.isfile(package_relative_path):
+            return package_relative_path
+            
+        # Try in the ROS2 share directory (installed configs)
+        try:
+            share_dir = get_package_share_directory('xwr68xxisk')
+        except Exception:
+            share_dir = os.path.join(os.path.dirname(os.path.dirname(package_dir)), 'share', 'xwr68xxisk')
+        share_relative_path = os.path.join(share_dir, profile_path)
+        if os.path.isfile(share_relative_path):
+            return share_relative_path
+            
+        # Try relative to current working directory
+        if os.path.isfile(profile_path):
+            return os.path.abspath(profile_path)
+            
+        # Try in the source directory (for development)
+        source_dir = os.path.join(os.path.dirname(package_dir), 'xwr68xxisk')
+        source_relative_path = os.path.join(source_dir, profile_path)
+        if os.path.isfile(source_relative_path):
+            return source_relative_path
+            
+        # If not found, return the share-relative path (will cause error with helpful message)
+        return share_relative_path
+    
     def connect_radar(self) -> bool:
         """
         Connect to the radar sensor.
@@ -114,17 +168,24 @@ class RadarPublisherNode(Node):
         try:
             self.get_logger().info('Attempting to connect to radar...')
             
-            # Create radar connection
-            self.radar = create_radar()
+            # Create radar connection with transport parameters
+            self.radar = create_radar(
+                transport=self.transport,
+                control_endpoint=self.bridge_control_endpoint,
+                data_endpoint=self.bridge_data_endpoint
+            )
             
             if self.radar_profile:
-                self.get_logger().info(f'Using radar profile: {self.radar_profile}')
-                self.radar.connect(self.radar_profile)
+                # Resolve profile path relative to package directory
+                profile_path = self._resolve_profile_path(self.radar_profile)
+                self.get_logger().info(f'Using radar profile: {profile_path}')
+                self.radar.connect(profile_path)
             else:
                 # Fall back to default profile if none specified
-                default_profile = 'profiles/profile_2d.cfg'
-                self.get_logger().info(f'No profile specified, using default: {default_profile}')
-                self.radar.connect(default_profile)
+                default_profile = 'configs/user_profile.cfg'
+                profile_path = self._resolve_profile_path(default_profile)
+                self.get_logger().info(f'No profile specified, using default: {profile_path}')
+                self.radar.connect(profile_path)
             
             # Connection was successful if no exception was raised
             self.get_logger().info('Successfully connected to radar')

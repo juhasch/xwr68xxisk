@@ -20,7 +20,7 @@ def generate_launch_description():
     # Define launch arguments
     radar_profile_arg = DeclareLaunchArgument(
         'radar_profile',
-        default_value='profiles/profile_2d.cfg',
+        default_value='configs/user_profile.cfg',
         description='Path to radar profile configuration file (.cfg)'
     )
     
@@ -54,6 +54,25 @@ def generate_launch_description():
         description='Radar info publishing rate in Hz'
     )
     
+    # Network transport arguments
+    transport_arg = DeclareLaunchArgument(
+        'transport',
+        default_value='auto',
+        description='Transport type: auto, serial, or network'
+    )
+    
+    bridge_control_endpoint_arg = DeclareLaunchArgument(
+        'bridge_control_endpoint',
+        default_value='tcp://127.0.0.1:5557',
+        description='Bridge control endpoint for network transport'
+    )
+    
+    bridge_data_endpoint_arg = DeclareLaunchArgument(
+        'bridge_data_endpoint',
+        default_value='tcp://127.0.0.1:5556',
+        description='Bridge data endpoint for network transport'
+    )
+    
     # Define the radar publisher node
     radar_publisher_node = Node(
         package='xwr68xxisk',
@@ -68,6 +87,9 @@ def generate_launch_description():
                 'auto_connect': LaunchConfiguration('auto_connect'),
                 'radar_info_topic': LaunchConfiguration('radar_info_topic'),
                 'radar_info_publish_rate': LaunchConfiguration('radar_info_publish_rate'),
+                'transport': LaunchConfiguration('transport'),
+                'bridge_control_endpoint': LaunchConfiguration('bridge_control_endpoint'),
+                'bridge_data_endpoint': LaunchConfiguration('bridge_data_endpoint'),
             }
         ],
         remappings=[
@@ -84,11 +106,17 @@ def generate_launch_description():
         auto_connect_arg,
         radar_info_topic_arg,
         radar_info_publish_rate_arg,
+        transport_arg,
+        bridge_control_endpoint_arg,
+        bridge_data_endpoint_arg,
         
         LogInfo(
             msg=['Starting radar publisher node with:',
                  ' - Frame ID: ', LaunchConfiguration('frame_id'),
                  ' - Radar profile: ', LaunchConfiguration('radar_profile'),
+                 ' - Transport: ', LaunchConfiguration('transport'),
+                 ' - Control endpoint: ', LaunchConfiguration('bridge_control_endpoint'),
+                 ' - Data endpoint: ', LaunchConfiguration('bridge_data_endpoint'),
                  ' - Point cloud rate: ', LaunchConfiguration('publish_rate'), ' Hz',
                  ' - Radar info rate: ', LaunchConfiguration('radar_info_publish_rate'), ' Hz',
                  ' - Auto connect: ', LaunchConfiguration('auto_connect')]
