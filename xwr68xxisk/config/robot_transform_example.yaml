@@ -1,0 +1,54 @@
+# Example configuration for radar coordinate frame transformations
+# Copy and modify this file for your specific robot setup
+
+# Robot frame configuration
+robot_setup:
+  base_frame: "base_link"      # Your robot's base frame name
+  target_frame: "odom"         # Target frame for radar data (usually odom or map)
+  
+# Radar mounting position relative to base_link
+# Adjust these values to match your radar's actual position on the robot
+radar_mounting:
+  # Position in meters (x=forward, y=left, z=up in ROS convention)
+  position:
+    x: 0.2      # 20cm forward from robot center
+    y: 0.0      # Centered left-right  
+    z: 0.1      # 10cm above base_link
+  
+  # Orientation in radians (roll, pitch, yaw)
+  orientation:
+    roll: 0.0   # Rotation around x-axis
+    pitch: 0.0  # Rotation around y-axis (tilt up/down)
+    yaw: 0.0    # Rotation around z-axis (turn left/right)
+
+# Radar configuration
+radar_config:
+  profile_file: ""                    # Path to .cfg file, empty for default
+  publish_rate: 10.0                  # Hz
+  
+# Visualization settings  
+visualization:
+  enable_pointcloud2: true            # Enable PointCloud2 for RViz2
+  intensity_source: "snr"             # Use "snr" or "rcs" for coloring
+
+# Example configurations for different robot setups:
+
+# Example 1: Radar mounted on front of robot, pointing forward
+front_mounted:
+  position: {x: 0.3, y: 0.0, z: 0.15}
+  orientation: {roll: 0.0, pitch: 0.0, yaw: 0.0}
+
+# Example 2: Radar mounted on right side, pointing right
+side_mounted:
+  position: {x: 0.1, y: -0.2, z: 0.1}
+  orientation: {roll: 0.0, pitch: 0.0, yaw: -1.57}  # -90 degrees
+
+# Example 3: Radar tilted down for ground scanning
+ground_scanning:
+  position: {x: 0.2, y: 0.0, z: 0.2}
+  orientation: {roll: 0.0, pitch: -0.26, yaw: 0.0}  # -15 degrees down
+
+# Example 4: Radar mounted upside down
+upside_down:
+  position: {x: 0.2, y: 0.0, z: 0.1}
+  orientation: {roll: 3.14, pitch: 0.0, yaw: 0.0}   # 180 degrees roll 

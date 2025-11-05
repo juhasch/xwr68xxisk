@@ -30,6 +30,7 @@ dev = ["pytest >=8.1.1", "ruff >=0.9.1"]
 
 [project.scripts]
 xwr68xxisk = "xwr68xxisk.main:main"
+rerun-viewer = "xwr68xxisk.rerun_viewer:main"
 
 [tool.setuptools]
 packages = ["xwr68xxisk"]
